@@ -21,6 +21,7 @@ pub enum FeatureId {
     Sulog = 2,
     AdbRoot = 3,
     SelinuxHide = 4,
+    PartitionGuard = 5,
 }
 
 impl FeatureId {
@@ -31,6 +32,7 @@ impl FeatureId {
             2 => Some(Self::Sulog),
             3 => Some(Self::AdbRoot),
             4 => Some(Self::SelinuxHide),
+            5 => Some(Self::PartitionGuard),
             _ => None,
         }
     }
@@ -42,6 +44,7 @@ impl FeatureId {
             Self::Sulog => "sulog",
             Self::AdbRoot => "adb_root",
             Self::SelinuxHide => "selinux_hide",
+            Self::PartitionGuard => "partition_guard",
         }
     }
 
@@ -60,6 +63,9 @@ impl FeatureId {
             Self::SelinuxHide => {
                 "SELinux Hide - sanitize /sys/fs/selinux access results for app UIDs"
             }
+            Self::PartitionGuard => {
+                "System Partition Guard - block root apps from opening a raw block device for writing"
+            }
         }
     }
 }
@@ -71,6 +77,7 @@ fn parse_feature_id(name: &str) -> Result<FeatureId> {
         "sulog" | "2" => Ok(FeatureId::Sulog),
         "adb_root" | "3" => Ok(FeatureId::AdbRoot),
         "selinux_hide" | "4" => Ok(FeatureId::SelinuxHide),
+        "partition_guard" | "5" => Ok(FeatureId::PartitionGuard),
         _ => bail!("Unknown feature: {name}"),
     }
 }
@@ -317,6 +324,7 @@ pub fn list_features() {
         FeatureId::Sulog,
         FeatureId::AdbRoot,
         FeatureId::SelinuxHide,
+        FeatureId::PartitionGuard,
     ];
 
     for feature_id in &all_features {
@@ -380,6 +388,7 @@ pub fn save_config() -> Result<()> {
         FeatureId::Sulog,
         FeatureId::AdbRoot,
         FeatureId::SelinuxHide,
+        FeatureId::PartitionGuard,
     ];
 
     for feature_id in &all_features {

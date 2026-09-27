@@ -17,6 +17,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -42,6 +43,7 @@ import me.weishu.kernelsu.ui.navigation3.Route
 import me.weishu.kernelsu.ui.util.HideAppList
 import me.weishu.kernelsu.data.repository.isPartitionGuardEnabled
 import me.weishu.kernelsu.data.repository.setPartitionGuardEnabled
+import me.weishu.kernelsu.data.repository.syncPartitionGuardToKernel
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Icon as MiuixIcon
 import top.yukonga.miuix.kmp.basic.IconButton as MiuixIconButton
@@ -62,7 +64,6 @@ fun OtherFeaturesScreen() {
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-
     // System-partition guard: forced on (locked) in jailbreak/late-load mode,
     // otherwise it follows the user setting.
     val isLateLoad = Natives.isLateLoadMode
@@ -70,6 +71,14 @@ fun OtherFeaturesScreen() {
     val onGuardChange: (Boolean) -> Unit = { value ->
         setPartitionGuardEnabled(value)
         guardEnabled = isPartitionGuardEnabled()
+    }
+    // Keep the kernel copy of the switch in step with what the UI shows. The
+    // kernel flag is what actually blocks a *live* write from a rooted process;
+    // it is in-memory, so (re)push it whenever this screen is shown.
+    LaunchedEffect(guardEnabled, isLateLoad) {
+        withContext(Dispatchers.IO) {
+            runCatching { syncPartitionGuardToKernel(isPartitionGuardEnabled()) }
+        }
     }
     var phase by remember { mutableStateOf<HideAppListPhase?>(null) }
 

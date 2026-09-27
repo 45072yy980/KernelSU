@@ -44,6 +44,21 @@ fun partitionGuardUserSetting(): Boolean =
 fun setPartitionGuardEnabled(enabled: Boolean) {
     ksuApp.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
         .edit().putBoolean(KEY_PARTITION_GUARD, enabled).apply()
+    // Push the state into the kernel so it can block live writes from any
+    // already-rooted process, not just scan a module's scripts at install time.
+    // Fire-and-forget on a background thread: the shell call blocks.
+    Thread {
+        runCatching { syncPartitionGuardToKernel(enabled) }
+    }.start()
+}
+
+/**
+ * Hand the guard state to the kernel, where the actual live-write interception
+ * happens. Safe to call repeatedly; does nothing if the kernel does not support
+ * the feature (e.g. an older LKM).
+ */
+fun syncPartitionGuardToKernel(enabled: Boolean) {
+    execKsud("feature set partition_guard ${if (enabled) 1 else 0}", newShell = true)
 }
 
 class SettingsRepositoryImpl : SettingsRepository {
