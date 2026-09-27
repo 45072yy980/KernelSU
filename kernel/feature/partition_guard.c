@@ -38,35 +38,18 @@
 static bool ksu_partition_guard_enabled = false;
 
 /*
- * In jailbreak (late-load) mode the guard is mandatory: the session cannot undo
- * a real partition write by rebooting, and the whole point of this mode is that
- * the device's partitions are never touched. The device is also assumed to be
- * bootloader-locked, so a stray write is exactly the thing we must not allow.
+ * The runtime guard is strictly opt-in and defaults to OFF, in every mode
+ * including jailbreak (late-load). It hooks very hot syscalls (write/writev),
+ * so enabling it is a deliberate choice the user has to make from the Manager
+ * UI after the top-level system-partition-protection switch is already on.
  */
-static bool ksu_partition_guard_is_late_load(void)
-{
-    return ksu_late_loaded;
-}
-
 bool ksu_partition_guard_is_enabled(void)
 {
-    /* Late-load forces it on even if someone forgot to flip the switch. */
-    if (ksu_partition_guard_is_late_load())
-        return true;
     return ksu_partition_guard_enabled;
 }
 
 void ksu_partition_guard_set(bool enabled)
 {
-    /*
-     * Refuse to turn the guard off while in jailbreak mode: the user-visible
-     * switch is locked there, and a stray "feature set ... 0" (e.g. replayed
-     * from an old config) must not silently disable the protection.
-     */
-    if (!enabled && ksu_partition_guard_is_late_load()) {
-        pr_info("partition_guard: ignoring disable request in late-load mode\n");
-        return;
-    }
     ksu_partition_guard_enabled = enabled;
     pr_info("partition_guard: %s\n", enabled ? "enabled" : "disabled");
 }
@@ -84,8 +67,8 @@ static int partition_guard_feature_set(u64 value)
 }
 
 static const struct ksu_feature_handler partition_guard_handler = {
-    .feature_id = KSU_FEATURE_PARTITION_GUARD,
-    .name = "partition_guard",
+    .feature_id = KSU_FEATURE_PARTITION_GUARD_RUNTIME,
+    .name = "partition_guard_runtime",
     .get_handler = partition_guard_feature_get,
     .set_handler = partition_guard_feature_set,
 };
@@ -347,6 +330,6 @@ void __init ksu_partition_guard_init(void)
 
 void __exit ksu_partition_guard_exit(void)
 {
-    ksu_unregister_feature_handler(KSU_FEATURE_PARTITION_GUARD);
+    ksu_unregister_feature_handler(KSU_FEATURE_PARTITION_GUARD_RUNTIME);
     pr_info("partition_guard: exit\n");
 }

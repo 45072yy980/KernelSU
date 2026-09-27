@@ -22,6 +22,7 @@ pub enum FeatureId {
     AdbRoot = 3,
     SelinuxHide = 4,
     PartitionGuard = 5,
+    PartitionGuardRuntime = 6,
 }
 
 impl FeatureId {
@@ -33,6 +34,7 @@ impl FeatureId {
             3 => Some(Self::AdbRoot),
             4 => Some(Self::SelinuxHide),
             5 => Some(Self::PartitionGuard),
+            6 => Some(Self::PartitionGuardRuntime),
             _ => None,
         }
     }
@@ -45,6 +47,7 @@ impl FeatureId {
             Self::AdbRoot => "adb_root",
             Self::SelinuxHide => "selinux_hide",
             Self::PartitionGuard => "partition_guard",
+            Self::PartitionGuardRuntime => "partition_guard_runtime",
         }
     }
 
@@ -66,6 +69,9 @@ impl FeatureId {
             Self::PartitionGuard => {
                 "System Partition Guard - block root apps from opening a raw block device for writing"
             }
+            Self::PartitionGuardRuntime => {
+                "Runtime Partition Guard - kernel-side openat/mount/write interception (independent switch)"
+            }
         }
     }
 }
@@ -78,6 +84,7 @@ fn parse_feature_id(name: &str) -> Result<FeatureId> {
         "adb_root" | "3" => Ok(FeatureId::AdbRoot),
         "selinux_hide" | "4" => Ok(FeatureId::SelinuxHide),
         "partition_guard" | "5" => Ok(FeatureId::PartitionGuard),
+        "partition_guard_runtime" | "6" => Ok(FeatureId::PartitionGuardRuntime),
         _ => bail!("Unknown feature: {name}"),
     }
 }
@@ -325,6 +332,7 @@ pub fn list_features() {
         FeatureId::AdbRoot,
         FeatureId::SelinuxHide,
         FeatureId::PartitionGuard,
+        FeatureId::PartitionGuardRuntime,
     ];
 
     for feature_id in &all_features {
@@ -389,6 +397,7 @@ pub fn save_config() -> Result<()> {
         FeatureId::AdbRoot,
         FeatureId::SelinuxHide,
         FeatureId::PartitionGuard,
+        FeatureId::PartitionGuardRuntime,
     ];
 
     for feature_id in &all_features {

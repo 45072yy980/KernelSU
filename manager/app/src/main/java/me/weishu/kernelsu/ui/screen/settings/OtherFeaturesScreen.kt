@@ -8,6 +8,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -42,8 +43,10 @@ import me.weishu.kernelsu.ui.navigation3.LocalNavigator
 import me.weishu.kernelsu.ui.navigation3.Route
 import me.weishu.kernelsu.ui.util.HideAppList
 import me.weishu.kernelsu.data.repository.isPartitionGuardEnabled
+import me.weishu.kernelsu.data.repository.isRuntimeGuardEnabled
 import me.weishu.kernelsu.data.repository.setPartitionGuardEnabled
-import me.weishu.kernelsu.data.repository.syncPartitionGuardToKernel
+import me.weishu.kernelsu.data.repository.setRuntimeGuardEnabled
+import me.weishu.kernelsu.data.repository.syncRuntimeGuardToKernel
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Icon as MiuixIcon
 import top.yukonga.miuix.kmp.basic.IconButton as MiuixIconButton
@@ -68,16 +71,27 @@ fun OtherFeaturesScreen() {
     // otherwise it follows the user setting.
     val isLateLoad = Natives.isLateLoadMode
     var guardEnabled by remember { mutableStateOf(isPartitionGuardEnabled()) }
+    // The runtime layer is a *child* of the guard switch: it only shows (and
+    // only means anything) while the parent protection is on, and it is OFF by
+    // default in every mode, including jailbreak. It hooks very hot syscalls
+    // (write/writev), so we never turn it on for the user.
+    var runtimeGuardEnabled by remember { mutableStateOf(isRuntimeGuardEnabled()) }
     val onGuardChange: (Boolean) -> Unit = { value ->
         setPartitionGuardEnabled(value)
         guardEnabled = isPartitionGuardEnabled()
+        // setPartitionGuardEnabled(false) also clears the child; mirror that here.
+        runtimeGuardEnabled = isRuntimeGuardEnabled()
     }
-    // Keep the kernel copy of the switch in step with what the UI shows. The
-    // kernel flag is what actually blocks a *live* write from a rooted process;
-    // it is in-memory, so (re)push it whenever this screen is shown.
-    LaunchedEffect(guardEnabled, isLateLoad) {
+    val onRuntimeGuardChange: (Boolean) -> Unit = { value ->
+        setRuntimeGuardEnabled(value)
+        runtimeGuardEnabled = isRuntimeGuardEnabled()
+    }
+    // Keep the kernel copy of the runtime switch in step with what the UI shows.
+    // The kernel flag is what actually blocks a *live* write from a rooted
+    // process; it is in-memory, so (re)push it whenever this screen is shown.
+    LaunchedEffect(runtimeGuardEnabled) {
         withContext(Dispatchers.IO) {
-            runCatching { syncPartitionGuardToKernel(isPartitionGuardEnabled()) }
+            runCatching { syncRuntimeGuardToKernel(runtimeGuardEnabled) }
         }
     }
     var phase by remember { mutableStateOf<HideAppListPhase?>(null) }
@@ -108,6 +122,8 @@ fun OtherFeaturesScreen() {
             guardEnabled = guardEnabled,
             guardLocked = isLateLoad,
             onGuardChange = onGuardChange,
+            runtimeGuardEnabled = runtimeGuardEnabled,
+            onRuntimeGuardChange = onRuntimeGuardChange,
         )
         UiMode.Miuix -> OtherFeaturesMiuix(
             onBack = onBack,
@@ -116,6 +132,8 @@ fun OtherFeaturesScreen() {
             guardEnabled = guardEnabled,
             guardLocked = isLateLoad,
             onGuardChange = onGuardChange,
+            runtimeGuardEnabled = runtimeGuardEnabled,
+            onRuntimeGuardChange = onRuntimeGuardChange,
         )
     }
 
@@ -138,6 +156,8 @@ private fun OtherFeaturesMaterial(
     guardEnabled: Boolean,
     guardLocked: Boolean,
     onGuardChange: (Boolean) -> Unit,
+    runtimeGuardEnabled: Boolean,
+    onRuntimeGuardChange: (Boolean) -> Unit,
 ) {
     Scaffold(
         topBar = {
@@ -208,7 +228,19 @@ private fun OtherFeaturesMaterial(
                             onCheckedChange = onGuardChange,
                         )
                     },
-                ),
+                ) + if (guardEnabled) listOf(
+                    // Runtime child: only surfaced (and only meaningful) while the
+                    // parent guard is on. Off by default in every mode.
+                    {
+                        SegmentedSwitchItem(
+                            icon = Icons.Filled.Lock,
+                            title = stringResource(R.string.settings_runtime_guard),
+                            summary = stringResource(R.string.settings_runtime_guard_summary),
+                            checked = runtimeGuardEnabled,
+                            onCheckedChange = onRuntimeGuardChange,
+                        )
+                    },
+                ) else emptyList(),
             )
         }
     }
@@ -222,6 +254,8 @@ private fun OtherFeaturesMiuix(
     guardEnabled: Boolean,
     guardLocked: Boolean,
     onGuardChange: (Boolean) -> Unit,
+    runtimeGuardEnabled: Boolean,
+    onRuntimeGuardChange: (Boolean) -> Unit,
 ) {
     MiuixScaffold(
         topBar = {
@@ -289,6 +323,24 @@ private fun OtherFeaturesMiuix(
                         checked = guardEnabled,
                         onCheckedChange = onGuardChange,
                     )
+                    // Runtime child: only surfaced (and only meaningful) while the
+                    // parent guard is on. Off by default in every mode.
+                    if (guardEnabled) {
+                        SwitchPreference(
+                            title = stringResource(R.string.settings_runtime_guard),
+                            summary = stringResource(R.string.settings_runtime_guard_summary),
+                            startAction = {
+                                MiuixIcon(
+                                    imageVector = Icons.Filled.Lock,
+                                    contentDescription = null,
+                                    tint = colorScheme.onBackground,
+                                    modifier = Modifier.padding(end = 6.dp),
+                                )
+                            },
+                            checked = runtimeGuardEnabled,
+                            onCheckedChange = onRuntimeGuardChange,
+                        )
+                    }
                 }
             }
         }

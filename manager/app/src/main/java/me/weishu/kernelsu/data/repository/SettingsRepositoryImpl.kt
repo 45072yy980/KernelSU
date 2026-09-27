@@ -21,6 +21,7 @@ import java.security.SecureRandom
 private const val SETTINGS_PREFS = "settings"
 private const val KEY_USE_SOFT_REBOOT = "soft_reboot"
 private const val KEY_PARTITION_GUARD = "partition_guard"
+private const val KEY_RUNTIME_GUARD = "runtime_partition_guard"
 /** Prefer soft reboot: always in jailbreak mode, or when the setting is enabled. */
 fun isSoftRebootPreferred(): Boolean =
     Natives.isLateLoadMode || ksuApp.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
@@ -44,21 +45,41 @@ fun partitionGuardUserSetting(): Boolean =
 fun setPartitionGuardEnabled(enabled: Boolean) {
     ksuApp.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
         .edit().putBoolean(KEY_PARTITION_GUARD, enabled).apply()
+    // Turning the top-level protection off also disables the runtime layer: the
+    // child switch is only meaningful while the parent is on.
+    if (!enabled) {
+        setRuntimeGuardEnabled(false)
+    }
+}
+
+/**
+ * The runtime (kernel-side) guard, an extra opt-in on top of the install-time
+ * scan. It is OFF by default in every mode - including jailbreak (late-load) -
+ * because it hooks very hot syscalls (write/writev) and a bug there can panic
+ * the kernel. Users enable it deliberately.
+ */
+fun isRuntimeGuardEnabled(): Boolean =
+    ksuApp.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
+        .getBoolean(KEY_RUNTIME_GUARD, false)
+
+fun setRuntimeGuardEnabled(enabled: Boolean) {
+    ksuApp.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
+        .edit().putBoolean(KEY_RUNTIME_GUARD, enabled).apply()
     // Push the state into the kernel so it can block live writes from any
     // already-rooted process, not just scan a module's scripts at install time.
     // Fire-and-forget on a background thread: the shell call blocks.
     Thread {
-        runCatching { syncPartitionGuardToKernel(enabled) }
+        runCatching { syncRuntimeGuardToKernel(enabled) }
     }.start()
 }
 
 /**
- * Hand the guard state to the kernel, where the actual live-write interception
- * happens. Safe to call repeatedly; does nothing if the kernel does not support
- * the feature (e.g. an older LKM).
+ * Hand the runtime-guard state to the kernel, where the actual live-write
+ * interception happens. Safe to call repeatedly; does nothing if the kernel
+ * does not support the feature (e.g. an older LKM).
  */
-fun syncPartitionGuardToKernel(enabled: Boolean) {
-    execKsud("feature set partition_guard ${if (enabled) 1 else 0}", newShell = true)
+fun syncRuntimeGuardToKernel(enabled: Boolean) {
+    execKsud("feature set partition_guard_runtime ${if (enabled) 1 else 0}", newShell = true)
 }
 
 class SettingsRepositoryImpl : SettingsRepository {

@@ -203,6 +203,8 @@
     <string name="settings_partition_guard">System partition protection</string>
     <string name="settings_partition_guard_summary">Blocks installation of modules that would really write a system partition (dd to a block device, remount rw, flash, mkfs ...). Always on in jailbreak mode; can be toggled here otherwise.</string>
     <string name="settings_partition_guard_summary_jailbreak">Always on in jailbreak mode and cannot be turned off here - a late-loaded session cannot undo a real partition write.</string>
+    <string name="settings_runtime_guard">Runtime guard (kernel interception)</string>
+    <string name="settings_runtime_guard_summary">Extra layer on top of the install-time scan: hooks openat/openat2/mount/write to block a rooted process from writing a system partition live. Off by default; it hooks very hot syscalls, so only turn it on if you understand the risk.</string>
     <string name="hide_applist_about">Adds every third-party app that has no entry yet to HMA-OSS\'s hidden scope; apps that are already configured only get their presets filled in, and the Manager is hidden from all of them.</string>
     <string name="hide_applist_plain">Standard</string>
     <string name="hide_applist_scene">Scene</string>

@@ -72,6 +72,8 @@
     <string name="settings_partition_guard">系統分區保護</string>
     <string name="settings_partition_guard_summary">攔截會真正寫入系統分區的模組安裝（dd 寫區塊裝置、remount rw、刷寫、mkfs 等）。越獄模式下始終開啟，其他情況可在此開關。</string>
     <string name="settings_partition_guard_summary_jailbreak">越獄模式下始終開啟，無法在此關閉——晚期載入的會話無法撤銷對分區的真實寫入。</string>
+    <string name="settings_runtime_guard">執行時防護（核心攔截）</string>
+    <string name="settings_runtime_guard_summary">在安裝時掃描之外額外加一層：掛鉤 openat/openat2/mount/write，即時攔截已獲 root 的程序寫系統分區。預設關閉；它會掛鉤極高頻系統呼叫，理解風險後再開啟。</string>
     <string name="jailbreak_guard_running_summary">當前處於越獄模式。會攔截真正寫入分區的模組安裝；重啟即還原。此模式運行期間，系統分區寫入受到保護。</string>
     <string name="home_jailbreak">越獄</string>
     <string name="jailbreak_timeout">越獄可能失敗，請檢查日誌</string>
