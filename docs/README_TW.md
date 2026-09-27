@@ -81,6 +81,7 @@ Manager UI ──▶ AppZygotePreload (JNI) ──▶ ksud late-load --magica <p
 ### 其它客製化
 
 - **Manager 更名為 DikSU**，套件名 `me.diksu.kernelsu`，獨立簽名鏈，與核心內的憑證雜湊嚴格對應。
+- **全新桌面圖示**：自適應圖示，已依安全區適配，圓形 / 方形遮罩下均完整顯示。
 - **Miuix 主題**：Material 與 Miuix 雙 UI 風格，可自由切換。
 
 ## 相容狀態
