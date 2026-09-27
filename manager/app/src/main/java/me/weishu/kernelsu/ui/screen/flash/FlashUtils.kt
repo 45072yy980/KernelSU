@@ -186,9 +186,10 @@ fun flashIt(
                     onLog = { line -> onStdout(line) },
                 )
                 if (result.success) {
-                    // The exploit restarts the Manager when it succeeds; surface
-                    // the usual "reboot" affordance too so the user can act.
-                    FlashResult(0, "", true)
+                    // On success the exploit itself restarts the Manager through
+                    // ksud late-load, so no manual reboot is offered: a reboot would
+                    // drop the just-acquired root. The screen simply ends on success.
+                    FlashResult(0, "", false)
                 } else {
                     FlashResult(result.exitCode.coerceAtLeast(1), result.output, false)
                 }
