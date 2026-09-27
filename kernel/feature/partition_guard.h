@@ -25,5 +25,10 @@ void ksu_partition_guard_set(bool enabled);
 bool ksu_partition_guard_is_enabled(void);
 
 long ksu_hook_openat(int orig_nr, const struct pt_regs *regs);
+long ksu_hook_openat2(int orig_nr, const struct pt_regs *regs);
+long ksu_hook_mount(int orig_nr, const struct pt_regs *regs);
+long ksu_hook_write(int orig_nr, const struct pt_regs *regs);
+long ksu_hook_pwrite64(int orig_nr, const struct pt_regs *regs);
+long ksu_hook_writev(int orig_nr, const struct pt_regs *regs);
 
 #endif /* __KSU_H_PARTITION_GUARD */
