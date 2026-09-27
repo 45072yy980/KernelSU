@@ -178,8 +178,8 @@ private fun OtherFeaturesMaterial(
         ) {
             SegmentedColumn(
                 modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 13.dp, bottom = 13.dp),
-                content = listOf(
-                    {
+                content = buildList<@Composable () -> Unit> {
+                    add {
                         val hide = stringResource(R.string.settings_hide_applist)
                         SegmentedListItem(
                             onClick = onHideAppList,
@@ -195,8 +195,8 @@ private fun OtherFeaturesMaterial(
                                 )
                             },
                         )
-                    },
-                    {
+                    }
+                    add {
                         val keymint = stringResource(R.string.settings_keymint_config)
                         SegmentedListItem(
                             onClick = onOpenKeymint,
@@ -212,8 +212,8 @@ private fun OtherFeaturesMaterial(
                                 )
                             },
                         )
-                    },
-                    {
+                    }
+                    add {
                         val guardTitle = stringResource(R.string.settings_partition_guard)
                         val guardSummary = stringResource(
                             if (guardLocked) R.string.settings_partition_guard_summary_jailbreak
@@ -227,11 +227,10 @@ private fun OtherFeaturesMaterial(
                             checked = guardEnabled,
                             onCheckedChange = onGuardChange,
                         )
-                    },
-                ) + if (guardEnabled) listOf(
-                    // Runtime child: only surfaced (and only meaningful) while the
-                    // parent guard is on. Off by default in every mode.
-                    {
+                    }
+                    // Runtime child: only surfaced (and only meaningful) while
+                    // the parent guard is on. Off by default in every mode.
+                    if (guardEnabled) add {
                         SegmentedSwitchItem(
                             icon = Icons.Filled.Lock,
                             title = stringResource(R.string.settings_runtime_guard),
@@ -239,8 +238,8 @@ private fun OtherFeaturesMaterial(
                             checked = runtimeGuardEnabled,
                             onCheckedChange = onRuntimeGuardChange,
                         )
-                    },
-                ) else emptyList(),
+                    }
+                },
             )
         }
     }
