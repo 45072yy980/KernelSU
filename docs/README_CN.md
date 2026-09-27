@@ -58,10 +58,16 @@ Manager UI ──▶ AppZygotePreload (JNI) ──▶ ksud late-load --magica <p
 
 > ⚠️ 仅支持漏洞利用所覆盖的内核版本；其余设备仍可走手动安装。
 
-### 🛡️ 越狱模式防护（Jailbreak Partition Guard）
+### 🛡️ 系统分区保护（System Partition Guard）
 
 越狱模式跑在内存里，**无法像重启那样还原一个被真实写入的分区**。因此在越狱模式下，
-安装模块时 DikSU 会自动启用防护：
+安装模块时 DikSU 会自动启用防护；非越狱模式下则由你自行决定是否开启：
+
+- **越狱模式**：强制开启、**不可关闭** —— 晚期加载的会话无法撤销一次真实的分区写入。
+- **非越狱模式**：可在 设置 → **其他功能** → **系统分区保护** 中自由开关。
+  开启后，安装模块时 Manager 会向 ksud 传入 `KSU_PARTITION_GUARD=1`。
+
+拦截规则（ksud 侧）：
 
 - **会拦截**：脚本中真正触达块设备 / 真实分区的操作 ——
   `dd ... of=/dev/...`、`> /dev/block/...`、`tee /dev/block/...`、
@@ -70,7 +76,8 @@ Manager UI ──▶ AppZygotePreload (JNI) ──▶ ksud late-load --magica <p
 - **不会误伤**：仅包含 `system/` 等分区目录的普通模块（那是 OverlayFS 的**临时**覆盖，重启即还原）、
   写 `/sys`、写 `/data`、bind mount、注释里提到 flash 等，都会正常放行。
 
-> ℹ️ 防护**只在越狱模式下生效**；正常开机进入的 KernelSU 完全不受影响。
+> ℹ️ 默认情况下该防护**只在越狱模式自动启用**；正常开机进入的 KernelSU 不受影响，
+> 除非你在设置里主动打开它。
 > 若确需强制安装，可使用 `ksud module install --force <zip>` 绕过。
 
 ### 其它定制
@@ -102,7 +109,7 @@ WSA、ChromeOS 和运行在容器上的 Android 也可以与 DikSU 一起工作�
 
 1. **包名 / 名称**：`me.diksu.kernelsu`，显示名 `DikSU`。
 2. **越狱模式（Magica）**：完整的内核晚期加载链路（Manager → JNI → ksud → 内核）。
-3. **越狱模式防护**：拦截会真实写入分区的模块，保护"不可还原"的设备。
+3. **系统分区保护**：越狱模式强制开启、非越狱模式可开关，拦截会真实写入分区的模块。
 4. **内置漏洞利用**：未 root 时可由「未安装」卡片直接提权并进入越狱（GhostLock / CVE-2026-43499）。
 4. **签名链**：使用自建密钥与证书哈希，内核与 Manager 严格匹配。
 5. **UI**：Miuix / Material 双主题，含若干界面优化。
