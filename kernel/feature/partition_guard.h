@@ -18,8 +18,8 @@
  *   - The guard is off by default and toggled from the Manager.
  */
 
-void ksu_partition_guard_init(void);
-void ksu_partition_guard_exit(void);
+void __init ksu_partition_guard_init(void);
+void __exit ksu_partition_guard_exit(void);
 
 void ksu_partition_guard_set(bool enabled);
 bool ksu_partition_guard_is_enabled(void);

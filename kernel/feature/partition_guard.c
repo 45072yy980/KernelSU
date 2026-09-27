@@ -114,7 +114,7 @@ long __nocfi ksu_hook_openat(int orig_nr, const struct pt_regs *regs)
     return ret;
 }
 
-void ksu_partition_guard_init(void)
+void __init ksu_partition_guard_init(void)
 {
     int ret = ksu_register_feature_handler(&partition_guard_handler);
     if (ret) {
@@ -123,7 +123,7 @@ void ksu_partition_guard_init(void)
     pr_info("partition_guard: init done (default off)\n");
 }
 
-void ksu_partition_guard_exit(void)
+void __exit ksu_partition_guard_exit(void)
 {
     ksu_unregister_feature_handler(KSU_FEATURE_PARTITION_GUARD);
     pr_info("partition_guard: exit\n");
