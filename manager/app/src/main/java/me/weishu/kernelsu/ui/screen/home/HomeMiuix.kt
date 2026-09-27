@@ -49,7 +49,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.layout.ContentScale
@@ -77,9 +76,7 @@ import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.CardDefaults
 import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Scaffold
-import top.yukonga.miuix.kmp.basic.ScrollBehavior
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.blur.LayerBackdrop
@@ -97,22 +94,23 @@ fun HomePagerMiuix(
     actions: HomeActions,
     bottomInnerPadding: Dp,
 ) {
-    val scrollBehavior = MiuixScrollBehavior()
     val enableBlur = LocalEnableBlur.current
     val backdrop = rememberBlurBackdrop(enableBlur)
     Scaffold(
         popupHost = { },
         contentWindowInsets = WindowInsets.systemBars.add(WindowInsets.displayCutout).only(WindowInsetsSides.Horizontal)
-    ) { innerPadding ->
+    ) { _ ->
         Box(modifier = if (backdrop != null) Modifier.layerBackdrop(backdrop) else Modifier) {
             LazyColumn(
                 modifier = Modifier
                     .fillMaxHeight()
                     .scrollEndHaptic()
                     .overScrollVertical()
-                    .nestedScroll(scrollBehavior.nestedScrollConnection)
                     .padding(horizontal = 12.dp),
-                contentPadding = innerPadding,
+                contentPadding = WindowInsets.systemBars
+                    .add(WindowInsets.displayCutout)
+                    .only(WindowInsetsSides.Vertical)
+                    .asPaddingValues(),
                 overscrollEffect = null,
             ) {
                 item {
@@ -248,9 +246,9 @@ private fun StatusCard(
                 // Over a picture the card is nothing but the picture, so the text carries the same
                 // bright tint the info card uses; on the card's own colour it is plain black.
                 val statusTitleColor =
-                    if (statusImage != null) lerp(colorScheme.primary, Color.White, 0.65f) else Color.Black
+                    if (statusImage != null) lerp(colorScheme.primary, Color.White, 0.65f) else colorScheme.onSurface
                 val statusSubColor =
-                    if (statusImage != null) lerp(colorScheme.primary, Color.White, 0.8f) else Color.Black
+                    if (statusImage != null) lerp(colorScheme.primary, Color.White, 0.8f) else colorScheme.onSurfaceVariantSummary
 
                 Row(
                     modifier = Modifier
@@ -506,14 +504,14 @@ private fun InfoCard(
                     // the page's own dark text vanished, and plainly white text reads as a different
                     // app. Only the text moves — the components keep the scheme they had.
                     // With no picture the page is the plain light one, and there the text is black.
-                    color = if (wallpaperSet) lerp(colorScheme.primary, Color.White, 0.65f) else Color.Black,
+                    color = if (wallpaperSet) lerp(colorScheme.primary, Color.White, 0.65f) else colorScheme.onSurface,
                 )
                 Text(
                     text = content,
                     fontSize = MiuixTheme.textStyles.body2.fontSize,
                     color = if (wallpaperSet) {
                         lerp(colorScheme.primary, Color.White, 0.8f)
-                    } else Color.Black,
+                    } else colorScheme.onSurfaceVariantSummary,
                     modifier = Modifier.padding(top = 2.dp),
                 )
             }
