@@ -87,7 +87,7 @@ Manager UI ──▶ AppZygotePreload (JNI) ──▶ ksud late-load --magica <p
 | 钩子 | 拦什么 |
 |---|---|
 | `openat` / `openat2` | 以写方式打开 `/dev/block/**` 下的块设备 |
-| `mount` | `MS_REMOUNT` 且未带 `MS_RDONLY`（把分区重挂为可写） |
+| `mount` | `MS_REMOUNT` 且未带 `MS_RDONLY`，且目标是系统分区（`/`、`/system`、`/vendor`、`/odm` 等）；其余 remount 放行 |
 | `write` / `pwrite64` / `writev` | 经由**已打开的**块设备 fd 写入 |
 
 也就是说，**任何拿到 root 的应用**（而不只是模块安装脚本）都无法再直接写系统分区，
