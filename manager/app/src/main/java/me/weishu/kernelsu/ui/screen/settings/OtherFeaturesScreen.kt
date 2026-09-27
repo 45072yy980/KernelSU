@@ -86,10 +86,20 @@ fun OtherFeaturesScreen() {
         setRuntimeGuardEnabled(value)
         runtimeGuardEnabled = isRuntimeGuardEnabled()
     }
-    // Keep the kernel copy of the runtime switch in step with what the UI shows.
+    // Push the runtime switch to the kernel when (and only when) it changes.
     // The kernel flag is what actually blocks a *live* write from a rooted
-    // process; it is in-memory, so (re)push it whenever this screen is shown.
+    // process, and it is in-memory, so the value has to be re-sent per session.
+    //
+    // We skip the very first composition: the kernel already reflects this
+    // value right after load (ksud replays it from the feature config), and
+    // re-sending "ksud feature set ... 0" on every visit would silently undo a
+    // value another screen/instance had just set.
+    var syncedOnce by remember { mutableStateOf(false) }
     LaunchedEffect(runtimeGuardEnabled) {
+        if (!syncedOnce) {
+            syncedOnce = true
+            return@LaunchedEffect
+        }
         withContext(Dispatchers.IO) {
             runCatching { syncRuntimeGuardToKernel(runtimeGuardEnabled) }
         }

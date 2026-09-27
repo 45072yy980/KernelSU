@@ -37,14 +37,13 @@ fun isPartitionGuardEnabled(): Boolean =
     Natives.isLateLoadMode || ksuApp.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
         .getBoolean(KEY_PARTITION_GUARD, false)
 
-/** The user setting on its own, ignoring the jailbreak override (for the settings UI). */
-fun partitionGuardUserSetting(): Boolean =
-    ksuApp.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
-        .getBoolean(KEY_PARTITION_GUARD, false)
 
 fun setPartitionGuardEnabled(enabled: Boolean) {
+    // commit() for the same reason as setRuntimeGuardEnabled(): the settings
+    // screen re-reads this right after the call and an async apply() could make
+    // the parent switch snap back.
     ksuApp.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
-        .edit().putBoolean(KEY_PARTITION_GUARD, enabled).apply()
+        .edit().putBoolean(KEY_PARTITION_GUARD, enabled).commit()
     // Turning the top-level protection off also disables the runtime layer: the
     // child switch is only meaningful while the parent is on.
     if (!enabled) {
@@ -63,14 +62,13 @@ fun isRuntimeGuardEnabled(): Boolean =
         .getBoolean(KEY_RUNTIME_GUARD, false)
 
 fun setRuntimeGuardEnabled(enabled: Boolean) {
+    // commit(), not apply(): the settings screen reads the value back right after
+    // this returns, so an async write could make the switch snap back.
     ksuApp.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
-        .edit().putBoolean(KEY_RUNTIME_GUARD, enabled).apply()
-    // Push the state into the kernel so it can block live writes from any
-    // already-rooted process, not just scan a module's scripts at install time.
-    // Fire-and-forget on a background thread: the shell call blocks.
-    Thread {
-        runCatching { syncRuntimeGuardToKernel(enabled) }
-    }.start()
+        .edit().putBoolean(KEY_RUNTIME_GUARD, enabled).commit()
+    // NOTE: pushing the value to the kernel is deliberately left to the caller
+    // (the settings screen's LaunchedEffect). Pushing here too would fire the
+    // same "ksud feature set" twice per toggle.
 }
 
 /**

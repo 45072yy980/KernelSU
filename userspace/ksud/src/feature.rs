@@ -331,7 +331,8 @@ pub fn list_features() {
         FeatureId::Sulog,
         FeatureId::AdbRoot,
         FeatureId::SelinuxHide,
-        FeatureId::PartitionGuard,
+        // PartitionGuard (id 5) is a reserved slot with no kernel handler:
+        // the live write guard lives in PartitionGuardRuntime (id 6) now.
         FeatureId::PartitionGuardRuntime,
     ];
 
@@ -396,7 +397,6 @@ pub fn save_config() -> Result<()> {
         FeatureId::Sulog,
         FeatureId::AdbRoot,
         FeatureId::SelinuxHide,
-        FeatureId::PartitionGuard,
         FeatureId::PartitionGuardRuntime,
     ];
 
