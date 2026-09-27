@@ -186,6 +186,9 @@
     <string name="settings_uninstall_permanent_message">徹底永久解除安裝 KernelSU（Root 權限及所有模組）</string>
     <string name="settings_restore_stock_image_message">恢復原廠映像（如有備份），通常用於 OTA 前；如需解除安裝 KernelSU，請使用「永久解除安裝」</string>
     <string name="flashing">正在刷入</string>
+    <string name="jailbreaking">正在越獄</string>
+    <string name="jailbreak_success">越獄完成</string>
+    <string name="jailbreak_failed">越獄失敗</string>
     <string name="flash_success">刷入成功</string>
     <string name="flash_failed">刷入失敗</string>
     <string name="selected_lkm">已選取 LKM：%s</string>

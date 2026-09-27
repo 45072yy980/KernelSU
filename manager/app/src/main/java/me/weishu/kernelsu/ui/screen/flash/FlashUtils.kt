@@ -35,9 +35,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.parcelize.Parcelize
 import me.weishu.kernelsu.R
+import me.weishu.kernelsu.ksuApp
 import me.weishu.kernelsu.ui.LocalUiMode
 import me.weishu.kernelsu.ui.UiMode
 import me.weishu.kernelsu.ui.util.FlashResult
+import me.weishu.kernelsu.ui.util.JailbreakExploit as JailbreakExploitRunner
 import me.weishu.kernelsu.ui.util.LkmSelection
 import me.weishu.kernelsu.ui.util.downloadBoot
 import me.weishu.kernelsu.ui.util.flashModule
@@ -110,6 +112,15 @@ sealed class FlashIt : Parcelable {
 
     @Parcelize
     data object FlashUninstall : FlashIt()
+
+    /**
+     * Runs the bundled GhostLock exploit to gain root and hand off to the
+     * Manager's own ksud late-load. Reused by the Flash progress screen so the
+     * exploit gets the same live log, success/failure banner and save-log
+     * button as a module install.
+     */
+    @Parcelize
+    data object JailbreakExploit : FlashIt()
 }
 
 fun flashModulesSequentially(
@@ -162,6 +173,27 @@ fun flashIt(
 
         FlashIt.FlashRestore -> restoreBoot(onStdout, onStderr)
         FlashIt.FlashUninstall -> uninstallPermanently(onStdout, onStderr)
+        FlashIt.JailbreakExploit -> {
+            onStdout("==== jailbreak (exploit) ====")
+            val appContext = ksuApp.applicationContext
+            if (!JailbreakExploitRunner.isAvailable(appContext)) {
+                onStderr("exploit binary not bundled for this ABI")
+                FlashResult(1, "exploit binary not bundled", false)
+            } else {
+                val result = JailbreakExploitRunner.run(
+                    context = appContext,
+                    managerPackage = appContext.packageName,
+                    onLog = { line -> onStdout(line) },
+                )
+                if (result.success) {
+                    // The exploit restarts the Manager when it succeeds; surface
+                    // the usual "reboot" affordance too so the user can act.
+                    FlashResult(0, "", true)
+                } else {
+                    FlashResult(result.exitCode.coerceAtLeast(1), result.output, false)
+                }
+            }
+        }
     }
 }
 

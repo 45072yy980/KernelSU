@@ -1,7 +1,6 @@
 package me.weishu.kernelsu.ui.screen.home
 
 import android.content.Intent
-import android.util.Log
 import android.widget.Toast
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -29,11 +28,11 @@ import me.weishu.kernelsu.ui.component.dialog.rememberConfirmDialog
 import me.weishu.kernelsu.ui.component.dialog.rememberLoadingDialog
 import me.weishu.kernelsu.ui.navigation3.Navigator
 import me.weishu.kernelsu.ui.navigation3.Route
+import me.weishu.kernelsu.ui.screen.flash.FlashIt
 import me.weishu.kernelsu.ui.util.JailbreakExploit
 import me.weishu.kernelsu.ui.viewmodel.HomeViewModel
 import kotlin.time.Duration.Companion.milliseconds
 
-private const val TAG = "HomeScreen"
 
 @Composable
 fun HomePager(
@@ -55,23 +54,12 @@ fun HomePager(
     // installation flow. The exploit is only offered when the binary is bundled.
     val jailbreakPrompt = rememberConfirmDialog(
         onConfirm = {
-            // Confirmed: run the exploit-based jailbreak.
-            val onLog: (String) -> Unit = { line -> Log.d(TAG, "[jailbreak] $line") }
+            // Confirmed: open the live progress screen. It runs the bundled
+            // exploit and streams its log the same way a module install does.
             if (!JailbreakExploit.isAvailable(context)) {
                 Toast.makeText(context, R.string.jailbreak_exploit_unavailable, Toast.LENGTH_LONG).show()
             } else {
-                loadingDialog.showLoading()
-                scope.launch(Dispatchers.IO) {
-                    val result = JailbreakExploit.run(context = context, onLog = onLog)
-                    withContext(Dispatchers.Main) {
-                        loadingDialog.hide()
-                        if (result.success) {
-                            viewModel.refresh()
-                        } else {
-                            Toast.makeText(context, R.string.jailbreak_exploit_failed, Toast.LENGTH_LONG).show()
-                        }
-                    }
-                }
+                navigator.push(Route.Flash(FlashIt.JailbreakExploit))
             }
         },
         onDismiss = {

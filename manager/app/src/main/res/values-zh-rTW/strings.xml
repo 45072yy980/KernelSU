@@ -136,6 +136,9 @@
     <string name="settings_uninstall_permanent">永久性解除安裝</string>
     <string name="settings_uninstall_permanent_message">徹底解除安裝 KernelSU（含 Root 授權與所有的模組）。</string>
     <string name="flashing">正在閃刷</string>
+    <string name="jailbreaking">正在越獄</string>
+    <string name="jailbreak_success">越獄完成</string>
+    <string name="jailbreak_failed">越獄失敗</string>
     <string name="flash_success">閃刷成功</string>
     <string name="settings_restore_stock_image_message">若裝置內含有備份檔案，遂以 OTA 更新前的原廠系統映像檔進行復原。若需要解除安裝 KernelSU，請選擇「永久性解除安裝」。</string>
     <string name="flash_failed">閃刷失敗</string>

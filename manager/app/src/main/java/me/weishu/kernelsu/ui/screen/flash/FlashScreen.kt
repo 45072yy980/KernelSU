@@ -64,6 +64,7 @@ fun FlashScreen(flashIt: FlashIt) {
         flashingStatus = flashingStatus,
         showJailbreakWarning = needJailbreakWarning && !flashingEnabled,
         rebootLabelRes = if (softReboot) R.string.reboot_soft else R.string.reboot,
+        isJailbreak = flashIt is FlashIt.JailbreakExploit,
     )
     val actions = FlashScreenActions(
         onBack = dropUnlessResumed { navigator.pop() },

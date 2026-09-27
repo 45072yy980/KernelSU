@@ -70,10 +70,18 @@ fun FlashScreenMaterial(
                 title = {
                     Text(
                         stringResource(
-                            when (state.flashingStatus) {
-                                FlashingStatus.FLASHING -> R.string.flashing
-                                FlashingStatus.SUCCESS -> R.string.flash_success
-                                FlashingStatus.FAILED -> R.string.flash_failed
+                            if (state.isJailbreak) {
+                                when (state.flashingStatus) {
+                                    FlashingStatus.FLASHING -> R.string.jailbreaking
+                                    FlashingStatus.SUCCESS -> R.string.jailbreak_success
+                                    FlashingStatus.FAILED -> R.string.jailbreak_failed
+                                }
+                            } else {
+                                when (state.flashingStatus) {
+                                    FlashingStatus.FLASHING -> R.string.flashing
+                                    FlashingStatus.SUCCESS -> R.string.flash_success
+                                    FlashingStatus.FAILED -> R.string.flash_failed
+                                }
                             }
                         )
                     )
