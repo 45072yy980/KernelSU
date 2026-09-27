@@ -62,6 +62,8 @@ jobs:
       run: |
         if [ "${{ github.event_name }}" = "pull_request" ]; then
           export KSU_PACKAGE_NAME="me.weishu.kernelsu.pr"
+        else
+          export KSU_PACKAGE_NAME="me.diksu.kernelsu"
         fi
         if [ "${{ inputs.target }}" = riscv64-linux-android ]; then
           source .github/scripts/setup-rust-build.sh riscv64-linux-android 35

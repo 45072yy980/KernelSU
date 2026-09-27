@@ -48,6 +48,21 @@ jobs:
       keystore_password: ${{ steps.gen.outputs.keystore_password }}
       key_password: ${{ steps.gen.outputs.key_password }}
     steps:
+      - name: Checkout signing key
+        if: github.event_name != 'pull_request'
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: ksu-signing.jks
+          sparse-checkout-cone-mode: false
+      - name: Use repository keystore
+        if: github.event_name != 'pull_request'
+        id: gen
+        run: |
+          KEYSTORE_PASSWORD='kernelsu123456'
+          KEY_PASSWORD='kernelsu123456'
+          echo "keystore_password=$KEYSTORE_PASSWORD" >> $GITHUB_OUTPUT
+          echo "key_password=$KEY_PASSWORD" >> $GITHUB_OUTPUT
+          echo "keystore=$(base64 -w 0 ksu-signing.jks)" >> $GITHUB_OUTPUT
       - name: Generate temporary keystore
         if: github.event_name == 'pull_request'
         id: gen
@@ -70,27 +85,27 @@ jobs:
           echo "keystore=$(base64 -w 0 pr-key.jks)" >> $GITHUB_OUTPUT
 
       - name: Extract certificate hash and size
-        if: github.event_name == 'pull_request'
         id: extract
         env:
           STORE_PASS: ${{ steps.gen.outputs.keystore_password }}
         run: |
-          # Export DER certificate
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            KS=pr-key.jks
+            ALIAS=pr-key
+          else
+            KS=ksu-signing.jks
+            ALIAS=kernelsu
+          fi
           keytool -exportcert \
-            -alias pr-key \
-            -keystore pr-key.jks \
+            -alias "$ALIAS" \
+            -keystore "$KS" \
             -storepass "$STORE_PASS" \
-            -file pr-cert.der
-
-          # Calculate size in hex
-          SIZE_DEC=$(stat -c%s pr-cert.der)
+            -file cert.der
+          SIZE_DEC=$(stat -c%s cert.der)
           SIZE_HEX=$(printf '0x%04x' "$SIZE_DEC")
           echo "expected_size=$SIZE_HEX" >> $GITHUB_OUTPUT
-
-          # Calculate SHA256 hash
-          HASH=$(sha256sum pr-cert.der | awk '{print $1}')
+          HASH=$(sha256sum cert.der | awk '{print $1}')
           echo "expected_hash=$HASH" >> $GITHUB_OUTPUT
-
           echo "Certificate size: $SIZE_HEX ($SIZE_DEC bytes)"
           echo "Certificate hash: $HASH"
 
@@ -295,13 +310,20 @@ jobs:
             echo "SIGN_KEY_ALIAS=pr-key" >> $GITHUB_ENV
             echo "SIGN_KEYSTORE_PASSWORD=$PR_KEYSTORE_PASSWORD" >> $GITHUB_ENV
             echo "SIGN_KEY_PASSWORD=$PR_KEY_PASSWORD" >> $GITHUB_ENV
-          else
-            test -n "$PROD_KEYSTORE"
+          elif [ -n "$PROD_KEYSTORE" ]; then
             echo "$PROD_KEYSTORE" | base64 -d > key.jks
             echo "SIGN_KEYSTORE_FILE=key.jks" >> $GITHUB_ENV
             echo "SIGN_KEY_ALIAS=$PROD_KEY_ALIAS" >> $GITHUB_ENV
             echo "SIGN_KEYSTORE_PASSWORD=$PROD_KEYSTORE_PASSWORD" >> $GITHUB_ENV
             echo "SIGN_KEY_PASSWORD=$PROD_KEY_PASSWORD" >> $GITHUB_ENV
+          else
+            # Fall back to the repository keystore so a fork without signing
+            # secrets still produces a manager the kernel recognises.
+            cp ksu-signing.jks key.jks
+            echo "SIGN_KEYSTORE_FILE=key.jks" >> $GITHUB_ENV
+            echo "SIGN_KEY_ALIAS=kernelsu" >> $GITHUB_ENV
+            echo "SIGN_KEYSTORE_PASSWORD=kernelsu123456" >> $GITHUB_ENV
+            echo "SIGN_KEY_PASSWORD=kernelsu123456" >> $GITHUB_ENV
           fi
 
       - name: Repack and resign

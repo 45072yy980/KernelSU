@@ -83,10 +83,11 @@ fun MiuixKernelSUTheme(
             // The picture decides how the text reads, and it does so for everything the app draws —
             // a page, a pushed screen, a dialog. With one the app is the dark one, where the greys
             // the theme hands out are too dim: the text climbs to the bright tint the home's own
-            // text uses, white with the key colour still in it. With no picture the app is the light
-            // one, and there the text is plain black rather than the theme's own brown-black. Only
-            // the text colours move; a component that paints its own container keeps the colour
-            // meant for it, so the bright ones stay bright.
+            // text uses, white with the key colour still in it. Only the text colours move; a
+            // component that paints its own container keeps the colour meant for it, so the bright
+            // ones stay bright. With no picture the theme already pairs its own dark text with its
+            // own light containers, so nothing is forced here — overriding it to plain black is
+            // what made cards and their labels sit at odds with each other.
             val base = MiuixTheme.colorScheme
             val litText = lerp(base.primary, Color.White, 0.65f)
             val litSummary = lerp(base.primary, Color.White, 0.8f)
@@ -97,11 +98,7 @@ fun MiuixKernelSUTheme(
                     onSurfaceVariantSummary = lerp(base.onSurfaceVariantSummary, litSummary, 0.6f),
                 )
             } else {
-                base.copy(
-                    onSurface = Color.Black,
-                    onBackground = Color.Black,
-                    onSurfaceVariantSummary = Color.Black,
-                )
+                base
             }
             MiuixTheme(colors = textColors, textStyles = MiuixTheme.textStyles) {
                 CompositionLocalProvider(
