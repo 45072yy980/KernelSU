@@ -79,7 +79,50 @@ static bool is_protected_block_path(const char *path)
     return true;
 }
 
-/* Write-intent check shared by openat and openat2. */
+/*
+ * A mount target is "system" when it is one of the read-only partitions the
+ * bootloader / dm-verity watch. Remounting any of these read-write is the thing
+ * we refuse; everything else (loop devices, overlayfs, tmpfs, bind mounts,
+ * namespaces, /data, /mnt, ...) is left completely alone so module mounting and
+ * normal sandboxing keep working.
+ */
+static bool is_system_mount_target(const char *path)
+{
+    static const char *const targets[] = {
+        "/system",
+        "/system_ext",
+        "/system_dlkm",
+        "/vendor",
+        "/vendor_dlkm",
+        "/product",
+        "/odm",
+        "/my_product",
+        "/my_stock",
+        "/my_carrier",
+        "/my_region",
+        "/my_bigball",
+        "/my_manifest",
+    };
+    int i;
+
+    if (!path || path[0] != '/')
+        return false;
+
+    /* The root filesystem itself: only the exact path "/". */
+    if (path[1] == '\0')
+        return true;
+
+    for (i = 0; i < (int)(sizeof(targets) / sizeof(targets[0])); i++) {
+        size_t len = strlen(targets[i]);
+        /* Exact match, or a subdirectory of the mount point. */
+        if (strncmp(path, targets[i], len) != 0)
+            continue;
+        if (path[len] == '\0' || path[len] == '/')
+            return true;
+    }
+
+    return false;
+}
 static bool flags_have_write_intent(unsigned long flags)
 {
     return (flags & (O_WRONLY | O_RDWR | O_APPEND | O_CREAT | O_TRUNC)) != 0;
@@ -169,7 +212,6 @@ long __nocfi ksu_hook_openat2(int orig_nr, const struct pt_regs *regs)
 
 long __nocfi ksu_hook_mount(int orig_nr, const struct pt_regs *regs)
 {
-    long ret;
     unsigned long flags;
 
     if (likely(!ksu_partition_guard_enabled))
@@ -177,24 +219,30 @@ long __nocfi ksu_hook_mount(int orig_nr, const struct pt_regs *regs)
 
     flags = (unsigned long)PT_REGS_SYSCALL_PARM4(regs);
     /*
-     * A remount that clears MS_RDONLY turns a protected partition writable.
-     * Reject that outright; every other mount call goes through untouched so
-     * namespaces, tmpfs and bind mounts keep working.
+     * Only a remount that clears MS_RDONLY *on a system partition* is refused.
+     * A remount of anything else (tmpfs, a loop-backed module image, an app
+     * sandbox) goes straight through, so late-load module mounting is never at
+     * risk from this hook.
      */
     if ((flags & MS_REMOUNT) && !(flags & MS_RDONLY)) {
         char src[160];
         char tgt[160];
+
         src[0] = '\0';
         tgt[0] = '\0';
         copy_path_from_user((const char __user *)PT_REGS_PARM1(regs), src, sizeof(src));
         copy_path_from_user((const char __user *)PT_REGS_PARM2(regs), tgt, sizeof(tgt));
-        pr_info("partition_guard: blocked remount rw of %s (src %s)\n",
-                tgt[0] ? tgt : "?", src[0] ? src : "?");
-        return -EACCES;
+
+        if (is_system_mount_target(tgt)) {
+            pr_info("partition_guard: blocked remount rw of %s (src %s)\n",
+                    tgt, src[0] ? src : "?");
+            return -EACCES;
+        }
+        pr_info("partition_guard: allowing remount rw of non-system %s\n",
+                tgt[0] ? tgt : "?");
     }
 
-    ret = ksu_syscall_table[orig_nr](regs);
-    return ret;
+    return ksu_syscall_table[orig_nr](regs);
 }
 
 /*
