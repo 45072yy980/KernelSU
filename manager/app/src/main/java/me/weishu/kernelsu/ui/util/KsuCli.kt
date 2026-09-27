@@ -23,6 +23,7 @@ import me.weishu.kernelsu.core.tasks.ExtractImage
 import me.weishu.kernelsu.core.tasks.ProbeResult
 import me.weishu.kernelsu.core.utils.DataSourceChannel
 import me.weishu.kernelsu.ksuApp
+import me.weishu.kernelsu.data.repository.isPartitionGuardEnabled
 import okhttp3.OkHttpClient
 import java.io.File
 import java.nio.ByteBuffer
@@ -202,7 +203,10 @@ fun flashModule(
             this?.copyTo(output)
         }
         val cmd = "module install ${file.absolutePath}"
-        val result = flashWithIO("${getKsuDaemonPath()} $cmd", onStdout, onStderr)
+        // Opt the install into the system-partition guard when it is enabled
+        // (always in jailbreak mode, otherwise the user setting).
+        val guardEnv = if (isPartitionGuardEnabled()) "KSU_PARTITION_GUARD=1 " else ""
+        val result = flashWithIO("$guardEnv${getKsuDaemonPath()} $cmd", onStdout, onStderr)
         Log.i("KernelSU", "install module $uri result: $result")
 
         file.delete()

@@ -615,14 +615,22 @@ fn jailbreak_partition_hazard(updated_dir: &Path) -> Option<String> {
 /// memory and cannot put a partition back the way a reboot would, so a module
 /// that writes one leaves a mark that survives until the device is wiped.
 fn guard_jailbreak_partition(updated_dir: &Path, force: bool) -> Result<()> {
-    if !ksucalls::is_late_load() {
+    // In jailbreak (late-load) mode the guard is always on: that session cannot
+    // undo a real partition write the way a reboot would. Outside jailbreak mode
+    // the user may opt in per install by setting KSU_PARTITION_GUARD=1 (the
+    // Manager's "System partition protection" switch).
+    let late_load = ksucalls::is_late_load();
+    let env_guard = std::env::var("KSU_PARTITION_GUARD")
+        .map(|v| v == "1")
+        .unwrap_or(false);
+    if !late_load && !env_guard {
         return Ok(());
     }
     let Some(reason) = jailbreak_partition_hazard(updated_dir) else {
         return Ok(());
     };
     if force {
-        warn!("jailbreak guard: allowing module that {reason} (forced)");
+        warn!("partition guard: allowing module that {reason} (forced)");
         return Ok(());
     }
     println!("\n\u{274c} Installation Blocked (jailbreak mode)");
@@ -639,7 +647,7 @@ fn guard_jailbreak_partition(updated_dir: &Path, force: bool) -> Result<()> {
     println!("\u{2502} Install it after a normal boot entry, or re-run with");
     println!("\u{2502}   ksud module install --force <zip>");
     println!("\u{2514}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\n");
-    bail!("jailbreak mode: module would modify a partition ({reason})");
+    bail!("partition guard: module would modify a partition ({reason})");
 }
 
 fn install_module_to_system(zip: &str, force: bool) -> Result<()> {

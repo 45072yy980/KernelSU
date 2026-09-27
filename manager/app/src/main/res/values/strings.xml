@@ -200,6 +200,9 @@
     <string name="hide_manager_restore_done">Restoring the plain Manager…</string>
     <string name="settings_hide_applist">Hide app list in one tap</string>
     <string name="settings_hide_applist_summary">Writes a Hide My Applist config for every third-party app and has HMA reload it</string>
+    <string name="settings_partition_guard">System partition protection</string>
+    <string name="settings_partition_guard_summary">Blocks installation of modules that would really write a system partition (dd to a block device, remount rw, flash, mkfs ...). Always on in jailbreak mode; can be toggled here otherwise.</string>
+    <string name="settings_partition_guard_summary_jailbreak">Always on in jailbreak mode and cannot be turned off here - a late-loaded session cannot undo a real partition write.</string>
     <string name="hide_applist_about">Adds every third-party app that has no entry yet to HMA-OSS\'s hidden scope; apps that are already configured only get their presets filled in, and the Manager is hidden from all of them.</string>
     <string name="hide_applist_plain">Standard</string>
     <string name="hide_applist_scene">Scene</string>

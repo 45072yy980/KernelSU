@@ -20,11 +20,31 @@ import java.security.SecureRandom
 
 private const val SETTINGS_PREFS = "settings"
 private const val KEY_USE_SOFT_REBOOT = "soft_reboot"
-
+private const val KEY_PARTITION_GUARD = "partition_guard"
 /** Prefer soft reboot: always in jailbreak mode, or when the setting is enabled. */
 fun isSoftRebootPreferred(): Boolean =
     Natives.isLateLoadMode || ksuApp.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
         .getBoolean(KEY_USE_SOFT_REBOOT, false)
+
+/**
+ * Whether the system-partition guard should run for a module install.
+ *
+ * It is always on in jailbreak (late-load) mode - that session cannot undo a
+ * real partition write - and optional otherwise, following the user setting.
+ */
+fun isPartitionGuardEnabled(): Boolean =
+    Natives.isLateLoadMode || ksuApp.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
+        .getBoolean(KEY_PARTITION_GUARD, false)
+
+/** The user setting on its own, ignoring the jailbreak override (for the settings UI). */
+fun partitionGuardUserSetting(): Boolean =
+    ksuApp.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
+        .getBoolean(KEY_PARTITION_GUARD, false)
+
+fun setPartitionGuardEnabled(enabled: Boolean) {
+    ksuApp.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
+        .edit().putBoolean(KEY_PARTITION_GUARD, enabled).apply()
+}
 
 class SettingsRepositoryImpl : SettingsRepository {
 

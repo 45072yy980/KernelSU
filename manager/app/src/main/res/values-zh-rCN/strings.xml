@@ -183,6 +183,9 @@
     <string name="hide_manager_restore_done">正在还原原版管理器…</string>
     <string name="settings_hide_applist">一键配置隐藏应用列表</string>
     <string name="settings_hide_applist_summary">为所有第三方应用写好 Hide My Applist 配置并让其重读</string>
+    <string name="settings_partition_guard">系统分区保护</string>
+    <string name="settings_partition_guard_summary">拦截会真正写入系统分区的模块安装（dd 写块设备、remount rw、刷写、mkfs 等）。越狱模式下始终开启，其他情况可在此开关。</string>
+    <string name="settings_partition_guard_summary_jailbreak">越狱模式下始终开启，无法在此关闭——晚期加载的会话无法撤销对分区的真实写入。</string>
     <string name="hide_applist_about">把还没配过的第三方应用加进 HMA-OSS 的隐藏范围，已配过的应用只补齐预设、别的字段不动，管理器自己也会从这些应用里隐藏掉。</string>
     <string name="hide_applist_plain">标准</string>
     <string name="hide_applist_scene">Scene</string>

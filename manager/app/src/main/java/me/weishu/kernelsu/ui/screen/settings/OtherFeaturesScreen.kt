@@ -30,14 +30,18 @@ import androidx.lifecycle.compose.dropUnlessResumed
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import me.weishu.kernelsu.Natives
 import me.weishu.kernelsu.R
 import me.weishu.kernelsu.ui.LocalUiMode
 import me.weishu.kernelsu.ui.UiMode
 import me.weishu.kernelsu.ui.component.material.SegmentedColumn
 import me.weishu.kernelsu.ui.component.material.SegmentedListItem
+import me.weishu.kernelsu.ui.component.material.SegmentedSwitchItem
 import me.weishu.kernelsu.ui.navigation3.LocalNavigator
 import me.weishu.kernelsu.ui.navigation3.Route
 import me.weishu.kernelsu.ui.util.HideAppList
+import me.weishu.kernelsu.data.repository.isPartitionGuardEnabled
+import me.weishu.kernelsu.data.repository.setPartitionGuardEnabled
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Icon as MiuixIcon
 import top.yukonga.miuix.kmp.basic.IconButton as MiuixIconButton
@@ -46,6 +50,7 @@ import top.yukonga.miuix.kmp.basic.TopAppBar as MiuixTopAppBar
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.preference.ArrowPreference
+import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme
 
 /** The two extras that came over from DikSU: the one-tap Hide My Applist config, and the keyMint panel. */
@@ -57,6 +62,15 @@ fun OtherFeaturesScreen() {
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+
+    // System-partition guard: forced on (locked) in jailbreak/late-load mode,
+    // otherwise it follows the user setting.
+    val isLateLoad = Natives.isLateLoadMode
+    var guardEnabled by remember { mutableStateOf(isPartitionGuardEnabled()) }
+    val onGuardChange: (Boolean) -> Unit = { value ->
+        setPartitionGuardEnabled(value)
+        guardEnabled = isPartitionGuardEnabled()
+    }
     var phase by remember { mutableStateOf<HideAppListPhase?>(null) }
 
     val onHideAppList = { phase = HideAppListPhase.Pick }
@@ -78,8 +92,22 @@ fun OtherFeaturesScreen() {
     }
 
     when (LocalUiMode.current) {
-        UiMode.Material -> OtherFeaturesMaterial(onBack, onOpenKeymint, onHideAppList)
-        UiMode.Miuix -> OtherFeaturesMiuix(onBack, onOpenKeymint, onHideAppList)
+        UiMode.Material -> OtherFeaturesMaterial(
+            onBack = onBack,
+            onOpenKeymint = onOpenKeymint,
+            onHideAppList = onHideAppList,
+            guardEnabled = guardEnabled,
+            guardLocked = isLateLoad,
+            onGuardChange = onGuardChange,
+        )
+        UiMode.Miuix -> OtherFeaturesMiuix(
+            onBack = onBack,
+            onOpenKeymint = onOpenKeymint,
+            onHideAppList = onHideAppList,
+            guardEnabled = guardEnabled,
+            guardLocked = isLateLoad,
+            onGuardChange = onGuardChange,
+        )
     }
 
     val open = phase
@@ -98,6 +126,9 @@ private fun OtherFeaturesMaterial(
     onBack: () -> Unit,
     onOpenKeymint: () -> Unit,
     onHideAppList: () -> Unit,
+    guardEnabled: Boolean,
+    guardLocked: Boolean,
+    onGuardChange: (Boolean) -> Unit,
 ) {
     Scaffold(
         topBar = {
@@ -153,6 +184,21 @@ private fun OtherFeaturesMaterial(
                             },
                         )
                     },
+                    {
+                        val guardTitle = stringResource(R.string.settings_partition_guard)
+                        val guardSummary = stringResource(
+                            if (guardLocked) R.string.settings_partition_guard_summary_jailbreak
+                            else R.string.settings_partition_guard_summary
+                        )
+                        SegmentedSwitchItem(
+                            icon = Icons.Filled.Security,
+                            title = guardTitle,
+                            summary = guardSummary,
+                            enabled = !guardLocked,
+                            checked = guardEnabled,
+                            onCheckedChange = onGuardChange,
+                        )
+                    },
                 ),
             )
         }
@@ -164,6 +210,9 @@ private fun OtherFeaturesMiuix(
     onBack: () -> Unit,
     onOpenKeymint: () -> Unit,
     onHideAppList: () -> Unit,
+    guardEnabled: Boolean,
+    guardLocked: Boolean,
+    onGuardChange: (Boolean) -> Unit,
 ) {
     MiuixScaffold(
         topBar = {
@@ -212,6 +261,24 @@ private fun OtherFeaturesMiuix(
                             )
                         },
                         onClick = onOpenKeymint,
+                    )
+                    SwitchPreference(
+                        title = stringResource(R.string.settings_partition_guard),
+                        summary = stringResource(
+                            if (guardLocked) R.string.settings_partition_guard_summary_jailbreak
+                            else R.string.settings_partition_guard_summary
+                        ),
+                        startAction = {
+                            MiuixIcon(
+                                imageVector = Icons.Filled.Security,
+                                contentDescription = null,
+                                tint = colorScheme.onBackground,
+                                modifier = Modifier.padding(end = 6.dp),
+                            )
+                        },
+                        enabled = !guardLocked,
+                        checked = guardEnabled,
+                        onCheckedChange = onGuardChange,
                     )
                 }
             }

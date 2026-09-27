@@ -24,7 +24,7 @@ import me.weishu.kernelsu.R
 import me.weishu.kernelsu.magica.MagicaService
 import me.weishu.kernelsu.ui.LocalUiMode
 import me.weishu.kernelsu.ui.UiMode
-import me.weishu.kernelsu.ui.component.dialog.rememberConfirmDialog
+import me.weishu.kernelsu.ui.component.dialog.JailbreakDialog
 import me.weishu.kernelsu.ui.component.dialog.rememberLoadingDialog
 import me.weishu.kernelsu.ui.navigation3.Navigator
 import me.weishu.kernelsu.ui.navigation3.Route
@@ -32,7 +32,6 @@ import me.weishu.kernelsu.ui.screen.flash.FlashIt
 import me.weishu.kernelsu.ui.util.JailbreakExploit
 import me.weishu.kernelsu.ui.viewmodel.HomeViewModel
 import kotlin.time.Duration.Companion.milliseconds
-
 
 @Composable
 fun HomePager(
@@ -49,22 +48,28 @@ fun HomePager(
     val latestIsCurrentPage by rememberUpdatedState(isCurrentPage)
     val initialResumeHandled = rememberSaveable { mutableStateOf(false) }
 
-    // Ask the user how to proceed when the kernel is not installed yet: run the
-    // bundled exploit to gain root and late-load right now, or go to the manual
-    // installation flow. The exploit is only offered when the binary is bundled.
-    val jailbreakPrompt = rememberConfirmDialog(
-        onConfirm = {
-            // Confirmed: open the live progress screen. It runs the bundled
-            // exploit and streams its log the same way a module install does.
+    // Ask how to proceed when the kernel is not installed yet. This dialog has
+    // two explicit buttons (exploit / manual install); tapping outside or the
+    // back gesture only closes it and must NOT fall through to the install page.
+    var jailbreakChooserShown by rememberSaveable { mutableStateOf(false) }
+
+    JailbreakDialog(
+        show = jailbreakChooserShown,
+        onExploit = {
+            jailbreakChooserShown = false
             if (!JailbreakExploit.isAvailable(context)) {
                 Toast.makeText(context, R.string.jailbreak_exploit_unavailable, Toast.LENGTH_LONG).show()
             } else {
                 navigator.push(Route.Flash(FlashIt.JailbreakExploit))
             }
         },
-        onDismiss = {
-            // Dismissed: fall back to the ordinary installation flow.
+        onManualInstall = {
+            jailbreakChooserShown = false
             navigator.push(Route.Install)
+        },
+        onCancel = {
+            // Just close the chooser; do not navigate anywhere.
+            jailbreakChooserShown = false
         },
     )
 
@@ -88,15 +93,8 @@ fun HomePager(
         onInstallClick = { navigator.push(Route.Install) },
         onOpenUrl = uriHandler::openUri,
         // The card's own click, or the small "jailbreak" button when SELinux is
-        // permissive: ask whether to exploit-then-late-load or install manually.
-        onNotInstalledClick = {
-            jailbreakPrompt.showConfirm(
-                title = context.getString(R.string.jailbreak_choose_title),
-                content = context.getString(R.string.jailbreak_choose_message),
-                confirm = context.getString(R.string.jailbreak_exploit_action),
-                dismiss = context.getString(R.string.jailbreak_manual_action),
-            )
-        },
+        // permissive: open the chooser (exploit vs manual install).
+        onNotInstalledClick = { jailbreakChooserShown = true },
         onJailbreakClick = {
             // Immediate jailbreak: the device already has a working shell/ksud, so
             // just ask ksud to late-load via the magica service.
@@ -112,15 +110,7 @@ fun HomePager(
                 }
             }
         },
-        onJailbreakExploitClick = {
-            // Explicit request to exploit; skip the chooser and run it directly.
-            jailbreakPrompt.showConfirm(
-                title = context.getString(R.string.jailbreak_choose_title),
-                content = context.getString(R.string.jailbreak_choose_message),
-                confirm = context.getString(R.string.jailbreak_exploit_action),
-                dismiss = context.getString(R.string.jailbreak_manual_action),
-            )
-        },
+        onJailbreakExploitClick = { jailbreakChooserShown = true },
     )
 
     when (LocalUiMode.current) {
