@@ -113,8 +113,13 @@ jobs:
     needs: generate-key
     uses: ./.github/workflows/build-lkm.yml
     with:
-      expected_size2: ${{ needs.generate-key.outputs.expected_size || '' }}
-      expected_hash2: ${{ needs.generate-key.outputs.expected_hash || '' }}
+      # Release builds sign with the repository key and must land in the
+      # primary signature slot, otherwise the kernel carries EXPECTED_SIZE2
+      # and reports itself as a PR build. PR builds keep the second slot.
+      expected_size: ${{ github.event_name != 'pull_request' && needs.generate-key.outputs.expected_size || '' }}
+      expected_hash: ${{ github.event_name != 'pull_request' && needs.generate-key.outputs.expected_hash || '' }}
+      expected_size2: ${{ github.event_name == 'pull_request' && needs.generate-key.outputs.expected_size || '' }}
+      expected_hash2: ${{ github.event_name == 'pull_request' && needs.generate-key.outputs.expected_hash || '' }}
     secrets: inherit
 
   build-ksuinit:
