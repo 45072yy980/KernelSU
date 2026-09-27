@@ -159,7 +159,14 @@ long __nocfi ksu_hook_openat2(int orig_nr, const struct pt_regs *regs)
     return ret;
 }
 
-/* mount(source, target, type, flags, data): flags = PARM4. */
+/* mount(source, target, type, flags, data): flags = the 4th argument. */
+#ifndef MS_RDONLY
+#define MS_RDONLY 1
+#endif
+#ifndef MS_REMOUNT
+#define MS_REMOUNT 32
+#endif
+
 long __nocfi ksu_hook_mount(int orig_nr, const struct pt_regs *regs)
 {
     long ret;
@@ -168,7 +175,7 @@ long __nocfi ksu_hook_mount(int orig_nr, const struct pt_regs *regs)
     if (likely(!ksu_partition_guard_enabled))
         return ksu_syscall_table[orig_nr](regs);
 
-    flags = (unsigned long)PT_REGS_PARM4(regs);
+    flags = (unsigned long)PT_REGS_SYSCALL_PARM4(regs);
     /*
      * A remount that clears MS_RDONLY turns a protected partition writable.
      * Reject that outright; every other mount call goes through untouched so
