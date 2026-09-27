@@ -65,7 +65,9 @@ Manager UI ──▶ AppZygotePreload (JNI) ──▶ ksud late-load --magica <p
 - **非越獄模式**：可在 設定 → **其他功能** → **系統分區保護** 中自由開關。
   開啟後，安裝模組時 Manager 會向 ksud 傳入 `KSU_PARTITION_GUARD=1`。
 
-攔截規則（ksud 側）：
+攔截分兩層：
+
+**1. 安裝時（ksud 靜態掃描）**
 
 - **會攔截**：腳本中真正觸達區塊裝置 / 真實分區的操作 ——
   `dd ... of=/dev/...`、`> /dev/block/...`、`tee /dev/block/...`、
@@ -73,6 +75,15 @@ Manager UI ──▶ AppZygotePreload (JNI) ──▶ ksud late-load --magica <p
   `mount -o remount,rw /dev/...`、`blockdev --setrw /dev/...`、`fastboot flash` 等。
 - **不會誤傷**：僅包含 `system/` 等分區目錄的普通模組（那是 OverlayFS 的**臨時**覆蓋，重啟即還原）、
   寫 `/sys`、寫 `/data`、bind mount、註解裡提到 flash 等，都會正常放行。
+
+**2. 執行時（核心 `openat` 鉤子）**
+
+開關打開時，核心會掛鉤 `openat`。該鉤子只對**已取得 root 的程序**生效
+（掛在 KernelSU 的 syscall dispatcher 上，只路由被標記的程序），因此：
+
+- **任何取得 root 的應用程式**，只要以**寫入方式**開啟 `/dev/block/**` 下的區塊裝置，
+  都會被拒絕（`EACCES`）；**唯讀開啟照常**。
+- 普通應用、系統守護程序、核心執行緒**完全不受影響**。
 
 > ℹ️ 預設情況下該防護**只在越獄模式自動啟用**；正常開機進入的 KernelSU 不受影響，
 > 除非你在設定裡主動打開它。
