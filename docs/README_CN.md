@@ -78,14 +78,20 @@ Manager UI ──▶ AppZygotePreload (JNI) ──▶ ksud late-load --magica <p
 - **不会误伤**：仅包含 `system/` 等分区目录的普通模块（那是 OverlayFS 的**临时**覆盖，重启即还原）、
   写 `/sys`、写 `/data`、bind mount、注释里提到 flash 等，都会正常放行。
 
-**2. 运行时（内核 `openat` 钩子）**
+**2. 运行时（内核 syscall 钩子）**
 
-开关打开时，内核会挂钩 `openat`。该钩子只对**已获得 root 的进程**生效
-（挂在 KernelSU 的 syscall dispatcher 上，只路由被标记的进程），因此：
+开关打开时，内核会挂钩一组系统调用。它们都挂在 KernelSU 的 syscall dispatcher
+上，只路由**被标记的进程**（即已获得 root 的应用），因此普通应用、系统守护进程、
+内核线程**完全不受影响**。被拦的操作一律返回 `EACCES`，**只读操作照常**：
 
-- **任何拿到 root 的应用**，只要以**写方式**打开 `/dev/block/**` 下的块设备，都会被
-  拒绝（`EACCES`）；**只读打开照常**。
-- 普通应用、系统守护进程、内核线程**完全不受影响**。
+| 钩子 | 拦什么 |
+|---|---|
+| `openat` / `openat2` | 以写方式打开 `/dev/block/**` 下的块设备 |
+| `mount` | `MS_REMOUNT` 且未带 `MS_RDONLY`（把分区重挂为可写） |
+| `write` / `pwrite64` / `writev` | 经由**已打开的**块设备 fd 写入 |
+
+也就是说，**任何拿到 root 的应用**（而不只是模块安装脚本）都无法再直接写系统分区，
+包括 `dd if=... of=/dev/block/...`、`mount -o remount,rw /` 这类操作。
 
 > ℹ️ 默认情况下该防护**只在越狱模式自动启用**；正常开机进入的 KernelSU 不受影响，
 > 除非你在设置里主动打开它。
