@@ -215,20 +215,29 @@ fun FlashEffect(
         var currentText = text
         val mainHandler = Handler(Looper.getMainLooper())
         withContext(Dispatchers.IO) {
-            flashIt(flashIt, onStdout = {
-                val tempText = "$it\n"
-                if (tempText.startsWith("[H[J")) { // clear command
-                    currentText = tempText.substring(6)
-                } else {
-                    currentText += tempText
-                }
-                mainHandler.post {
-                    onTextUpdate(currentText)
-                }
-                logContent.append(it).append("\n")
-            }, onStderr = {
-                logContent.append(it).append("\n")
-            }).apply {
+            // Never let a failure in the work itself crash the app: the progress
+            // screen should end on FAILED with the message in the log instead.
+            val result = try {
+                flashIt(flashIt, onStdout = {
+                    val tempText = "$it\n"
+                    if (tempText.startsWith("[H[J")) { // clear command
+                        currentText = tempText.substring(6)
+                    } else {
+                        currentText += tempText
+                    }
+                    mainHandler.post {
+                        onTextUpdate(currentText)
+                    }
+                    logContent.append(it).append("\n")
+                }, onStderr = {
+                    logContent.append(it).append("\n")
+                })
+            } catch (t: Throwable) {
+                val msg = t.message ?: t.javaClass.simpleName
+                logContent.append(msg).append("\n")
+                FlashResult(1, msg, false)
+            }
+            result.apply {
                 if (code != 0) {
                     currentText += "Error code: $code.\n $err Please save and check the log.\n"
                     mainHandler.post {

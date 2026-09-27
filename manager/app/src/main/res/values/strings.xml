@@ -72,6 +72,8 @@
     <string name="send_log">Send logs</string>
     <string name="safe_mode">Safe mode</string>
     <string name="jailbreak_mode">Jailbreak mode</string>
+    <string name="jailbreak_guard_running_title">System partition protection</string>
+    <string name="jailbreak_guard_running_summary">Jailbreak mode is active. Blocks installation of modules that would really write a partition; a reboot restores everything. Partition writes are guarded while this mode runs.</string>
     <string name="home_jailbreak">Jailbreak</string>
     <string name="jailbreak_timeout">Jailbreak may have failed, please check logs</string>
     <string name="jailbreak_choose_title">Enable root</string>

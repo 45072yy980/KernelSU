@@ -68,6 +68,8 @@
     <string name="send_log">傳送日誌</string>
     <string name="safe_mode">安全模式</string>
     <string name="jailbreak_mode">越獄模式</string>
+    <string name="jailbreak_guard_running_title">系統分區保護運行中</string>
+    <string name="jailbreak_guard_running_summary">當前處於越獄模式。會攔截真正寫入分區的模組安裝；重啟即還原。此模式運行期間，系統分區寫入受到保護。</string>
     <string name="home_jailbreak">越獄</string>
     <string name="jailbreak_timeout">越獄可能失敗，請檢查日誌</string>
     <string name="jailbreak_choose_title">啟用 Root</string>

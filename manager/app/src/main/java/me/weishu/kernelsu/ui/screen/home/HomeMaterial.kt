@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -128,6 +129,9 @@ fun HomePagerMaterial(
             }
             if (state.showRootWarning) {
                 WarningCard(stringResource(id = R.string.grant_root_failed))
+            }
+            if (state.isLateLoadMode) {
+                JailbreakGuardCard()
             }
             StatusCard(
                 state = state,
@@ -353,6 +357,45 @@ private fun WarningCard(
         TonalCard(containerColor = containerColor, onClick = onClick, content = content)
     } else {
         TonalCard(containerColor = containerColor, content = content)
+    }
+}
+
+@Composable
+private fun JailbreakGuardCard(modifier: Modifier = Modifier) {
+    // Shown while jailbreak (late-load) mode is running: the partition guard is
+    // active, so this tells the user their system partitions are protected.
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.tertiaryContainer,
+        contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+        shape = MaterialTheme.shapes.large,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Security,
+                contentDescription = null,
+                modifier = Modifier
+                    .padding(end = 12.dp)
+                    .size(28.dp),
+            )
+            Column {
+                Text(
+                    text = stringResource(R.string.jailbreak_guard_running_title),
+                    style = MaterialTheme.typography.titleMediumEmphasized,
+                )
+                Text(
+                    text = stringResource(R.string.jailbreak_guard_running_summary),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.8f),
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
+        }
     }
 }
 

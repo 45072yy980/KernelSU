@@ -155,6 +155,9 @@ fun HomePagerMiuix(
                         if (state.showRootWarning) {
                             WarningCard(stringResource(id = R.string.grant_root_failed))
                         }
+                        if (state.isLateLoadMode) {
+                            JailbreakGuardCard(modifier = Modifier.fillMaxWidth())
+                        }
                         StatusCard(
                             state = state,
                             actions = actions,
@@ -418,6 +421,50 @@ private fun StatusCard(
                         }
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun JailbreakGuardCard(modifier: Modifier = Modifier) {
+    // Shown while jailbreak (late-load) mode is running: the partition guard is
+    // active, so this tells the user their system partitions are protected.
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.defaultColors(
+            color = colorScheme.tertiaryContainer,
+        ),
+        showIndication = false,
+        pressFeedbackType = PressFeedbackType.Sink,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Security,
+                contentDescription = null,
+                modifier = Modifier
+                    .padding(end = 12.dp)
+                    .size(28.dp),
+                tint = colorScheme.onTertiaryContainer,
+            )
+            Column {
+                Text(
+                    text = stringResource(R.string.jailbreak_guard_running_title),
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = colorScheme.onTertiaryContainer,
+                )
+                Text(
+                    text = stringResource(R.string.jailbreak_guard_running_summary),
+                    fontSize = 12.sp,
+                    color = colorScheme.onTertiaryContainer.copy(alpha = 0.8f),
+                    modifier = Modifier.padding(top = 2.dp),
+                )
             }
         }
     }
