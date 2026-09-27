@@ -44,9 +44,9 @@ jobs:
     outputs:
       expected_size: ${{ steps.extract.outputs.expected_size }}
       expected_hash: ${{ steps.extract.outputs.expected_hash }}
-      keystore: ${{ steps.gen.outputs.keystore }}
-      keystore_password: ${{ steps.gen.outputs.keystore_password }}
-      key_password: ${{ steps.gen.outputs.key_password }}
+      keystore: ${{ steps.gen.outputs.keystore || steps.gen_pr.outputs.keystore }}
+      keystore_password: ${{ steps.gen.outputs.keystore_password || steps.gen_pr.outputs.keystore_password }}
+      key_password: ${{ steps.gen.outputs.key_password || steps.gen_pr.outputs.key_password }}
     steps:
       - name: Checkout signing key
         if: github.event_name != 'pull_request'
@@ -65,7 +65,7 @@ jobs:
           echo "keystore=$(base64 -w 0 ksu-signing.jks)" >> $GITHUB_OUTPUT
       - name: Generate temporary keystore
         if: github.event_name == 'pull_request'
-        id: gen
+        id: gen_pr
         run: |
           KEYSTORE_PASSWORD=$(openssl rand -hex 32)
           KEY_PASSWORD=$(openssl rand -hex 32)
