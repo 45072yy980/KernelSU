@@ -241,7 +241,7 @@ private fun StatusCard(
         } else if (notInstalled && state.isSELinuxPermissive) {
             {
                 Button(
-                    onClick = actions.onJailbreakClick,
+                    onClick = actions.onNotInstalledClick,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.error,
                         contentColor = MaterialTheme.colorScheme.onError
@@ -259,7 +259,8 @@ private fun StatusCard(
             shape = MaterialTheme.shapes.large,
             onClick = {
                 if (!state.isLateLoadMode) {
-                    actions.onInstallClick()
+                    // Offer the exploit jailbreak or the ordinary install flow.
+                    actions.onNotInstalledClick()
                 }
             }
         ) {

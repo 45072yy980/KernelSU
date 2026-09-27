@@ -61,6 +61,12 @@
     <string name="jailbreak_mode">越狱模式</string>
     <string name="home_jailbreak">越狱</string>
     <string name="jailbreak_timeout">越狱可能失败，请检查日志</string>
+    <string name="jailbreak_choose_title">启用 Root</string>
+    <string name="jailbreak_choose_message">当前内核尚未加载。你可以让本应用借助内置的漏洞利用直接提权并立即进入越狱（late-load）模式，全程不修改任何分区；也可以选择手动安装内核。</string>
+    <string name="jailbreak_exploit_action">越狱激活（漏洞提权）</string>
+    <string name="jailbreak_manual_action">手动安装</string>
+    <string name="jailbreak_exploit_unavailable">本设备未内置该漏洞利用。</string>
+    <string name="jailbreak_exploit_failed">越狱激活失败，内核可能不受支持，请检查日志。</string>
     <string name="jailbreak_reboot_warning">当前处于越狱模式，重启后将失去 Root 权限，开机后需要重新越狱。确定要重启吗？</string>
     <string name="safe_mode_module_disabled">处于安全模式下，禁止安装模块</string>
     <string name="reboot_to_apply">重启生效</string>

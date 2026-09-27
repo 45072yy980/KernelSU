@@ -60,4 +60,11 @@ data class HomeActions(
     val onInstallClick: () -> Unit,
     val onOpenUrl: (String) -> Unit,
     val onJailbreakClick: () -> Unit = {},
+    // The exploit-based path: escalate to root, then hand off to the Manager's
+    // ksud late-load. Shown on the "not installed" card when the device is not
+    // yet rooted at all (so a plain late-load would have no ksud to talk to).
+    val onJailbreakExploitClick: () -> Unit = {},
+    // Clicking the "not installed" card itself: offer the exploit jailbreak or the
+    // ordinary install flow.
+    val onNotInstalledClick: () -> Unit = {},
 )

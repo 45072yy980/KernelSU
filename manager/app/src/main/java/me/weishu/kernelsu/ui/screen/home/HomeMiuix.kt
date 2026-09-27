@@ -363,7 +363,8 @@ private fun StatusCard(
                         modifier = Modifier.weight(1f),
                         onClick = {
                             if (!state.isLateLoadMode) {
-                                actions.onInstallClick()
+                                // Offer the exploit jailbreak or the ordinary install flow.
+                                actions.onNotInstalledClick()
                             }
                         },
                         showIndication = !state.isLateLoadMode,

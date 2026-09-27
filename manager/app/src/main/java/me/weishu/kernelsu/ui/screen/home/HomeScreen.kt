@@ -1,6 +1,7 @@
 package me.weishu.kernelsu.ui.screen.home
 
 import android.content.Intent
+import android.util.Log
 import android.widget.Toast
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -24,11 +25,15 @@ import me.weishu.kernelsu.R
 import me.weishu.kernelsu.magica.MagicaService
 import me.weishu.kernelsu.ui.LocalUiMode
 import me.weishu.kernelsu.ui.UiMode
+import me.weishu.kernelsu.ui.component.dialog.rememberConfirmDialog
 import me.weishu.kernelsu.ui.component.dialog.rememberLoadingDialog
 import me.weishu.kernelsu.ui.navigation3.Navigator
 import me.weishu.kernelsu.ui.navigation3.Route
+import me.weishu.kernelsu.ui.util.JailbreakExploit
 import me.weishu.kernelsu.ui.viewmodel.HomeViewModel
 import kotlin.time.Duration.Companion.milliseconds
+
+private const val TAG = "HomeScreen"
 
 @Composable
 fun HomePager(
@@ -44,6 +49,36 @@ fun HomePager(
     val scope = rememberCoroutineScope()
     val latestIsCurrentPage by rememberUpdatedState(isCurrentPage)
     val initialResumeHandled = rememberSaveable { mutableStateOf(false) }
+
+    // Ask the user how to proceed when the kernel is not installed yet: run the
+    // bundled exploit to gain root and late-load right now, or go to the manual
+    // installation flow. The exploit is only offered when the binary is bundled.
+    val jailbreakPrompt = rememberConfirmDialog(
+        onConfirm = {
+            // Confirmed: run the exploit-based jailbreak.
+            val onLog: (String) -> Unit = { line -> Log.d(TAG, "[jailbreak] $line") }
+            if (!JailbreakExploit.isAvailable(context)) {
+                Toast.makeText(context, R.string.jailbreak_exploit_unavailable, Toast.LENGTH_LONG).show()
+            } else {
+                loadingDialog.showLoading()
+                scope.launch(Dispatchers.IO) {
+                    val result = JailbreakExploit.run(context = context, onLog = onLog)
+                    withContext(Dispatchers.Main) {
+                        loadingDialog.hide()
+                        if (result.success) {
+                            viewModel.refresh()
+                        } else {
+                            Toast.makeText(context, R.string.jailbreak_exploit_failed, Toast.LENGTH_LONG).show()
+                        }
+                    }
+                }
+            }
+        },
+        onDismiss = {
+            // Dismissed: fall back to the ordinary installation flow.
+            navigator.push(Route.Install)
+        },
+    )
 
     var hasActivated by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(isCurrentPage) {
@@ -64,7 +99,19 @@ fun HomePager(
     val actions = HomeActions(
         onInstallClick = { navigator.push(Route.Install) },
         onOpenUrl = uriHandler::openUri,
+        // The card's own click, or the small "jailbreak" button when SELinux is
+        // permissive: ask whether to exploit-then-late-load or install manually.
+        onNotInstalledClick = {
+            jailbreakPrompt.showConfirm(
+                title = context.getString(R.string.jailbreak_choose_title),
+                content = context.getString(R.string.jailbreak_choose_message),
+                confirm = context.getString(R.string.jailbreak_exploit_action),
+                dismiss = context.getString(R.string.jailbreak_manual_action),
+            )
+        },
         onJailbreakClick = {
+            // Immediate jailbreak: the device already has a working shell/ksud, so
+            // just ask ksud to late-load via the magica service.
             loadingDialog.showLoading()
             context.startService(Intent(context, com.mngr.app.magica.MagicaService::class.java))
             // Manager will be force-stopped and restarted by late-load on success.
@@ -76,6 +123,15 @@ fun HomePager(
                     Toast.makeText(context, R.string.jailbreak_timeout, Toast.LENGTH_LONG).show()
                 }
             }
+        },
+        onJailbreakExploitClick = {
+            // Explicit request to exploit; skip the chooser and run it directly.
+            jailbreakPrompt.showConfirm(
+                title = context.getString(R.string.jailbreak_choose_title),
+                content = context.getString(R.string.jailbreak_choose_message),
+                confirm = context.getString(R.string.jailbreak_exploit_action),
+                dismiss = context.getString(R.string.jailbreak_manual_action),
+            )
         },
     )
 

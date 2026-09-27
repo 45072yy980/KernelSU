@@ -70,6 +70,12 @@
     <string name="jailbreak_mode">越獄模式</string>
     <string name="home_jailbreak">越獄</string>
     <string name="jailbreak_timeout">越獄可能失敗，請檢查日誌</string>
+    <string name="jailbreak_choose_title">啟用 Root</string>
+    <string name="jailbreak_choose_message">當前核心尚未載入。你可以讓本應用藉助內建的漏洞利用直接提權並立即進入越獄（late-load）模式，全程不修改任何分區；也可以選擇手動安裝核心。</string>
+    <string name="jailbreak_exploit_action">越獄啟用（漏洞提權）</string>
+    <string name="jailbreak_manual_action">手動安裝</string>
+    <string name="jailbreak_exploit_unavailable">本裝置未內建該漏洞利用。</string>
+    <string name="jailbreak_exploit_failed">越獄啟用失敗，核心可能不受支援，請檢查日誌。</string>
     <string name="jailbreak_reboot_warning">現正處於越獄模式，重新啟動將失去 Root 權限，開機後需重新越獄。確定要重啟嗎？</string>
     <string name="safe_mode_module_disabled">安全模式下禁止安裝模組</string>
     <string name="reboot_to_apply">重新啟動後生效</string>
