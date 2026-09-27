@@ -108,6 +108,15 @@ pub fn run(package_name: &String, kmi: Option<String>, allow_shell: bool) -> Res
         warn!("init features failed: {e}");
     }
 
+    // 7b. In jailbreak (late-load) mode the system-partition guard is mandatory:
+    // this session lives in memory and cannot undo a real partition write, so we
+    // force it on regardless of the persisted setting. Do this *before* any
+    // stage script runs so module hooks are protected too.
+    match crate::feature::set_kernel_feature(crate::feature::FeatureId::PartitionGuard, 1) {
+        Ok(()) => info!("late-load: forced system-partition guard ON"),
+        Err(e) => warn!("late-load: failed to enable system-partition guard: {e}"),
+    }
+
     // 8. Execute late-load stage scripts (blocking)
     init_event::run_stage("late-load", true);
 

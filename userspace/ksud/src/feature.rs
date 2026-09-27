@@ -82,7 +82,7 @@ fn parse_feature_id(name: &str) -> Result<FeatureId> {
     }
 }
 
-fn set_kernel_feature(feature_id: FeatureId, value: u64) -> Result<()> {
+pub fn set_kernel_feature(feature_id: FeatureId, value: u64) -> Result<()> {
     crate::ksucalls::set_feature(feature_id as u32, value)
         .with_context(|| format!("Failed to set feature {} to {value}", feature_id.name()))?;
 

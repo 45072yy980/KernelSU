@@ -16,6 +16,7 @@
 #include "feature/partition_guard.h"
 #include "hook/syscall_hook.h"
 #include "klog.h" // IWYU pragma: keep
+#include "ksu.h"
 #include "policy/feature.h"
 #include "util.h"
 #include "uapi/feature.h"
@@ -36,20 +37,43 @@
 
 static bool ksu_partition_guard_enabled = false;
 
+/*
+ * In jailbreak (late-load) mode the guard is mandatory: the session cannot undo
+ * a real partition write by rebooting, and the whole point of this mode is that
+ * the device's partitions are never touched. The device is also assumed to be
+ * bootloader-locked, so a stray write is exactly the thing we must not allow.
+ */
+static bool ksu_partition_guard_is_late_load(void)
+{
+    return ksu_late_loaded;
+}
+
 bool ksu_partition_guard_is_enabled(void)
 {
+    /* Late-load forces it on even if someone forgot to flip the switch. */
+    if (ksu_partition_guard_is_late_load())
+        return true;
     return ksu_partition_guard_enabled;
 }
 
 void ksu_partition_guard_set(bool enabled)
 {
+    /*
+     * Refuse to turn the guard off while in jailbreak mode: the user-visible
+     * switch is locked there, and a stray "feature set ... 0" (e.g. replayed
+     * from an old config) must not silently disable the protection.
+     */
+    if (!enabled && ksu_partition_guard_is_late_load()) {
+        pr_info("partition_guard: ignoring disable request in late-load mode\n");
+        return;
+    }
     ksu_partition_guard_enabled = enabled;
     pr_info("partition_guard: %s\n", enabled ? "enabled" : "disabled");
 }
 
 static int partition_guard_feature_get(u64 *value)
 {
-    *value = ksu_partition_guard_enabled ? 1 : 0;
+    *value = ksu_partition_guard_is_enabled() ? 1 : 0;
     return 0;
 }
 
@@ -149,7 +173,7 @@ long __nocfi ksu_hook_openat(int orig_nr, const struct pt_regs *regs)
     long ret = ksu_syscall_table[orig_nr](regs);
     char buf[160];
 
-    if (likely(!ksu_partition_guard_enabled))
+    if (likely(!ksu_partition_guard_is_enabled()))
         return ret;
     if (ret < 0)
         return ret;
@@ -182,7 +206,7 @@ long __nocfi ksu_hook_openat2(int orig_nr, const struct pt_regs *regs)
     char buf[160];
     struct ksu_open_how how;
 
-    if (likely(!ksu_partition_guard_enabled))
+    if (likely(!ksu_partition_guard_is_enabled()))
         return ret;
     if (ret < 0)
         return ret;
@@ -214,7 +238,7 @@ long __nocfi ksu_hook_mount(int orig_nr, const struct pt_regs *regs)
 {
     unsigned long flags;
 
-    if (likely(!ksu_partition_guard_enabled))
+    if (likely(!ksu_partition_guard_is_enabled()))
         return ksu_syscall_table[orig_nr](regs);
 
     flags = (unsigned long)PT_REGS_SYSCALL_PARM4(regs);
@@ -274,7 +298,7 @@ static bool fd_is_block_device(unsigned long fd)
  */
 static bool block_fd_write(unsigned long fd)
 {
-    if (likely(!ksu_partition_guard_enabled))
+    if (likely(!ksu_partition_guard_is_enabled()))
         return false;
     if (!fd_is_block_device(fd))
         return false;
