@@ -80,7 +80,14 @@ Manager UI ──▶ AppZygotePreload (JNI) ──▶ ksud late-load --magica <p
 
 **2. 运行时（内核 syscall 钩子）**
 
-开关打开时，内核会挂钩一组系统调用。它们都挂在 KernelSU 的 syscall dispatcher
+这一层是**可选的、默认关闭的**：它需要在内核里挂钩一组系统调用，其中包含
+`write`/`writev` 这类极高频路径，尚未经过充分的真机压测，因此**不默认替用户开启**。
+
+开启方式：在 设置 → **其他功能** 里先打开「系统分区保护」，其下方会**多出一个子开关**
+「运行时防护（内核拦截）」，**手动把它打开**即可。不管越狱还是非越狱，这个子开关
+默认都是关闭的；越狱模式也不再强制开启它。
+
+开启后，内核会挂钩一组系统调用。它们都挂在 KernelSU 的 syscall dispatcher
 上，只路由**被标记的进程**（即已获得 root 的应用），因此普通应用、系统守护进程、
 内核线程**完全不受影响**。被拦的操作一律返回 `EACCES`，**只读操作照常**：
 
@@ -93,8 +100,8 @@ Manager UI ──▶ AppZygotePreload (JNI) ──▶ ksud late-load --magica <p
 也就是说，**任何拿到 root 的应用**（而不只是模块安装脚本）都无法再直接写系统分区，
 包括 `dd if=... of=/dev/block/...`、`mount -o remount,rw /` 这类操作。
 
-> ℹ️ 默认情况下该防护**只在越狱模式自动启用**；正常开机进入的 KernelSU 不受影响，
-> 除非你在设置里主动打开它。
+> ℹ️ 运行时防护由独立的内核 feature `partition_guard_runtime`（id 6）承载，
+> 与安装时扫描的 `partition_guard`（id 5）分开；两者都由设置里的开关驱动。
 > 若确需强制安装，可使用 `ksud module install --force <zip>` 绕过。
 
 ### 其它定制
@@ -127,7 +134,7 @@ WSA、ChromeOS 和运行在容器上的 Android 也可以与 DikSU 一起工作�
 
 1. **包名 / 名称**：`me.diksu.kernelsu`，显示名 `DikSU`。
 2. **越狱模式（Magica）**：完整的内核晚期加载链路（Manager → JNI → ksud → 内核）。
-3. **系统分区保护**：越狱模式强制开启、非越狱模式可开关，拦截会真实写入分区的模块。
+3. **系统分区保护**：越狱模式强制开启、非越狱模式可开关，拦截会真实写入分区的模块；另提供可选的、默认关闭的「运行时防护（内核拦截）」子开关。
 4. **内置漏洞利用**：未 root 时可由「未安装」卡片直接提权并进入越狱（GhostLock / CVE-2026-43499）。
 4. **签名链**：使用自建密钥与证书哈希，内核与 Manager 严格匹配。
 5. **UI**：Miuix / Material 双主题，含若干界面优化。
