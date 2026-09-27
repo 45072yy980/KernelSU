@@ -520,7 +520,129 @@ pub fn handle_updated_modules() -> Result<()> {
     Ok(())
 }
 
-fn install_module_to_system(zip: &str) -> Result<()> {
+
+/// Commands that write to a *real* block device, remount a real partition
+/// read-write, or flash an image. KernelSU's own module loader covers a module's
+/// `system/` (and friends) with a mount-namespace overlay, so shipping a partition
+/// tree is not, by itself, a write to that partition - it is gone again on reboot
+/// just like the overlay. What a jailbreak session cannot take back is a command
+/// that reaches the block device directly, so only those are refused.
+///
+/// Every pattern anchors on a `/dev` path or a real command shape, so a mere word
+/// like "flash" in a comment or a variable name cannot trip the guard.
+const PARTITION_WRITE_PATTERNS: &[&str] = &[
+    // dd onto a raw device:  dd if=.. of=/dev/block/.. (or any /dev path)
+    r"(^|[\s;&|])dd\b[^\n]*of=[^\n]*(/dev/)",
+    // redirect / tee into a block device path
+    r"(>>?|tee\b[^\n]*)[^\n]*/dev/block/",
+    // filesystem tools against a /dev node
+    r"\b(mkfs(\.[a-z0-9]+)?|mke2fs|tune2fs|e2fsck|resize2fs|nandwrite|sgdisk|parted)\b[^\n]*(/dev/)",
+    // remount a real partition read-write (both argument orders)
+    r"\bmount\b[^\n]*\b(remount|rw)\b[^\n]*/(system|vendor|product|system_ext|odm|oem|my_[a-z]+)\b",
+    r"\bmount\b[^\n]*/(system|vendor|product|system_ext|odm|oem|my_[a-z]+)\b[^\n]*\b(remount|rw)\b",
+    // blockdev --setrw on a device
+    r"\bblockdev\b[^\n]*--setrw",
+    // fastboot flash / flash an image partition
+    r"\b(fastboot\s+flash|flash)\b[^\n]*(boot|system|vendor|system_ext|product|super|vbmeta|dtbo)\b",
+];
+
+/// The shell scripts a module runs, whether at install time or later at boot.
+fn module_partition_scripts(dir: &Path) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    let candidates = [
+        "customize.sh",
+        "install.sh",
+        "post-fs-data.sh",
+        "post-mount.sh",
+        "service.sh",
+        "boot-completed.sh",
+        "late-load.sh",
+        "uninstall.sh",
+        "metainstall.sh",
+        "metamount.sh",
+    ];
+    for name in candidates {
+        let f = dir.join(name);
+        if f.is_file() {
+            out.push(f);
+        }
+    }
+    // Anything under a scripts/ directory is executed as well.
+    let scripts = dir.join("scripts");
+    if scripts.is_dir()
+        && let Ok(entries) = std::fs::read_dir(&scripts)
+    {
+        for entry in entries.flatten() {
+            let f = entry.path();
+            if f.is_file() {
+                out.push(f);
+            }
+        }
+    }
+    out
+}
+
+/// Decide whether a module would, in a jailbreak (late-load) session, actually
+/// write to a real partition - which that session cannot undo the way a normal
+/// boot does. Returns the reason when it would.
+///
+/// A module's own `system/` (and friends) tree is deliberately ignored: KernelSU
+/// mounts it as a namespace overlay, so it is not a write to the real partition
+/// and disappears on reboot. Only a script that reaches a block device, remounts
+/// a real partition read-write, or flashes an image is refused.
+fn jailbreak_partition_hazard(updated_dir: &Path) -> Option<String> {
+    for script in module_partition_scripts(updated_dir) {
+        let Ok(text) = std::fs::read_to_string(&script) else {
+            continue;
+        };
+        for pat in PARTITION_WRITE_PATTERNS {
+            let Ok(re) = Regex::new(pat) else { continue };
+            if let Some(m) = re.find(&text) {
+                let hit: String = m.as_str().trim().chars().take(64).collect();
+                let name = script
+                    .file_name()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("script");
+                return Some(format!("{name} runs a partition-write command: {hit}"));
+            }
+        }
+    }
+    None
+}
+
+/// Refuse a module that would really touch a partition while running as a late
+/// load, unless the caller asked to force it. A late-loaded KernelSU lives in
+/// memory and cannot put a partition back the way a reboot would, so a module
+/// that writes one leaves a mark that survives until the device is wiped.
+fn guard_jailbreak_partition(updated_dir: &Path, force: bool) -> Result<()> {
+    if !ksucalls::is_late_load() {
+        return Ok(());
+    }
+    let Some(reason) = jailbreak_partition_hazard(updated_dir) else {
+        return Ok(());
+    };
+    if force {
+        warn!("jailbreak guard: allowing module that {reason} (forced)");
+        return Ok(());
+    }
+    println!("\n\u{274c} Installation Blocked (jailbreak mode)");
+    println!("\u{250c}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}");
+    println!("\u{2502} A script in this module writes to a real partition:");
+    println!("\u{2502}   {reason}");
+    println!("\u{2502}");
+    println!("\u{2502} In jailbreak (late-load) mode KernelSU runs from memory and");
+    println!("\u{2502} cannot restore a partition the way a reboot would.");
+    println!("\u{2502}");
+    println!("\u{2502} A module that only ships system/ files is fine - this one");
+    println!("\u{2502} reaches a block device, remounts a partition rw, or flashes.");
+    println!("\u{2502}");
+    println!("\u{2502} Install it after a normal boot entry, or re-run with");
+    println!("\u{2502}   ksud module install --force <zip>");
+    println!("\u{2514}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\n");
+    bail!("jailbreak mode: module would modify a partition ({reason})");
+}
+
+fn install_module_to_system(zip: &str, force: bool) -> Result<()> {
     ensure_boot_completed()?;
 
     // print banner
@@ -643,6 +765,9 @@ fn install_module_to_system(zip: &str) -> Result<()> {
     }
 
     // Execute install script
+    // Jailbreak (late-load) sessions run from memory and cannot undo a real
+    // partition write, so refuse a module that would make one.
+    guard_jailbreak_partition(&updated_dir, force)?;
     println!("- Running module installer");
     exec_install_script(zip, is_metamodule, module_id)?;
 
@@ -666,10 +791,10 @@ fn install_module_to_system(zip: &str) -> Result<()> {
     Ok(())
 }
 
-pub fn install_module(zip: &str) -> Result<()> {
+pub fn install_module(zip: &str, force: bool) -> Result<()> {
     ksucalls::ensure_uapi_version_matched()?;
 
-    let result = install_module_to_system(zip);
+    let result = install_module_to_system(zip, force);
     if let Err(ref e) = result {
         println!("- Error: {e}");
     } else if let Err(e) = regenerate_preinit_rc() {
