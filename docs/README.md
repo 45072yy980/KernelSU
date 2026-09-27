@@ -47,6 +47,20 @@ Manager UI ──▶ AppZygotePreload (JNI) ──▶ ksud late-load --magica <p
                                               └─ 5. service / boot-completed cleanup
 ```
 
+### 🚀 One-tap jailbreak (built-in exploit)
+
+When the device has **no root at all yet** (kernel not loaded), tapping the
+"not installed" card on the home screen offers two choices:
+
+- **Jailbreak (exploit)** — run the bundled [GhostLock](https://github.com/45072yy980/ghostlock-app)
+  (CVE-2026-43499) exploit to gain uid 0, then automatically call this Manager's
+  own `ksud late-load` to enter jailbreak mode on the spot. **No partition is touched.**
+- **Manual install** — the ordinary installation flow.
+
+The exploit ships inside the APK as `libghostlock.so` (arm64-v8a only) and matches
+its kernel offset table against `uname -r`; unsupported kernels are refused. It
+follows the same never-touch-a-partition rule.
+
 ### 🛡️ Jailbreak Partition Guard
 
 Jailbreak mode runs from memory, so it **cannot revert a partition that was really written
@@ -96,6 +110,7 @@ Currently, `arm64-v8a` and `x86_64` are supported.
 1. **Package / name**: `me.diksu.kernelsu`, display name `DikSU`.
 2. **Jailbreak (Magica) mode**: full kernel late-load chain (Manager → JNI → ksud → kernel).
 3. **Jailbreak guard**: blocks modules that really write partitions, protecting a device that cannot be reverted.
+4. **Built-in exploit**: with no root yet, the "not installed" card can escalate and enter jailbreak (GhostLock / CVE-2026-43499).
 4. **Signing chain**: a dedicated key and certificate hash, strictly matched between kernel and Manager.
 5. **UI**: Miuix / Material dual themes, with several interface refinements.
 

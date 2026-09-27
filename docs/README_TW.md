@@ -44,6 +44,18 @@ Manager UI ──▶ AppZygotePreload (JNI) ──▶ ksud late-load --magica <p
                                               └─ 5. service / boot-completed 收尾
 ```
 
+### 🚀 一鍵越獄啟用（內建漏洞利用）
+
+裝置**完全還沒有 root** 時（核心尚未載入），主介面的「尚未安裝」卡片點擊後會彈出選擇：
+
+- **越獄啟用（漏洞提權）** —— 直接使用內建的 [GhostLock](https://github.com/45072yy980/ghostlock-app)
+  （CVE-2026-43499）漏洞利用取得 uid 0，隨後自動呼叫本管理器自己的 `ksud late-load`，
+  就地進入越獄模式。**全程不修改任何分區。**
+- **手動安裝** —— 走原本的手動安裝流程。
+
+內建的漏洞利用以 `libghostlock.so` 形式隨 APK 分發（僅 `arm64-v8a`），並會依 `uname -r`
+比對核心偏移表；比對不到的核心會拒絕執行。它同樣遵循「不動分區」的紅線。
+
 ### 🛡️ 越獄模式防護（Jailbreak Partition Guard）
 
 越獄模式跑在記憶體裡，**無法像重啟那樣還原一個被真實寫入的分區**。因此在越獄模式下，
@@ -89,6 +101,7 @@ WSA、ChromeOS 和運行在容器上的 Android 也可以與 DikSU 一起工作�
 1. **套件 / 名稱**：`me.diksu.kernelsu`，顯示名 `DikSU`。
 2. **越獄模式（Magica）**：完整的核心晚期載入鏈路（Manager → JNI → ksud → 核心）。
 3. **越獄模式防護**：攔截會真實寫入分區的模組，保護「不可還原」的裝置。
+4. **內建漏洞利用**：未 root 時可由「尚未安裝」卡片直接提權並進入越獄（GhostLock / CVE-2026-43499）。
 4. **簽名鏈**：使用自建金鑰與憑證雜湊，核心與 Manager 嚴格匹配。
 5. **UI**：Miuix / Material 雙主題，含若干介面優化。
 
