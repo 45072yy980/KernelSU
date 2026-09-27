@@ -1,60 +1,118 @@
 [English](README.md) | [Español](README_ES.md) | [简体中文](README_CN.md) | **繁體中文** | [日本語](README_JP.md) | [한국어](README_KR.md) | [Polski](README_PL.md) | [Português (Brasil)](README_PT-BR.md) | [Türkçe](README_TR.md) | [Русский](README_RU.md) | [Tiếng Việt](README_VI.md) | [Indonesia](README_ID.md) | [עברית](README_IW.md) | [हिंदी](README_IN.md) | [Italiano](README_IT.md)
 
-# KernelSU
+# DikSU
 
 <img src="https://kernelsu.org/logo.png" style="width: 96px;" alt="標誌">
 
-一套基於 Android 裝置核心的 Root 解決方案。
+**DikSU** 是一套面向 Android、基於核心的 root 方案（KernelSU 的客製化分支），
+內建**越獄模式（Jailbreak / Magica）**：在裝置**未解鎖 Bootloader、不修改任何分區**的前提下，
+藉由已取得的臨時權限，把 KernelSU 以核心模組的形式**晚期載入**進正在運行的系統。
 
-[![最新版本](https://img.shields.io/github/v/release/tiann/KernelSU?label=%e7%99%bc%e8%a1%8c%e7%89%88%e6%9c%ac&logo=github)](https://github.com/tiann/KernelSU/releases/latest)
-[![Weblate](https://img.shields.io/badge/%e6%9c%ac%e5%9c%9f%e5%8c%96%e7%bf%bb%e8%ad%af-Weblate-teal?logo=weblate)](https://hosted.weblate.org/engage/kernelsu)
-[![頻道](https://img.shields.io/badge/%e8%bf%bd%e8%b9%a4-Telegram-blue.svg?logo=telegram)](https://t.me/KernelSU)
-[![授權條款：《GPL v2》](https://img.shields.io/badge/%e6%8e%88%e6%ac%8a%e6%a2%9d%e6%ac%be-%E3%80%8AGPL%20v2%E3%80%8B-orange.svg?logo=gnu)](https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html)
-[![GitHub 授權條款](https://img.shields.io/github/license/tiann/KernelSU?logo=gnu)](/LICENSE)
+[![最新版本](https://img.shields.io/github/v/release/45072yy980/KernelSU?label=%e7%99%bc%e8%a1%8c%e7%89%88%e6%9c%ac&logo=github)](https://github.com/45072yy980/KernelSU/releases/latest)
+[![Channel](https://img.shields.io/badge/Follow-Telegram-blue.svg?logo=telegram)](https://t.me/KernelSU)
+[![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-orange.svg?logo=gnu)](https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html)
+[![GitHub License](https://img.shields.io/github/license/tiann/KernelSU?logo=gnu)](/LICENSE)
 
-## 特色功能
+## 特性
 
-1. 以核心內 `su` 管理 Root 存取。
-2. 以 [metamodules](https://kernelsu.org/zh_TW/guide/metamodule.html) 運作模組系統：可插拔的無系統修改基礎架構。
-3. [App Profile](https://kernelsu.org/zh_TW/guide/app-profile.html)：使 Root 掌握的生殺大權受制於此。
+### 核心能力（繼承自 KernelSU）
 
-## 相容事態
+- 基於核心的 `su` 與權限管理，比使用者態方案更穩定、更隱蔽。
+- 基於 [metamodules](https://kernelsu.org/zh_TW/guide/metamodule.html) 的模組系統：可插拔的模組架構，支援 OverlayFS 等主流元模組。
+- [App Profile](https://kernelsu.org/zh_TW/guide/app-profile.html)：把 Root 權限關進籠子裡。
 
-理論上採以 Android GKI 2.0 的裝置（核心版本 5.10+），皆受 KernelSU 支援；採以老舊核心版本（4.14+）的裝置在手動建置核心後，亦受支援。
+### 🌟 越獄模式（Jailbreak / Magica）—— 核心特色
 
-另可在 WSA、ChromeOS 一類的容器式 Android 中運作。
+面向**沒有解鎖 Bootloader**、但透過漏洞取得了臨時權限（例如 `adb root`）的裝置：
+
+| 關鍵點 | 說明 |
+|---|---|
+| **全程不修改分區** | 不刷 `boot`、不動 `system`/`vendor`/`product`，所有資料都落在 `/data` |
+| **無需解鎖 BL** | 適合無法 / 不願解鎖 Bootloader 的使用者 |
+| **記憶體晚期載入** | 透過 `late-load` 把 `kernelsu.ko` 直接從記憶體注入正在運行的核心 |
+| **重啟即還原** | 不做任何持久化寫入，重啟後回到原廠狀態，無痕可查 |
+
+越獄模式要求 **SELinux 為 Permissive**，並且裝置已取得臨時 root（典型路徑是 `adb root`）。
+
+```text
+Manager UI ──▶ AppZygotePreload (JNI) ──▶ ksud late-load --magica <port>
+                                              │
+                                              ├─ 1. enable_adb_root(port)
+                                              ├─ 2. 透過 adb 連回本機
+                                              ├─ 3. 從記憶體載入 kernelsu.ko
+                                              ├─ 4. 執行 post-fs-data / 元模組掛載等階段
+                                              └─ 5. service / boot-completed 收尾
+```
+
+### 🛡️ 越獄模式防護（Jailbreak Partition Guard）
+
+越獄模式跑在記憶體裡，**無法像重啟那樣還原一個被真實寫入的分區**。因此在越獄模式下，
+安裝模組時 DikSU 會自動啟用防護：
+
+- **會攔截**：腳本中真正觸達區塊裝置 / 真實分區的操作 ——
+  `dd ... of=/dev/...`、`> /dev/block/...`、`tee /dev/block/...`、
+  `mkfs`/`mke2fs`/`tune2fs`/`e2fsck`/`resize2fs`/`nandwrite`/`sgdisk`/`parted` 操作 `/dev/...`、
+  `mount -o remount,rw /dev/...`、`blockdev --setrw /dev/...`、`fastboot flash` 等。
+- **不會誤傷**：僅包含 `system/` 等分區目錄的普通模組（那是 OverlayFS 的**臨時**覆蓋，重啟即還原）、
+  寫 `/sys`、寫 `/data`、bind mount、註解裡提到 flash 等，都會正常放行。
+
+> ℹ️ 防護**只在越獄模式下生效**；正常開機進入的 KernelSU 完全不受影響。
+> 若確需強制安裝，可使用 `ksud module install --force <zip>` 繞過。
+
+### 其它客製化
+
+- **Manager 更名為 DikSU**，套件名 `me.diksu.kernelsu`，獨立簽名鏈，與核心內的憑證雜湊嚴格對應。
+- **Miuix 主題**：Material 與 Miuix 雙 UI 風格，可自由切換。
+
+## 相容狀態
+
+DikSU 官方支援 GKI 2.0 的裝置（核心版本 5.10 以上）；舊核心也是相容的（最低 4.14+），不過需要自己編譯核心。
+
+WSA、ChromeOS 和運行在容器上的 Android 也可以與 DikSU 一起工作。
 
 目前支援 `arm64-v8a` 和 `x86_64` 架構。
 
+**越獄模式額外要求**：SELinux 為 Permissive，且可取得臨時 root（如 `adb root`）。
+
 > [!CAUTION]
-> 最近的核心版本引入了一項破壞性更改，導致 KernelSU 在 `x86_64` 上執行失敗，甚至可能引發核心恐慌 (kernel panic)！請查看網站獲取更多資訊！
+> 最近的核心版本引入了一項破壞性變更，導致 KernelSU 在 `x86_64` 上運行失敗，甚至可能引發核心恐慌 (kernel panic)！請查看網站獲取更多資訊！
 
-## 使用手冊
+## 使用方法
 
-- [安裝教學](https://kernelsu.org/zh_TW/guide/installation.html)
-- [如何建置 KernelSU？](https://kernelsu.org/zh_TW/guide/how-to-build.html)
+- [安裝教學](https://kernelsu.org/zh_TW/guide/installation.html)（DikSU 支援其中的 LKM / 越獄模式兩種路徑）
+- [如何建置？](https://kernelsu.org/zh_TW/guide/how-to-build.html)
 - [官方網站](https://kernelsu.org/zh_TW/)
+- **越獄模式**：在 Manager 主介面，當偵測到 SELinux 為 Permissive 時會出現「越獄」入口，依提示操作即可。
 
-## 多語翻譯
+## 與上游 KernelSU 的差異
 
-欲要協助 KernelSU 邁向多語化，抑或改進翻譯品質，請前往 [Weblate](https://hosted.weblate.org/engage/kernelsu/) 進行翻譯。為避免與 Weblate 上的翻譯發生衝突，現已不再受理翻譯相關的管理工具 PR。
+1. **套件 / 名稱**：`me.diksu.kernelsu`，顯示名 `DikSU`。
+2. **越獄模式（Magica）**：完整的核心晚期載入鏈路（Manager → JNI → ksud → 核心）。
+3. **越獄模式防護**：攔截會真實寫入分區的模組，保護「不可還原」的裝置。
+4. **簽名鏈**：使用自建金鑰與憑證雜湊，核心與 Manager 嚴格匹配。
+5. **UI**：Miuix / Material 雙主題，含若干介面優化。
 
-## 綜合討論
+## 參與翻譯
 
-- Telegram：[@KernelSU](https://t.me/KernelSU)
+中文（簡體 / 繁體）為本專案的主要維護語言。如需新增語言支援，歡迎提交 PR。
 
-## 安全政策
+## 討論
 
-欲要得知、回報 KernelSU 的安全性漏洞，請參閱 [SECURITY.md](/SECURITY.md)。
+- Telegram: [@KernelSU](https://t.me/KernelSU)
+
+## 安全性
+
+有關回報 KernelSU 安全漏洞的資訊，請參閱 [SECURITY.md](/SECURITY.md)。
 
 ## 授權條款
 
-- 位於 `kernel` 資料夾的檔案以[《GPL-2.0-only》](https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html)規範。
-- 非位於 `kernel` 資料夾的其他檔案以[《GPL-3.0-or-later》](https://www.gnu.org/licenses/gpl-3.0.html)規範。
+- 目錄 `kernel` 下所有檔案為 [GPL-2.0-only](https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html)。
+- 除 `kernel` 目錄的其他部分均為 [GPL-3.0-or-later](https://www.gnu.org/licenses/gpl-3.0.html)。
 
-## 致謝名單
+## 誌謝
 
-- [kernel-assisted-superuser](https://git.zx2c4.com/kernel-assisted-superuser/about/)：KernelSU 的靈感來源。
-- [Magisk](https://github.com/topjohnwu/Magisk)：強而有力的 Root 工具。
-- [genuine](https://github.com/brevent/genuine/)：用於確效 Apk v2 簽章。
-- [Diamorphine](https://github.com/m0nad/Diamorphine): 用於增進 Rootkit 技巧。
+- [KernelSU](https://github.com/tiann/KernelSU)：本專案的上游與基礎。
+- [kernel-assisted-superuser](https://git.zx2c4.com/kernel-assisted-superuser/about/)：KernelSU 的靈感。
+- [Magisk](https://github.com/topjohnwu/Magisk)：強大的 root 工具箱。
+- [genuine](https://github.com/brevent/genuine/)：apk v2 簽名驗證。
+- [Diamorphine](https://github.com/m0nad/Diamorphine)：一些 rootkit 技巧。
