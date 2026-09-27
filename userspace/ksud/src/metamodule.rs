@@ -4,7 +4,7 @@
 //! Metamodules are special modules that manage how regular modules are mounted
 //! and provide hooks for module installation/uninstallation.
 
-use anyhow::{Context, Result, bail, ensure};
+use anyhow::{Context, Result, ensure};
 use log::{info, warn};
 use std::{
     collections::HashMap,
@@ -256,37 +256,21 @@ pub fn exec_mount_script(module_dir: &str) -> Result<()> {
     let Some(mount_script) = check_metamodule_script(defs::METAMODULE_MOUNT_SCRIPT) else {
         return Ok(());
     };
+
     info!("Executing mount script for metamodule");
-    // Capture stdout/stderr instead of inheriting: a metamodule that cannot mount
-    // in this session (for example a late-load / jailbreak session, which runs
-    // after the real boot mount window has already passed) prints the reason, and
-    // that is the line worth keeping. On success the output is noise, so it drops.
-    let output = Command::new(assets::BUSYBOX_PATH)
+
+    let result = Command::new(assets::BUSYBOX_PATH)
         .args(["sh", mount_script.to_str().unwrap()])
         .envs(crate::module::get_common_script_envs(
             get_metamodule_id().as_deref(),
         ))
         .env("MODULE_DIR", module_dir)
-        .output()?;
-    if !output.status.success() {
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        for line in stdout.lines().chain(stderr.lines()) {
-            let line = line.trim();
-            if !line.is_empty() {
-                warn!("metamodule mount: {line}");
-            }
-        }
-        let suffix = if crate::ksucalls::is_late_load() {
-            " (late-load / jailbreak session: some metamodules need the real boot mount window)"
-        } else {
-            ""
-        };
-        bail!(
-            "Metamodule mount script failed with status: {}{suffix}",
-            output.status
-        );
-    }
+        .status()?;
+
+    ensure!(
+        result.success(),
+        "Metamodule mount script failed with status: {result:?}"
+    );
 
     info!("Metamodule mount script executed successfully");
     Ok(())
