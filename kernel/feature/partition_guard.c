@@ -198,21 +198,24 @@ long __nocfi ksu_hook_mount(int orig_nr, const struct pt_regs *regs)
 }
 
 /*
- * Does the fd@fd refer to a raw block device? Used by the write hooks. Cheap
- * enough because it only runs for a pre-filtered fd (see ksu_block_fd_write).
+ * Does fd@fd refer to a raw block device? Used by the write hooks. We use the
+ * plain fget_raw()/fput() pair because it returns a struct file * directly and
+ * is stable across kernel versions, unlike struct fd whose layout changed in
+ * 6.12 (the .file member was replaced by the fd_file() accessor).
  */
 static bool fd_is_block_device(unsigned long fd)
 {
-    struct fd f;
+    struct file *f;
     bool isblk = false;
 
     /* A real fd is far below this; the bound only guards against garbage. */
     if (fd >= (1UL << 20))
         return false;
-    f = fdget((unsigned int)fd);
-    if (f.file)
-        isblk = S_ISBLK(file_inode(f.file)->i_mode);
-    fdput(f);
+    f = fget_raw((unsigned int)fd);
+    if (f) {
+        isblk = S_ISBLK(file_inode(f)->i_mode);
+        fput(f);
+    }
     return isblk;
 }
 
