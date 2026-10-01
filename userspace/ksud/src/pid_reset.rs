@@ -11,14 +11,21 @@
 //! restart, so the framework that comes back up looks like it took the low PIDs
 //! a fresh boot would have handed out.
 //!
-//! Two ways to do it, tried in order:
+//! How the rollback works, and why it is a loop:
 //!
-//! 1. Write `/proc/sys/kernel/ns_last_pid`. The kernel then hands out the next
-//!    PID after that value. One small write, no processes spawned.
-//! 2. If that path is not writable (older kernels, tightened permissions), fall
-//!    back to a short `fork` loop: each child takes the next PID, so the counter
-//!    walks forward on its own. The children exit at once, so the cost is a
-//!    handful of forks.
+//! The obvious way is to write the desired value into
+//! `/proc/sys/kernel/ns_last_pid`. That file only exists when the kernel was
+//! built with `CONFIG_CHECKPOINT_RESTORE`, and plenty of production kernels are
+//! not -- on those the whole sysctl is missing. The only remaining lever is the
+//! allocator itself: fork a child, it consumes the next PID. Forking *forward*
+//! cannot move the counter down, so we wait for it to come back around on its
+//! own: the allocator hands out PIDs up to `/proc/sys/kernel/pid_max` (usually
+//! 32768) and then wraps to a small value. We keep forking until we see the
+//! wrap, then keep going until the freshly handed-out PID reaches `TARGET_PID`.
+//!
+//! That is exactly what the trusted module's helper binary does, and it is why
+//! a small attempt cap is useless here: from a counter in the tens of thousands
+//! the wrap alone can take ~30k forks. The budget is time, not attempts.
 //!
 //! This used to ship as an installable module with a prebuilt static binary per
 //! ABI. Doing it here means no module, no extra binary to keep in sync with each
@@ -34,23 +41,33 @@ use std::{
 use log::{info, warn};
 
 const NS_LAST_PID: &str = "/proc/sys/kernel/ns_last_pid";
+const PID_MAX: &str = "/proc/sys/kernel/pid_max";
+
 /// Where the allocator should sit after we are done. Well above the low,
 /// "fresh boot" range but far below `/proc/sys/kernel/pid_max` (usually 32768),
 /// so there is plenty of room left for real work.
 const TARGET_PID: i32 = 1700;
-/// Upper bound on the fork-loop fallback, so a stuck counter can never hang a
-/// reboot. In practice the ns_last_pid write above succeeds, so this branch is
-/// a safety net rather than the normal path.
-const FORK_FALLBACK_TIMEOUT: Duration = Duration::from_secs(2);
-/// Hard cap on how many children the fallback will spawn. Advancing the whole
-/// way to TARGET_PID one fork at a time is never worth a long stall, so give up
-/// early and leave the counter wherever it got to: a partial move still helps.
-const FORK_FALLBACK_MAX_ATTEMPTS: u32 = 128;
 
-fn read_current_last_pid() -> Option<i32> {
-    fs::read_to_string(NS_LAST_PID)
+/// How long the fork loop may run before we give up and let the reboot proceed.
+///
+/// Matches the module's `MAX_WAIT_SEC`. Reaching the wrap from a high counter
+/// genuinely takes tens of thousands of forks, so this is not a generous
+/// ceiling -- it is the amount of time the job actually needs.
+const FORK_LOOP_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// Fallback attempt cap, only used if `pid_max` cannot be read. One wrap plus
+/// the distance to `TARGET_PID` will never exceed this on a normal kernel.
+const FORK_LOOP_MAX_ATTEMPTS: u32 = 100_000;
+
+/// Read a small non-negative integer out of a procfs file.
+fn read_i32(path: &str) -> Option<i32> {
+    fs::read_to_string(path)
         .ok()
         .and_then(|s| s.trim().parse::<i32>().ok())
+}
+
+fn read_pid_max() -> Option<i32> {
+    read_i32(PID_MAX).filter(|v| *v > 0)
 }
 
 /// One fork, returning the PID the kernel handed the child (or `None` on
@@ -85,11 +102,10 @@ fn allocate_one_pid() -> Option<i32> {
 
 /// Ask the kernel to award the next PID after `target` by writing ns_last_pid.
 ///
-/// The write is verified the way the trusted module does it: by allocating a
-/// real PID and looking at the value, not by reading the file back. Kernels
-/// differ in how they treat the written value (some clamp it to the current
-/// counter, some hand out `value + 1`), and only the allocated PID tells us
-/// what the next process will actually get.
+/// Only available on kernels built with `CONFIG_CHECKPOINT_RESTORE`; the caller
+/// falls back to the fork loop when this returns `false`. The write is verified
+/// by allocating a real PID and looking at the value, not by reading the file
+/// back, because kernels differ in how they treat the written value.
 fn write_ns_last_pid(target: i32) -> bool {
     if !Path::new(NS_LAST_PID).exists() {
         return false;
@@ -107,32 +123,51 @@ fn write_ns_last_pid(target: i32) -> bool {
     allocated >= target
 }
 
-/// Fork children until the allocator hands out a PID at or past `target`, the
-/// attempt cap is hit, or time runs out. Returns whether the target was reached,
-/// plus how many children were spawned (for the log line).
-fn fork_until_past(target: i32) -> (bool, u32) {
-    let deadline = Instant::now() + FORK_FALLBACK_TIMEOUT;
-    let mut last = 0;
+/// Fork until the allocator wraps around and then reaches `target`.
+///
+/// Returns whether the counter was actually put at or past `target`, plus how
+/// many children were spawned and the last PID observed (for the log line).
+///
+/// It is not enough for a single PID to be `>= target`: the counter may already
+/// be far above `target`, in which case the *next* processes still carry the old
+/// high PIDs. Only after the wrap does the allocator hand out small values
+/// again, so `reached_target` is gated on having seen the wrap.
+fn fork_until_wrapped_to(target: i32) -> (bool, u32, i32) {
+    let deadline = Instant::now() + FORK_LOOP_TIMEOUT;
+    // One full lap plus room to walk from the wrap point up to `target`.
+    let max_attempts = read_pid_max()
+        .and_then(|v| u32::try_from(v).ok())
+        .and_then(|v| v.checked_add(4096))
+        .unwrap_or(FORK_LOOP_MAX_ATTEMPTS);
+
+    let mut prev = 0i32;
     let mut attempts: u32 = 0;
-    while attempts < FORK_FALLBACK_MAX_ATTEMPTS && Instant::now() < deadline {
+    let mut wrapped = false;
+
+    while attempts < max_attempts && Instant::now() < deadline {
         attempts += 1;
         let Some(pid) = allocate_one_pid() else {
-            warn!("pid_reset: fork failed while advancing the PID counter");
-            return (false, attempts);
+            warn!("pid_reset: fork failed while rolling the PID counter");
+            return (false, attempts, prev);
         };
-        last = pid;
-        if pid >= target {
-            return (true, attempts);
+        // A PID smaller than the previous one can only mean the allocator came
+        // back around.
+        if pid < prev {
+            wrapped = true;
         }
+        if wrapped && pid >= target {
+            return (true, attempts, pid);
+        }
+        prev = pid;
     }
-    warn!(
-        "pid_reset: fork fallback stopped at pid {last} (target {target}, {attempts} forks)"
-    );
-    (false, attempts)
+
+    (false, attempts, prev)
 }
 
-/// Advance the kernel's PID allocator so freshly started processes do not come
-/// out with low PIDs. Best-effort: every failure path just logs and returns.
+/// Roll the kernel's PID allocator back so freshly started processes do not come
+/// out with the large PIDs a long-running soft-rebooted device accumulates.
+///
+/// Best-effort: every failure path just logs and returns.
 ///
 /// Runs on a worker thread with a hard deadline. The soft reboot calls this
 /// right before it tears the framework down, and a hang here would leave the
@@ -149,17 +184,12 @@ pub fn reset_pid_counter() {
     }
 }
 
-/// Hard ceiling on the whole routine.
-const PID_RESET_DEADLINE: Duration = Duration::from_secs(2);
+/// Hard ceiling on the whole routine, comfortably above the loop's own timeout
+/// so a normally-finishing loop is never cut short by this outer guard.
+const PID_RESET_DEADLINE: Duration = Duration::from_secs(12);
 
 fn reset_pid_counter_inner() {
-    let before = read_current_last_pid();
-    if let Some(cur) = before
-        && cur >= TARGET_PID
-    {
-        info!("pid_reset: counter already at {cur}, nothing to do");
-        return;
-    }
+    let before = read_i32(NS_LAST_PID);
 
     if write_ns_last_pid(TARGET_PID) {
         info!(
@@ -169,13 +199,17 @@ fn reset_pid_counter_inner() {
         return;
     }
 
-    info!("pid_reset: ns_last_pid not usable, falling back to fork loop");
-    let (reached, attempts) = fork_until_past(TARGET_PID);
+    info!("pid_reset: ns_last_pid unavailable, rolling the PID counter via fork loop");
+    let (reached, attempts, last) = fork_until_wrapped_to(TARGET_PID);
     if reached {
-        info!("pid_reset: PID counter reached {TARGET_PID} via fork ({attempts} forks)");
+        info!(
+            "pid_reset: PID counter wrapped and reached {TARGET_PID} \
+             (last_pid={last}, {attempts} forks)"
+        );
     } else {
         warn!(
-            "pid_reset: PID counter not fully advanced ({attempts} forks); partial move kept"
+            "pid_reset: PID counter not rolled back (last_pid={last}, \
+             {attempts} forks); reboot continues with the old range"
         );
     }
 }
