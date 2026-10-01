@@ -87,12 +87,15 @@ fn spawn_pty(dir: &str) -> Result<Box<Pty>> {
     unsafe {
         let mut master: libc::c_int = -1;
         let mut slave: libc::c_int = -1;
+        // termios/winsize are *mut on every libc we build against, but the const
+        // null() only coerces on the targets whose openpty takes a const pointer
+        // (glibc does, Apple does not), so name the types and pass mut nulls.
         if libc::openpty(
             &raw mut master,
             &raw mut slave,
             std::ptr::null_mut(),
-            std::ptr::null(),
-            std::ptr::null(),
+            std::ptr::null_mut::<libc::termios>(),
+            std::ptr::null_mut::<libc::winsize>(),
         ) != 0
         {
             return Err(std::io::Error::last_os_error()).with_context(|| "openpty 失败");
