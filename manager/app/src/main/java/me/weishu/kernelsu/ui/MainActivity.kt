@@ -1,7 +1,6 @@
 package me.weishu.kernelsu.ui
 
 import androidx.compose.ui.layout.positionInWindow
-import androidx.compose.ui.graphics.drawscope.drawRect
 import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import android.annotation.SuppressLint
 import android.content.Intent
