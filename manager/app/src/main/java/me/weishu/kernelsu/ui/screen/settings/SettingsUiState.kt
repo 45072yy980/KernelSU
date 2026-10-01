@@ -57,10 +57,11 @@ data class SettingsUiState(
     val autoJailbreak: Boolean = false,
 
     // Soft Reboot
-    val useSoftReboot: Boolean = false
-    val pidResetOnSoftReboot: Boolean = false
-    val homeCardBlur: Boolean = false
-    val disablePagerSwipe: Boolean = false
+    val useSoftReboot: Boolean = false,
+    // Hide-root helpers (all default off)
+    val pidResetOnSoftReboot: Boolean = false,
+    val homeCardBlur: Boolean = false,
+    val disablePagerSwipe: Boolean = false,
 )
 
 @Immutable

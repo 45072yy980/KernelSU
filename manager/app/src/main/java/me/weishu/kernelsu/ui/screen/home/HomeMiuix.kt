@@ -6,6 +6,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -309,6 +310,8 @@ private fun StatusCard(
                                         .matchParentSize()
                                         .textureBlur(
                                             backdrop = statusBackdrop,
+                                            // Match the card's own rounding (Miuix cards use a large radius).
+                                            shape = RoundedCornerShape(16.dp),
                                             blurRadius = 25f,
                                             colors = BlurColors(
                                                 blendColors = listOf(
@@ -318,6 +321,7 @@ private fun StatusCard(
                                                     ),
                                                 ),
                                             ),
+                                            enabled = true,
                                         ),
                                 )
                             }

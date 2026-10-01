@@ -285,6 +285,7 @@ private fun StatusCard(
                         BlendColorEntry(color = containerColor.copy(alpha = 0.75f)),
                     ),
                 ),
+                enabled = true,
             )
         } else {
             Modifier

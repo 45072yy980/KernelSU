@@ -120,6 +120,10 @@ pub fn reset_pid_counter() {
 }
 
 /// `ksud pid-reset`: expose the routine so the Manager can trigger it directly.
+///
+/// Returns `Ok` even when the counter could not be moved: this is a best-effort
+/// hide-the-restart step, never a reason to fail a command.
+#[allow(clippy::unnecessary_wraps)]
 pub fn pid_reset_command() -> anyhow::Result<()> {
     reset_pid_counter();
     Ok(())

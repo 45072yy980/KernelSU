@@ -7,11 +7,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Article
+import androidx.compose.material.icons.automirrored.filled.CompareArrows
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.Rule
 import androidx.compose.material.icons.filled.Adb
-import androidx.compose.material.icons.automirrored.filled.Swipe
 import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.BlurOn
 import androidx.compose.material.icons.filled.DeveloperMode
@@ -181,7 +181,7 @@ private fun basicRows(uiState: SettingsUiState, viewModel: SettingsViewModel): L
         onCheckedChange = viewModel::setHomeCardBlur,
     ),
     BasicRow(
-        icon = Icons.AutoMirrored.Filled.Swipe,
+        icon = Icons.AutoMirrored.Filled.CompareArrows,
         title = R.string.settings_disable_pager_swipe,
         summary = stringResource(R.string.settings_disable_pager_swipe_summary),
         enabled = true,
