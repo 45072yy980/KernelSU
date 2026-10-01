@@ -21,6 +21,8 @@ pub enum FeatureId {
     Sulog = 2,
     AdbRoot = 3,
     SelinuxHide = 4,
+    PartitionGuard = 5,
+    PartitionGuardRuntime = 6,
 }
 
 impl FeatureId {
@@ -31,6 +33,8 @@ impl FeatureId {
             2 => Some(Self::Sulog),
             3 => Some(Self::AdbRoot),
             4 => Some(Self::SelinuxHide),
+            5 => Some(Self::PartitionGuard),
+            6 => Some(Self::PartitionGuardRuntime),
             _ => None,
         }
     }
@@ -42,6 +46,8 @@ impl FeatureId {
             Self::Sulog => "sulog",
             Self::AdbRoot => "adb_root",
             Self::SelinuxHide => "selinux_hide",
+            Self::PartitionGuard => "partition_guard",
+            Self::PartitionGuardRuntime => "partition_guard_runtime",
         }
     }
 
@@ -60,6 +66,12 @@ impl FeatureId {
             Self::SelinuxHide => {
                 "SELinux Hide - sanitize /sys/fs/selinux access results for app UIDs"
             }
+            Self::PartitionGuard => {
+                "System Partition Guard - block root apps from opening a raw block device for writing"
+            }
+            Self::PartitionGuardRuntime => {
+                "Runtime Partition Guard - kernel-side openat/mount/write interception (independent switch)"
+            }
         }
     }
 }
@@ -71,11 +83,13 @@ fn parse_feature_id(name: &str) -> Result<FeatureId> {
         "sulog" | "2" => Ok(FeatureId::Sulog),
         "adb_root" | "3" => Ok(FeatureId::AdbRoot),
         "selinux_hide" | "4" => Ok(FeatureId::SelinuxHide),
+        "partition_guard" | "5" => Ok(FeatureId::PartitionGuard),
+        "partition_guard_runtime" | "6" => Ok(FeatureId::PartitionGuardRuntime),
         _ => bail!("Unknown feature: {name}"),
     }
 }
 
-fn set_kernel_feature(feature_id: FeatureId, value: u64) -> Result<()> {
+pub fn set_kernel_feature(feature_id: FeatureId, value: u64) -> Result<()> {
     crate::ksucalls::set_feature(feature_id as u32, value)
         .with_context(|| format!("Failed to set feature {} to {value}", feature_id.name()))?;
 

@@ -587,7 +587,7 @@ fn install_from_path(stream: &mut TcpStream, path: &str) -> Result<()> {
     }
 
     let started = std::time::Instant::now();
-    match module::install_module(path) {
+    match module::install_module(path, false) {
         Ok(()) => json_response(
             stream,
             &ApiResponse::ok(format!(
@@ -2055,7 +2055,7 @@ fn handle_request(stream: &mut TcpStream, req: &HttpRequest, peer: Option<u32>) 
                 }
                 let wrote = started.elapsed().as_millis();
                 let installing = std::time::Instant::now();
-                let result = match module::install_module(&tmp) {
+                let result = match module::install_module(&tmp, false) {
                     Ok(()) => {
                         let installed = installing.elapsed().as_millis();
                         json_response(

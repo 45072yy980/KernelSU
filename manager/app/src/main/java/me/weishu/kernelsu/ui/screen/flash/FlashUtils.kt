@@ -35,9 +35,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.parcelize.Parcelize
 import me.weishu.kernelsu.R
+import me.weishu.kernelsu.ksuApp
 import me.weishu.kernelsu.ui.LocalUiMode
 import me.weishu.kernelsu.ui.UiMode
 import me.weishu.kernelsu.ui.util.FlashResult
+import me.weishu.kernelsu.ui.util.JailbreakExploit as JailbreakExploitRunner
 import me.weishu.kernelsu.ui.util.LkmSelection
 import me.weishu.kernelsu.ui.util.downloadBoot
 import me.weishu.kernelsu.ui.util.flashModule
@@ -111,6 +113,15 @@ sealed class FlashIt : Parcelable {
 
     @Parcelize
     data object FlashUninstall : FlashIt()
+
+    /**
+     * Runs the bundled GhostLock exploit to gain root and hand off to the
+     * Manager's own ksud late-load. Reused by the Flash progress screen so the
+     * exploit gets the same live log, success/failure banner and save-log
+     * button as a module install.
+     */
+    @Parcelize
+    data object JailbreakExploit : FlashIt()
 }
 
 fun flashModulesSequentially(
@@ -163,6 +174,28 @@ fun flashIt(
 
         FlashIt.FlashRestore -> restoreBoot(onStdout, onStderr)
         FlashIt.FlashUninstall -> uninstallPermanently(onStdout, onStderr)
+        FlashIt.JailbreakExploit -> {
+            onStdout("==== jailbreak (exploit) ====")
+            val appContext = ksuApp.applicationContext
+            if (!JailbreakExploitRunner.isAvailable(appContext)) {
+                onStderr("exploit binary not bundled for this ABI")
+                FlashResult(1, "exploit binary not bundled", false)
+            } else {
+                val result = JailbreakExploitRunner.run(
+                    context = appContext,
+                    managerPackage = appContext.packageName,
+                    onLog = { line -> onStdout(line) },
+                )
+                if (result.success) {
+                    // On success the exploit itself restarts the Manager through
+                    // ksud late-load, so no manual reboot is offered: a reboot would
+                    // drop the just-acquired root. The screen simply ends on success.
+                    FlashResult(0, "", false)
+                } else {
+                    FlashResult(result.exitCode.coerceAtLeast(1), result.output, false)
+                }
+            }
+        }
     }
 }
 
@@ -183,20 +216,29 @@ fun FlashEffect(
         var currentText = text
         val mainHandler = Handler(Looper.getMainLooper())
         withContext(Dispatchers.IO) {
-            flashIt(flashIt, onStdout = {
-                val tempText = "$it\n"
-                if (tempText.startsWith("[H[J")) { // clear command
-                    currentText = tempText.substring(6)
-                } else {
-                    currentText += tempText
-                }
-                mainHandler.post {
-                    onTextUpdate(currentText)
-                }
-                logContent.append(it).append("\n")
-            }, onStderr = {
-                logContent.append(it).append("\n")
-            }).apply {
+            // Never let a failure in the work itself crash the app: the progress
+            // screen should end on FAILED with the message in the log instead.
+            val result = try {
+                flashIt(flashIt, onStdout = {
+                    val tempText = "$it\n"
+                    if (tempText.startsWith("[H[J")) { // clear command
+                        currentText = tempText.substring(6)
+                    } else {
+                        currentText += tempText
+                    }
+                    mainHandler.post {
+                        onTextUpdate(currentText)
+                    }
+                    logContent.append(it).append("\n")
+                }, onStderr = {
+                    logContent.append(it).append("\n")
+                })
+            } catch (t: Throwable) {
+                val msg = t.message ?: t.javaClass.simpleName
+                logContent.append(msg).append("\n")
+                FlashResult(1, msg, false)
+            }
+            result.apply {
                 if (code != 0) {
                     currentText += "Error code: $code.\n $err Please save and check the log.\n"
                     mainHandler.post {

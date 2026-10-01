@@ -385,4 +385,18 @@
     <string name="nav_rail_collapse">Collapse navigation rail</string>
     <string name="settings_navigation_badge">Navigation badge</string>
     <string name="settings_navigation_badge_summary">Show granted app and enabled module counts on the navigation bar</string>
+    <string name="jailbreak_guard_running_title">System partition protection</string>
+    <string name="jailbreak_guard_running_summary">Jailbreak mode is active. Blocks installation of modules that would really write a partition; a reboot restores everything. Partition writes are guarded while this mode runs.</string>
+    <string name="jailbreak_choose_title">Enable root</string>
+    <string name="jailbreak_choose_message">The kernel is not loaded yet. You can have this app gain root through the bundled exploit and immediately enter jailbreak (late-load) mode, without touching any partition. Or install the kernel manually.</string>
+    <string name="jailbreak_manual_action">Manual install</string>
+    <string name="jailbreak_exploit_action">Jailbreak (exploit)</string>
+    <string name="jailbreak_exploit_unavailable">The exploit is not bundled for this device.</string>
+    <string name="jailbreak_exploit_failed">Jailbreak failed. The kernel may be unsupported; check the logs.</string>
+    <string name="jailbreaking">Jailbreaking</string>
+    <string name="jailbreak_success">Jailbreak success</string>
+    <string name="jailbreak_failed">Jailbreak failed</string>
+    <string name="settings_partition_guard">System partition protection</string>
+    <string name="settings_partition_guard_summary">Blocks installation of modules that would really write a system partition (dd to a block device, remount rw, flash, mkfs ...). Always on in jailbreak mode; can be toggled here otherwise.</string>
+    <string name="settings_partition_guard_summary_jailbreak">Always on in jailbreak mode and cannot be turned off here - a late-loaded session cannot undo a real partition write.</string>
 </resources>

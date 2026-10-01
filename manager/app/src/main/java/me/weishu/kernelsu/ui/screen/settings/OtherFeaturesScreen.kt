@@ -8,6 +8,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -17,6 +18,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -30,14 +32,21 @@ import androidx.lifecycle.compose.dropUnlessResumed
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import me.weishu.kernelsu.Natives
 import me.weishu.kernelsu.R
 import me.weishu.kernelsu.ui.LocalUiMode
 import me.weishu.kernelsu.ui.UiMode
 import me.weishu.kernelsu.ui.component.material.SegmentedColumn
 import me.weishu.kernelsu.ui.component.material.SegmentedListItem
+import me.weishu.kernelsu.ui.component.material.SegmentedSwitchItem
 import me.weishu.kernelsu.ui.navigation3.LocalNavigator
 import me.weishu.kernelsu.ui.navigation3.Route
 import me.weishu.kernelsu.ui.util.HideAppList
+import me.weishu.kernelsu.data.repository.isPartitionGuardEnabled
+import me.weishu.kernelsu.data.repository.isRuntimeGuardEnabled
+import me.weishu.kernelsu.data.repository.setPartitionGuardEnabled
+import me.weishu.kernelsu.data.repository.setRuntimeGuardEnabled
+import me.weishu.kernelsu.data.repository.syncRuntimeGuardToKernel
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Icon as MiuixIcon
 import top.yukonga.miuix.kmp.basic.IconButton as MiuixIconButton
@@ -46,6 +55,7 @@ import top.yukonga.miuix.kmp.basic.TopAppBar as MiuixTopAppBar
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.preference.ArrowPreference
+import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme
 
 /** The two extras that came over from DikSU: the one-tap Hide My Applist config, and the keyMint panel. */
@@ -57,6 +67,43 @@ fun OtherFeaturesScreen() {
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    // System-partition guard: forced on (locked) in jailbreak/late-load mode,
+    // otherwise it follows the user setting.
+    val isLateLoad = Natives.isLateLoadMode
+    var guardEnabled by remember { mutableStateOf(isPartitionGuardEnabled()) }
+    // The runtime layer is a *child* of the guard switch: it only shows (and
+    // only means anything) while the parent protection is on, and it is OFF by
+    // default in every mode, including jailbreak. It hooks very hot syscalls
+    // (write/writev), so we never turn it on for the user.
+    var runtimeGuardEnabled by remember { mutableStateOf(isRuntimeGuardEnabled()) }
+    val onGuardChange: (Boolean) -> Unit = { value ->
+        setPartitionGuardEnabled(value)
+        guardEnabled = isPartitionGuardEnabled()
+        // setPartitionGuardEnabled(false) also clears the child; mirror that here.
+        runtimeGuardEnabled = isRuntimeGuardEnabled()
+    }
+    val onRuntimeGuardChange: (Boolean) -> Unit = { value ->
+        setRuntimeGuardEnabled(value)
+        runtimeGuardEnabled = isRuntimeGuardEnabled()
+    }
+    // Push the runtime switch to the kernel when (and only when) it changes.
+    // The kernel flag is what actually blocks a *live* write from a rooted
+    // process, and it is in-memory, so the value has to be re-sent per session.
+    //
+    // We skip the very first composition: the kernel already reflects this
+    // value right after load (ksud replays it from the feature config), and
+    // re-sending "ksud feature set ... 0" on every visit would silently undo a
+    // value another screen/instance had just set.
+    var syncedOnce by remember { mutableStateOf(false) }
+    LaunchedEffect(runtimeGuardEnabled) {
+        if (!syncedOnce) {
+            syncedOnce = true
+            return@LaunchedEffect
+        }
+        withContext(Dispatchers.IO) {
+            runCatching { syncRuntimeGuardToKernel(runtimeGuardEnabled) }
+        }
+    }
     var phase by remember { mutableStateOf<HideAppListPhase?>(null) }
 
     val onHideAppList = { phase = HideAppListPhase.Pick }
@@ -78,8 +125,26 @@ fun OtherFeaturesScreen() {
     }
 
     when (LocalUiMode.current) {
-        UiMode.Material -> OtherFeaturesMaterial(onBack, onOpenKeymint, onHideAppList)
-        UiMode.Miuix, UiMode.MiuixStock -> OtherFeaturesMiuix(onBack, onOpenKeymint, onHideAppList)
+        UiMode.Material -> OtherFeaturesMaterial(
+            onBack = onBack,
+            onOpenKeymint = onOpenKeymint,
+            onHideAppList = onHideAppList,
+            guardEnabled = guardEnabled,
+            guardLocked = isLateLoad,
+            onGuardChange = onGuardChange,
+            runtimeGuardEnabled = runtimeGuardEnabled,
+            onRuntimeGuardChange = onRuntimeGuardChange,
+        )
+        UiMode.Miuix, UiMode.MiuixStock -> OtherFeaturesMiuix(
+            onBack = onBack,
+            onOpenKeymint = onOpenKeymint,
+            onHideAppList = onHideAppList,
+            guardEnabled = guardEnabled,
+            guardLocked = isLateLoad,
+            onGuardChange = onGuardChange,
+            runtimeGuardEnabled = runtimeGuardEnabled,
+            onRuntimeGuardChange = onRuntimeGuardChange,
+        )
     }
 
     val open = phase
@@ -98,6 +163,11 @@ private fun OtherFeaturesMaterial(
     onBack: () -> Unit,
     onOpenKeymint: () -> Unit,
     onHideAppList: () -> Unit,
+    guardEnabled: Boolean,
+    guardLocked: Boolean,
+    onGuardChange: (Boolean) -> Unit,
+    runtimeGuardEnabled: Boolean,
+    onRuntimeGuardChange: (Boolean) -> Unit,
 ) {
     Scaffold(
         topBar = {
@@ -118,8 +188,8 @@ private fun OtherFeaturesMaterial(
         ) {
             SegmentedColumn(
                 modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 13.dp, bottom = 13.dp),
-                content = listOf(
-                    {
+                content = buildList<@Composable () -> Unit> {
+                    add {
                         val hide = stringResource(R.string.settings_hide_applist)
                         SegmentedListItem(
                             onClick = onHideAppList,
@@ -135,8 +205,8 @@ private fun OtherFeaturesMaterial(
                                 )
                             },
                         )
-                    },
-                    {
+                    }
+                    add {
                         val keymint = stringResource(R.string.settings_keymint_config)
                         SegmentedListItem(
                             onClick = onOpenKeymint,
@@ -152,8 +222,34 @@ private fun OtherFeaturesMaterial(
                                 )
                             },
                         )
-                    },
-                ),
+                    }
+                    add {
+                        val guardTitle = stringResource(R.string.settings_partition_guard)
+                        val guardSummary = stringResource(
+                            if (guardLocked) R.string.settings_partition_guard_summary_jailbreak
+                            else R.string.settings_partition_guard_summary
+                        )
+                        SegmentedSwitchItem(
+                            icon = Icons.Filled.Security,
+                            title = guardTitle,
+                            summary = guardSummary,
+                            enabled = !guardLocked,
+                            checked = guardEnabled,
+                            onCheckedChange = onGuardChange,
+                        )
+                    }
+                    // Runtime child: only surfaced (and only meaningful) while
+                    // the parent guard is on. Off by default in every mode.
+                    if (guardEnabled) add {
+                        SegmentedSwitchItem(
+                            icon = Icons.Filled.Lock,
+                            title = stringResource(R.string.settings_runtime_guard),
+                            summary = stringResource(R.string.settings_runtime_guard_summary),
+                            checked = runtimeGuardEnabled,
+                            onCheckedChange = onRuntimeGuardChange,
+                        )
+                    }
+                },
             )
         }
     }
@@ -164,6 +260,11 @@ private fun OtherFeaturesMiuix(
     onBack: () -> Unit,
     onOpenKeymint: () -> Unit,
     onHideAppList: () -> Unit,
+    guardEnabled: Boolean,
+    guardLocked: Boolean,
+    onGuardChange: (Boolean) -> Unit,
+    runtimeGuardEnabled: Boolean,
+    onRuntimeGuardChange: (Boolean) -> Unit,
 ) {
     MiuixScaffold(
         topBar = {
@@ -213,6 +314,42 @@ private fun OtherFeaturesMiuix(
                         },
                         onClick = onOpenKeymint,
                     )
+                    SwitchPreference(
+                        title = stringResource(R.string.settings_partition_guard),
+                        summary = stringResource(
+                            if (guardLocked) R.string.settings_partition_guard_summary_jailbreak
+                            else R.string.settings_partition_guard_summary
+                        ),
+                        startAction = {
+                            MiuixIcon(
+                                imageVector = Icons.Filled.Security,
+                                contentDescription = null,
+                                tint = colorScheme.onBackground,
+                                modifier = Modifier.padding(end = 6.dp),
+                            )
+                        },
+                        enabled = !guardLocked,
+                        checked = guardEnabled,
+                        onCheckedChange = onGuardChange,
+                    )
+                    // Runtime child: only surfaced (and only meaningful) while the
+                    // parent guard is on. Off by default in every mode.
+                    if (guardEnabled) {
+                        SwitchPreference(
+                            title = stringResource(R.string.settings_runtime_guard),
+                            summary = stringResource(R.string.settings_runtime_guard_summary),
+                            startAction = {
+                                MiuixIcon(
+                                    imageVector = Icons.Filled.Lock,
+                                    contentDescription = null,
+                                    tint = colorScheme.onBackground,
+                                    modifier = Modifier.padding(end = 6.dp),
+                                )
+                            },
+                            checked = runtimeGuardEnabled,
+                            onCheckedChange = onRuntimeGuardChange,
+                        )
+                    }
                 }
             }
         }

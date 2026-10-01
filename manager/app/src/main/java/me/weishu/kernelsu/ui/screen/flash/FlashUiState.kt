@@ -10,6 +10,9 @@ data class FlashUiState(
     val flashingStatus: FlashingStatus,
     val showJailbreakWarning: Boolean,
     @param:StringRes val rebootLabelRes: Int,
+    // True while running the bundled jailbreak exploit, so the screen can say
+    // "jailbreaking" instead of "flashing".
+    val isJailbreak: Boolean = false,
 )
 
 @Immutable

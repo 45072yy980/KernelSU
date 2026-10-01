@@ -16,6 +16,7 @@ import com.topjohnwu.superuser.ShellUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.parcelize.Parcelize
+import me.weishu.kernelsu.data.repository.isPartitionGuardEnabled
 import me.weishu.kernelsu.BuildConfig
 import me.weishu.kernelsu.Natives
 import me.weishu.kernelsu.core.tasks.BootKernelVersion
@@ -202,7 +203,10 @@ fun flashModule(
             this?.copyTo(output)
         }
         val cmd = "module install ${file.absolutePath}"
-        val result = flashWithIO("${getKsuDaemonPath()} $cmd", onStdout, onStderr)
+        // Opt the install into the system-partition guard when it is enabled
+        // (always in jailbreak mode, otherwise the user setting).
+        val guardEnv = if (isPartitionGuardEnabled()) "KSU_PARTITION_GUARD=1 " else ""
+        val result = flashWithIO("$guardEnv${getKsuDaemonPath()} $cmd", onStdout, onStderr)
         Log.i("KernelSU", "install module $uri result: $result")
 
         file.delete()

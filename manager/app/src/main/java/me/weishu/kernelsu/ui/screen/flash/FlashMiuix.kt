@@ -163,11 +163,18 @@ private fun TopBar(
     onSave: () -> Unit = {},
     backdrop: LayerBackdrop?,
     barColor: Color,
+    isJailbreak: Boolean = false,
 ) {
     BlurredBar(backdrop) {
         SmallTopAppBar(
             title = stringResource(
-                when (status) {
+                if (isJailbreak) {
+                    when (status) {
+                        FlashingStatus.FLASHING -> R.string.jailbreaking
+                        FlashingStatus.SUCCESS -> R.string.jailbreak_success
+                        FlashingStatus.FAILED -> R.string.jailbreak_failed
+                    }
+                } else when (status) {
                     FlashingStatus.FLASHING -> R.string.flashing
                     FlashingStatus.SUCCESS -> R.string.flash_success
                     FlashingStatus.FAILED -> R.string.flash_failed

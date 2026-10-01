@@ -252,6 +252,10 @@ private fun StatusCard(
             }
         } else null
 
+        if (state.isLateLoadMode) {
+            JailbreakGuardCard()
+        }
+
         Surface(
             modifier = Modifier.fillMaxWidth(),
             color = containerColor,
@@ -259,7 +263,8 @@ private fun StatusCard(
             shape = MaterialTheme.shapes.large,
             onClick = {
                 if (!state.isLateLoadMode) {
-                    actions.onInstallClick()
+                    // Offer the exploit jailbreak or the ordinary install flow.
+                    actions.onNotInstalledClick()
                 }
             }
         ) {
@@ -607,3 +612,42 @@ private fun previewHomeScreenState(
     kernelUAPIVersion = 1,
     managerUAPIVersion = 1,
 )
+
+@Composable
+private fun JailbreakGuardCard(modifier: Modifier = Modifier) {
+    // Shown while jailbreak (late-load) mode is running: the partition guard is
+    // active, so this tells the user their system partitions are protected.
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.tertiaryContainer,
+        contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+        shape = MaterialTheme.shapes.large,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Security,
+                contentDescription = null,
+                modifier = Modifier
+                    .padding(end = 12.dp)
+                    .size(28.dp),
+            )
+            Column {
+                Text(
+                    text = stringResource(R.string.jailbreak_guard_running_title),
+                    style = MaterialTheme.typography.titleMediumEmphasized,
+                )
+                Text(
+                    text = stringResource(R.string.jailbreak_guard_running_summary),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.8f),
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
+        }
+    }
+}

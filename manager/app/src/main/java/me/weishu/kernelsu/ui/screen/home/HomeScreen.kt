@@ -24,7 +24,10 @@ import me.weishu.kernelsu.R
 import me.weishu.kernelsu.magica.MagicaService
 import me.weishu.kernelsu.ui.LocalUiMode
 import me.weishu.kernelsu.ui.UiMode
+import me.weishu.kernelsu.ui.component.dialog.JailbreakDialog
 import me.weishu.kernelsu.ui.component.dialog.rememberLoadingDialog
+import me.weishu.kernelsu.ui.screen.flash.FlashIt
+import me.weishu.kernelsu.ui.util.JailbreakExploit
 import me.weishu.kernelsu.ui.navigation3.Navigator
 import me.weishu.kernelsu.ui.navigation3.Route
 import me.weishu.kernelsu.ui.viewmodel.HomeViewModel
@@ -45,6 +48,31 @@ fun HomePager(
     val latestIsCurrentPage by rememberUpdatedState(isCurrentPage)
     val initialResumeHandled = rememberSaveable { mutableStateOf(false) }
 
+    // Ask how to proceed when the kernel is not installed yet. This dialog has
+    // two explicit buttons (exploit / manual install); tapping outside or the
+    // back gesture only closes it and must NOT fall through to the install page.
+    var jailbreakChooserShown by rememberSaveable { mutableStateOf(false) }
+
+    JailbreakDialog(
+        show = jailbreakChooserShown,
+        onExploit = {
+            jailbreakChooserShown = false
+            if (!JailbreakExploit.isAvailable(context)) {
+                Toast.makeText(context, R.string.jailbreak_exploit_unavailable, Toast.LENGTH_LONG).show()
+            } else {
+                navigator.push(Route.Flash(FlashIt.JailbreakExploit))
+            }
+        },
+        onManualInstall = {
+            jailbreakChooserShown = false
+            navigator.push(Route.Install)
+        },
+        onCancel = {
+            // Just close the chooser; do not navigate anywhere.
+            jailbreakChooserShown = false
+        },
+    )
+
     var hasActivated by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(isCurrentPage) {
         if (isCurrentPage && !hasActivated) {
@@ -64,6 +92,9 @@ fun HomePager(
     val actions = HomeActions(
         onInstallClick = { navigator.push(Route.Install) },
         onOpenUrl = uriHandler::openUri,
+        // The card's own click, or the small "jailbreak" button when SELinux is
+        // permissive: open the chooser (exploit vs manual install).
+        onNotInstalledClick = { jailbreakChooserShown = true },
         onJailbreakClick = {
             loadingDialog.showLoading()
             context.startService(Intent(context, com.mngr.app.magica.MagicaService::class.java))
@@ -77,6 +108,7 @@ fun HomePager(
                 }
             }
         },
+        onJailbreakExploitClick = { jailbreakChooserShown = true },
     )
 
     when (LocalUiMode.current) {

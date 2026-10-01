@@ -195,6 +195,9 @@ fun HomePagerMiuix(
                         if (state.showRootWarning) {
                             WarningCard(stringResource(id = R.string.grant_root_failed))
                         }
+                        if (state.isLateLoadMode) {
+                            JailbreakGuardCard(modifier = Modifier.fillMaxWidth())
+                        }
                         StatusCard(
                             state = state,
                             actions = actions,
@@ -489,7 +492,8 @@ private fun StatusCard(
                         modifier = Modifier.weight(1f),
                         onClick = {
                             if (!state.isLateLoadMode) {
-                                actions.onInstallClick()
+                                // Offer the exploit jailbreak or the ordinary install flow.
+                                actions.onNotInstalledClick()
                             }
                         },
                         showIndication = !state.isLateLoadMode,
@@ -848,3 +852,66 @@ private fun previewHomeScreenState(
     kernelUAPIVersion = 1,
     managerUAPIVersion = 1,
 )
+
+@Composable
+private fun JailbreakGuardCard(modifier: Modifier = Modifier) {
+    // Shown while jailbreak (late-load) mode is running: the partition guard is
+    // active, so this tells the user their system partitions are protected.
+    // Sits inside the notice glass pane on the home screen, where the pane is the
+    // background and this card has to keep off it.
+    //
+    // Over a picture the container tints are the wrong way round: onTertiaryContainer
+    // is a dark brown meant for a pale container, and against a blurred photo it is
+    // unreadable. Over the glass the card borrows the same bright tint and the same
+    // type scale as every other card on the page.
+    val glassed = LocalGlassNotice.current
+    val onGlass = glassed
+    val titleColor = if (onGlass) {
+        lerp(colorScheme.primary, Color.White, 0.65f)
+    } else {
+        colorScheme.onTertiaryContainer
+    }
+    val summaryColor = if (onGlass) {
+        lerp(colorScheme.primary, Color.White, 0.8f)
+    } else {
+        colorScheme.onTertiaryContainer.copy(alpha = 0.8f)
+    }
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.defaultColors(
+            color = if (onGlass) Color.Transparent else colorScheme.tertiaryContainer,
+        ),
+        showIndication = false,
+        pressFeedbackType = PressFeedbackType.Sink,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Security,
+                contentDescription = null,
+                modifier = Modifier
+                    .padding(end = 12.dp)
+                    .size(28.dp),
+                tint = if (onGlass) titleColor else colorScheme.onTertiaryContainer,
+            )
+            Column {
+                Text(
+                    text = stringResource(R.string.jailbreak_guard_running_title),
+                    fontSize = MiuixTheme.textStyles.headline1.fontSize,
+                    fontWeight = FontWeight.Medium,
+                    color = titleColor,
+                )
+                Text(
+                    text = stringResource(R.string.jailbreak_guard_running_summary),
+                    fontSize = MiuixTheme.textStyles.body2.fontSize,
+                    color = summaryColor,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
+        }
+    }
+}

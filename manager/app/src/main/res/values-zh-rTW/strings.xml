@@ -184,4 +184,18 @@
     <string name="profile_flags_desc_no_new_privs">防止在此 Root Profile 的上下文中透過 KernelSU 進一步提升權限</string>
     <string name="install_force_backup">備份為原廠映像</string>
     <string name="install_force_backup_summary">請確保你選擇的 boot 映像是原廠映像</string>
+    <string name="jailbreak_guard_running_title">系統分區保護運行中</string>
+    <string name="jailbreak_guard_running_summary">當前處於越獄模式。會攔截真正寫入分區的模組安裝；重啟即還原。此模式運行期間，系統分區寫入受到保護。</string>
+    <string name="jailbreak_choose_title">啟用 Root</string>
+    <string name="jailbreak_choose_message">當前核心尚未載入。你可以讓本應用藉助內建的漏洞利用直接提權並立即進入越獄（late-load）模式，全程不修改任何分區；也可以選擇手動安裝核心。</string>
+    <string name="jailbreak_manual_action">手動安裝</string>
+    <string name="jailbreak_exploit_action">越獄啟用（漏洞提權）</string>
+    <string name="jailbreak_exploit_unavailable">本裝置未內建該漏洞利用。</string>
+    <string name="jailbreak_exploit_failed">越獄啟用失敗，核心可能不受支援，請檢查日誌。</string>
+    <string name="jailbreaking">正在越獄</string>
+    <string name="jailbreak_success">越獄完成</string>
+    <string name="jailbreak_failed">越獄失敗</string>
+    <string name="settings_partition_guard">系統分區保護</string>
+    <string name="settings_partition_guard_summary">攔截會真正寫入系統分區的模組安裝（dd 寫區塊裝置、remount rw、刷寫、mkfs 等）。越獄模式下始終開啟，其他情況可在此開關。</string>
+    <string name="settings_partition_guard_summary_jailbreak">越獄模式下始終開啟，無法在此關閉——晚期載入的會話無法撤銷對分區的真實寫入。</string>
 </resources>

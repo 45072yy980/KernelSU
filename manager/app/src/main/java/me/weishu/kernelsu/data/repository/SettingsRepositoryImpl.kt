@@ -20,11 +20,94 @@ import java.security.SecureRandom
 
 private const val SETTINGS_PREFS = "settings"
 private const val KEY_USE_SOFT_REBOOT = "soft_reboot"
-
+private const val KEY_PARTITION_GUARD = "partition_guard"
+private const val KEY_RUNTIME_GUARD = "runtime_partition_guard"
+private const val KEY_HOME_CARD_BLUR = "home_card_blur"
+private const val KEY_DISABLE_PAGER_SWIPE = "disable_pager_swipe"
 /** Prefer soft reboot: always in jailbreak mode, or when the setting is enabled. */
 fun isSoftRebootPreferred(): Boolean =
     Natives.isLateLoadMode || ksuApp.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
         .getBoolean(KEY_USE_SOFT_REBOOT, false)
+
+/**
+ * Whether the system-partition guard should run for a module install.
+ *
+ * It is always on in jailbreak (late-load) mode - that session cannot undo a
+ * real partition write - and optional otherwise, following the user setting.
+ */
+fun isPartitionGuardEnabled(): Boolean =
+    Natives.isLateLoadMode || ksuApp.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
+        .getBoolean(KEY_PARTITION_GUARD, false)
+
+
+fun setPartitionGuardEnabled(enabled: Boolean) {
+    // commit() for the same reason as setRuntimeGuardEnabled(): the settings
+    // screen re-reads this right after the call and an async apply() could make
+    // the parent switch snap back.
+    ksuApp.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
+        .edit().putBoolean(KEY_PARTITION_GUARD, enabled).commit()
+    // Turning the top-level protection off also disables the runtime layer: the
+    // child switch is only meaningful while the parent is on.
+    if (!enabled) {
+        setRuntimeGuardEnabled(false)
+    }
+}
+
+/**
+ * The runtime (kernel-side) guard, an extra opt-in on top of the install-time
+ * scan. It is OFF by default in every mode - including jailbreak (late-load) -
+ * because it hooks very hot syscalls (write/writev) and a bug there can panic
+ * the kernel. Users enable it deliberately.
+ */
+fun isRuntimeGuardEnabled(): Boolean =
+    ksuApp.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
+        .getBoolean(KEY_RUNTIME_GUARD, false)
+
+fun setRuntimeGuardEnabled(enabled: Boolean) {
+    // commit(), not apply(): the settings screen reads the value back right after
+    // this returns, so an async write could make the switch snap back.
+    ksuApp.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
+        .edit().putBoolean(KEY_RUNTIME_GUARD, enabled).commit()
+    // NOTE: pushing the value to the kernel is deliberately left to the caller
+    // (the settings screen's LaunchedEffect). Pushing here too would fire the
+    // same "ksud feature set" twice per toggle.
+}
+
+/**
+ * Hand the runtime-guard state to the kernel, where the actual live-write
+ * interception happens. Safe to call repeatedly; does nothing if the kernel
+ * does not support the feature (e.g. an older LKM).
+ */
+fun syncRuntimeGuardToKernel(enabled: Boolean) {
+    execKsud("feature set partition_guard_runtime ${if (enabled) 1 else 0}", newShell = true)
+}
+
+/**
+ * Hide-root helpers that the jailbreak workflow benefits from. All three default
+ * to OFF, so a plain install behaves exactly like upstream until the user opts in
+ * from Basic settings.
+ */
+
+
+/** Render the "working" status card on the home page with a blurred (frosted) background. */
+fun isHomeCardBlurEnabled(): Boolean =
+    ksuApp.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
+        .getBoolean(KEY_HOME_CARD_BLUR, false)
+
+fun setHomeCardBlurEnabled(enabled: Boolean) {
+    ksuApp.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
+        .edit().putBoolean(KEY_HOME_CARD_BLUR, enabled).commit()
+}
+
+/** Stop the home pager from following a left/right swipe; navigation stays on the bottom bar. */
+fun isPagerSwipeDisabled(): Boolean =
+    ksuApp.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
+        .getBoolean(KEY_DISABLE_PAGER_SWIPE, false)
+
+fun setPagerSwipeDisabled(enabled: Boolean) {
+    ksuApp.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
+        .edit().putBoolean(KEY_DISABLE_PAGER_SWIPE, enabled).commit()
+}
 
 class SettingsRepositoryImpl : SettingsRepository {
 
@@ -163,6 +246,12 @@ class SettingsRepositoryImpl : SettingsRepository {
     override var useSoftReboot: Boolean
         get() = prefs.getBoolean(KEY_USE_SOFT_REBOOT, false)
         set(value) = prefs.edit { putBoolean(KEY_USE_SOFT_REBOOT, value) }
+    override var homeCardBlur: Boolean
+        get() = prefs.getBoolean(KEY_HOME_CARD_BLUR, false)
+        set(value) = prefs.edit { putBoolean(KEY_HOME_CARD_BLUR, value) }
+    override var disablePagerSwipe: Boolean
+        get() = prefs.getBoolean(KEY_DISABLE_PAGER_SWIPE, false)
+        set(value) = prefs.edit { putBoolean(KEY_DISABLE_PAGER_SWIPE, value) }
 
     override val intentToken: String
         get() {

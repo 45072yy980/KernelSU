@@ -60,4 +60,10 @@ data class HomeActions(
     val onInstallClick: () -> Unit,
     val onOpenUrl: (String) -> Unit,
     val onJailbreakClick: () -> Unit = {},
+    // Fires when the device is not rooted at all yet (so a plain late-load would
+    // have no ksud to talk to).
+    val onJailbreakExploitClick: () -> Unit = {},
+    // Clicking the "not installed" card itself: offer the exploit jailbreak or the
+    // ordinary install flow.
+    val onNotInstalledClick: () -> Unit = {},
 )

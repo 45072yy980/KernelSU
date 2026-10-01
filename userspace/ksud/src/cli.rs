@@ -327,6 +327,9 @@ enum Module {
     Install {
         /// module zip file path
         zip: String,
+        /// install even if the module would modify a real partition (jailbreak mode)
+        #[arg(long)]
+        force: bool,
     },
 
     /// Undo module uninstall mark <id>
@@ -568,7 +571,7 @@ pub fn run() -> Result<()> {
         Commands::Module { command } => {
             utils::switch_mnt_ns(1)?;
             match command {
-                Module::Install { zip } => module::install_module(&zip),
+                Module::Install { zip, force } => module::install_module(&zip, force),
                 Module::UndoUninstall { id } => module::undo_uninstall_module(&id),
                 Module::Uninstall { id } => module::uninstall_module(&id),
                 Module::Enable { id } => module::enable_module(&id),

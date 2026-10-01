@@ -379,4 +379,18 @@
     <string name="nav_rail_collapse">收起导航栏</string>
     <string name="settings_navigation_badge">导航栏角标</string>
     <string name="settings_navigation_badge_summary">在导航栏显示已授权应用和已启用模块数量</string>
+    <string name="jailbreak_guard_running_title">系统分区保护运行中</string>
+    <string name="jailbreak_guard_running_summary">当前处于越狱模式。会拦截真正写入分区的模块安装；重启即还原。此模式运行期间，系统分区写入受到保护。</string>
+    <string name="jailbreak_choose_title">启用 Root</string>
+    <string name="jailbreak_choose_message">当前内核尚未加载。你可以让本应用借助内置的漏洞利用直接提权并立即进入越狱（late-load）模式，全程不修改任何分区；也可以选择手动安装内核。</string>
+    <string name="jailbreak_manual_action">手动安装</string>
+    <string name="jailbreak_exploit_action">越狱激活（漏洞提权）</string>
+    <string name="jailbreak_exploit_unavailable">本设备未内置该漏洞利用。</string>
+    <string name="jailbreak_exploit_failed">越狱激活失败，内核可能不受支持，请检查日志。</string>
+    <string name="jailbreaking">正在越狱</string>
+    <string name="jailbreak_success">越狱完成</string>
+    <string name="jailbreak_failed">越狱失败</string>
+    <string name="settings_partition_guard">系统分区保护</string>
+    <string name="settings_partition_guard_summary">拦截会真正写入系统分区的模块安装（dd 写块设备、remount rw、刷写、mkfs 等）。越狱模式下始终开启，其他情况可在此开关。</string>
+    <string name="settings_partition_guard_summary_jailbreak">越狱模式下始终开启，无法在此关闭——晚期加载的会话无法撤销对分区的真实写入。</string>
 </resources>
