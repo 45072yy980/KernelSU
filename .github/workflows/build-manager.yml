@@ -156,15 +156,23 @@ jobs:
 
       - name: Write key
         if: ${{ ( github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev' )) || github.ref_type == 'tag' }}
+        env:
+          # Same source as repack-manager below: the key is committed as
+          # ksu-signing.jks, and generate-key exports it. Falling back to secrets
+          # would leave gradle unconfigured in a repo that has none, and the
+          # release APK would then carry a debug signature until the repack step.
+          KEYSTORE_B64: ${{ needs.generate-key.outputs.keystore }}
+          KEYSTORE_PASSWORD_IN: ${{ needs.generate-key.outputs.keystore_password }}
+          KEY_PASSWORD_IN: ${{ needs.generate-key.outputs.key_password }}
         run: |
-          if [ ! -z "${{ secrets.KEYSTORE }}" ]; then
+          if [ ! -z "$KEYSTORE_B64" ]; then
             {
-              echo KEYSTORE_PASSWORD='${{ secrets.KEYSTORE_PASSWORD }}'
-              echo KEY_ALIAS='${{ secrets.KEY_ALIAS }}'
-              echo KEY_PASSWORD='${{ secrets.KEY_PASSWORD }}'
+              echo KEYSTORE_PASSWORD="$KEYSTORE_PASSWORD_IN"
+              echo KEY_ALIAS='kernelsu'
+              echo KEY_PASSWORD="$KEY_PASSWORD_IN"
               echo KEYSTORE_FILE='key.jks'
             } >> gradle.properties
-            echo "${{ secrets.KEYSTORE }}" | base64 -d > key.jks
+            echo "$KEYSTORE_B64" | base64 -d > key.jks
           fi
 
       - name: Write PR key
@@ -283,10 +291,15 @@ jobs:
           PR_KEYSTORE: ${{ needs.generate-key.outputs.keystore }}
           PR_KEYSTORE_PASSWORD: ${{ needs.generate-key.outputs.keystore_password }}
           PR_KEY_PASSWORD: ${{ needs.generate-key.outputs.key_password }}
-          PROD_KEYSTORE: ${{ secrets.KEYSTORE }}
-          PROD_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          PROD_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          PROD_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          # The production key lives in the repository as ksu-signing.jks and
+          # generate-key already turned it into these outputs. Reading the same
+          # value from secrets would silently do nothing in a repo that never
+          # configured one, and the resign step below would abort on the empty
+          # string.
+          PROD_KEYSTORE: ${{ needs.generate-key.outputs.keystore }}
+          PROD_KEY_ALIAS: kernelsu
+          PROD_KEYSTORE_PASSWORD: ${{ needs.generate-key.outputs.keystore_password }}
+          PROD_KEY_PASSWORD: ${{ needs.generate-key.outputs.key_password }}
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             echo "$PR_KEYSTORE" | base64 -d > pr-key.jks
