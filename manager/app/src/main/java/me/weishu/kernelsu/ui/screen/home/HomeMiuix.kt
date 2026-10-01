@@ -50,7 +50,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.draw.BlurredEdgeTreatment
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -77,7 +76,6 @@ import me.weishu.kernelsu.ui.util.module.LatestVersionInfo
 import me.weishu.kernelsu.ui.util.HomeWallpaperStore
 import me.weishu.kernelsu.ui.util.rememberWallpaperSet
 import me.weishu.kernelsu.ui.util.rememberBlurBackdrop
-import me.weishu.kernelsu.ui.util.isBlurSupported
 import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
@@ -88,6 +86,9 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.blur.LayerBackdrop
 import top.yukonga.miuix.kmp.blur.layerBackdrop
+import top.yukonga.miuix.kmp.blur.BlendColorEntry
+import top.yukonga.miuix.kmp.blur.BlurColors
+import top.yukonga.miuix.kmp.blur.textureBlur
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme
@@ -168,6 +169,7 @@ fun HomePagerMiuix(
                         StatusCard(
                             state = state,
                             actions = actions,
+                            backdrop = backdrop,
                         )
                         InfoCard(
                             systemInfo = state.systemInfo,
@@ -228,6 +230,7 @@ private fun UpdateCard(
 private fun StatusCard(
     state: HomeUiState,
     actions: HomeActions,
+    backdrop: LayerBackdrop? = null,
 ) {
     Column {
         when {
@@ -254,8 +257,10 @@ private fun StatusCard(
                 val statusImage = remember(statusContext, statusVersion) {
                     HomeWallpaperStore.load(HomeWallpaperStore.statusFile(statusContext))
                 }
-                // Blur is only meaningful when the card has no picture of its own.
-                val statusBlurActive = homeCardBlur && statusImage == null && isBlurSupported()
+                // Blur is only meaningful when the card has no picture of its own
+                // and the page actually provides something to sample. The
+                // backdrop is hosted by HomePagerMiuix, one level up.
+                val statusBlurActive = homeCardBlur && statusImage == null && backdrop != null
                 val statusCardColor = lerp(colorScheme.primaryContainer, colorScheme.primary, 0.35f)
                 // Over a picture the card is nothing but the picture, so the text carries the same
                 // bright tint the info card uses; on the card's own colour it is plain black.
@@ -277,7 +282,7 @@ private fun StatusCard(
                             // it below so the card's dark text stays readable on any photo.
                             // Transparent too when the frosted layer paints the background.
                             color = if (statusBlurActive) {
-                                statusCardColor.copy(alpha = 0.35f)
+                                Color.Transparent
                             } else if (statusImage != null) {
                                 Color.Transparent
                             } else {
@@ -299,22 +304,27 @@ private fun StatusCard(
                     ) {
                         Box {
                             if (statusBlurActive) {
-                                // A soft colour wash behind the card, blurred. No
-                                // backdrop: sampling one from inside the card made
-                                // the blur feed on itself and crash the app.
+                                // Real frosted glass: sample what the page drew
+                                // behind the card and paint a blurred, lightly
+                                // tinted copy of it. The backdrop comes from
+                                // HomePagerMiuix - the card only consumes it, so
+                                // there is no self-sampling loop.
                                 Box(
                                     modifier = Modifier
                                         .matchParentSize()
-                                        .blur(24.dp, edgeTreatment = BlurredEdgeTreatment.Unbounded)
-                                        .background(
-                                            Brush.linearGradient(
-                                                listOf(
-                                                    statusCardColor.copy(alpha = 0.85f),
-                                                    statusCardColor.copy(alpha = 0.55f),
-                                                    statusCardColor.copy(alpha = 0.85f),
+                                        .textureBlur(
+                                            backdrop = backdrop!!,
+                                            shape = RoundedCornerShape(16.dp),
+                                            blurRadius = 25f,
+                                            colors = BlurColors(
+                                                blendColors = listOf(
+                                                    BlendColorEntry(
+                                                        // Light tint (option A: see-through)
+                                                        color = statusCardColor.copy(alpha = 0.55f),
+                                                    ),
                                                 ),
                                             ),
-                                            shape = RoundedCornerShape(16.dp),
+                                            enabled = true,
                                         ),
                                 )
                             }
