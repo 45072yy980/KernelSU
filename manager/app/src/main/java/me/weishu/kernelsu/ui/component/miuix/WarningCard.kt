@@ -12,6 +12,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import me.weishu.kernelsu.ui.component.WarningLevel
 import me.weishu.kernelsu.ui.theme.isInDarkTheme
+import me.weishu.kernelsu.ui.theme.LocalGlassNotice
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.CardDefaults
 import top.yukonga.miuix.kmp.basic.Text
@@ -27,11 +28,15 @@ fun WarningCard(
     onClick: (() -> Unit)? = null,
     action: (@Composable () -> Unit)? = null,
 ) {
+    // Inside a frosted pane the card must not paint its own tinted container:
+    // the pane is the background, and a container on top of it would hide the
+    // glass entirely. The content colour is kept so the text stays readable.
+    val glassed = LocalGlassNotice.current
     Card(
         modifier = modifier,
         onClick = { onClick?.invoke() },
         colors = CardDefaults.defaultColors(
-            color = level.containerColor(),
+            color = if (glassed) Color.Transparent else level.containerColor(),
             contentColor = level.contentColor(),
         ),
         showIndication = onClick != null,

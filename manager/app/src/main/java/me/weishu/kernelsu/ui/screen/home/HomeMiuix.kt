@@ -8,6 +8,9 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.layout.onSizeChanged
+import me.weishu.kernelsu.ui.theme.LocalGlassNotice
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.blur
 import androidx.compose.runtime.setValue
@@ -119,12 +122,93 @@ object GlassNudge {
     }
 }
 
+/**
+ * A frosted pane that shows the wallpaper slice sitting under it.
+ *
+ * Sampling a backdrop would mean sampling the pane's own output -- the renderer
+ * recurses and dies. So instead the pane draws a blurred copy of the whole
+ * wallpaper, aligned to the home panel and then offset back until the slice
+ * under the pane is the slice it shows. [PanelMetrics] gives the panel's size
+ * and window position; the pane reports its own position through [onPositioned]
+ * so the offset can be recomputed as the list scrolls.
+ *
+ * The [content] is drawn on top with no background of its own: callers are
+ * expected to make their cards transparent while [enabled] is true.
+ */
+@Composable
+private fun GlassPane(
+    enabled: Boolean,
+    wallpaper: ImageBitmap?,
+    onPositioned: (Offset) -> Unit,
+    cornerRadius: Dp,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    var paneWindowPos by remember { mutableStateOf(Offset.Zero) }
+    // Composition reads: layout writes, and the blur offset has to follow.
+    val panelSize = PanelMetrics.size.value
+    val panelPos = PanelMetrics.pos.value
+    val panePos = paneWindowPos
+    val density = LocalDensity.current
+
+    Box(
+        modifier = modifier.onGloballyPositioned {
+            paneWindowPos = it.positionInWindow()
+            onPositioned(paneWindowPos)
+        },
+    ) {
+        if (enabled && wallpaper != null && panelSize != IntSize.Zero && panePos != Offset.Zero) {
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .clip(RoundedCornerShape(cornerRadius)),
+            ) {
+                Image(
+                    bitmap = wallpaper,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .requiredSize(
+                            with(density) { (panelSize.width + 96).toDp() },
+                            with(density) { panelSize.height.toDp() },
+                        )
+                        .blur(16.dp)
+                        .offset {
+                            IntOffset(
+                                panelPos.x.roundToInt() - panePos.x.roundToInt()
+                                    - 48
+                                    + with(density) { GlassNudge.x.floatValue.dp.toPx() }.roundToInt(),
+                                panelPos.y.roundToInt() - panePos.y.roundToInt()
+                                    + with(density) { GlassNudge.y.floatValue.dp.toPx() }.roundToInt(),
+                            )
+                        },
+                )
+                // The same dimming the panel lays over the wallpaper, so the pane
+                // belongs to the page instead of glowing out of it.
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .background(Color.Black.copy(alpha = 0.28f)),
+                )
+            }
+        }
+        content()
+    }
+}
+
 @Composable
 fun HomePagerMiuix(
     state: HomeUiState,
     actions: HomeActions,
     bottomInnerPadding: Dp,
 ) {
+    // Shared by the notice pane and the working card: both show the same blurred
+    // wallpaper, so both have to read the same bitmap.
+    val wallpaperContext = LocalContext.current
+    val wallpaperVersion = HomeWallpaperStore.version
+    val noticeWallpaper = remember(wallpaperContext, wallpaperVersion) {
+        HomeWallpaperStore.load(HomeWallpaperStore.file(wallpaperContext))
+    }
     Scaffold(
         popupHost = { },
         contentWindowInsets = WindowInsets.systemBars.add(WindowInsets.displayCutout).only(WindowInsetsSides.Horizontal)
@@ -148,44 +232,89 @@ fun HomePagerMiuix(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        if (state.checkUpdateEnabled) {
-                            UpdateCard(state = state, actions = actions)
-                        }
-                        if (state.showManagerPrBuildWarning) {
-                            WarningCard(stringResource(id = R.string.home_pr_build_warning), level = WarningLevel.Notice)
-                        } else if (state.showKernelPrBuildWarning) {
-                            WarningCard(stringResource(id = R.string.home_pr_kernel_warning), level = WarningLevel.Notice)
-                        }
-                        if (state.showGkiWarning) {
-                            WarningCard(stringResource(id = R.string.home_gki_warning), level = WarningLevel.Notice)
-                        }
-                        if (state.requiresNewKernel) {
-                            WarningCard(
-                                stringResource(
-                                    id = if (state.lkmMode == true) R.string.require_kernel_version else R.string.require_kernel_version_gki
-                                ),
-                                onClick = if (state.lkmMode == true) actions.onInstallClick else null
-                            )
-                        }
-                        if (state.requiresNewManager) {
-                            WarningCard(
-                                stringResource(
-                                    id = R.string.require_manager_version
-                                )
-                            )
-                        }
-                        if (state.showLkmUpdate) {
-                            WarningCard(
-                                message = stringResource(R.string.home_lkm_update_available),
-                                level = WarningLevel.Notice,
-                                onClick = actions.onInstallClick,
-                            )
-                        }
-                        if (state.showRootWarning) {
-                            WarningCard(stringResource(id = R.string.grant_root_failed))
-                        }
-                        if (state.isLateLoadMode) {
-                            JailbreakGuardCard(modifier = Modifier.fillMaxWidth())
+                        // Everything above the working card: update, kernel/GKI notices,
+                        // root warnings and the jailbreak guard banner. They get the same
+                        // frosted treatment as the working card, as one pane, so a stack of
+                        // notices reads as a single sheet of glass rather than a pile of
+                        // tinted boxes. Nothing is drawn when none of them show.
+                        val showsNotice =
+                            (state.checkUpdateEnabled && state.hasUpdate) ||
+                                state.showManagerPrBuildWarning ||
+                                state.showKernelPrBuildWarning ||
+                                state.showGkiWarning ||
+                                state.requiresNewKernel ||
+                                state.requiresNewManager ||
+                                state.showLkmUpdate ||
+                                state.showRootWarning ||
+                                state.isLateLoadMode
+                        val noticeBlur = LocalHomeCardBlur.current
+                        val noticeContext = LocalContext.current
+                        var noticePaneHeight by remember { mutableStateOf(0.dp) }
+                        GlassPane(
+                            enabled = noticeBlur,
+                            wallpaper = noticeWallpaper,
+                            onPositioned = { },
+                            cornerRadius = 16.dp,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(noticePaneHeight),
+                        ) {
+                            if (showsNotice) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .onSizeChanged {
+                                            noticePaneHeight = with(LocalDensity.current) { it.height.toDp() }
+                                        },
+                                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                                ) {
+                                    // The cards go transparent only when the glass is really
+                                    // painted; with the setting off or no wallpaper they keep
+                                    // their usual tinted background.
+                                    val glassed = noticeBlur && noticeWallpaper != null
+                                    CompositionLocalProvider(LocalGlassNotice provides glassed) {
+                                    if (state.checkUpdateEnabled) {
+                                        UpdateCard(state = state, actions = actions)
+                                    }
+                                    if (state.showManagerPrBuildWarning) {
+                                        WarningCard(stringResource(id = R.string.home_pr_build_warning), level = WarningLevel.Notice)
+                                    } else if (state.showKernelPrBuildWarning) {
+                                        WarningCard(stringResource(id = R.string.home_pr_kernel_warning), level = WarningLevel.Notice)
+                                    }
+                                    if (state.showGkiWarning) {
+                                        WarningCard(stringResource(id = R.string.home_gki_warning), level = WarningLevel.Notice)
+                                    }
+                                    if (state.requiresNewKernel) {
+                                        WarningCard(
+                                            stringResource(
+                                                id = if (state.lkmMode == true) R.string.require_kernel_version else R.string.require_kernel_version_gki
+                                            ),
+                                            onClick = if (state.lkmMode == true) actions.onInstallClick else null
+                                        )
+                                    }
+                                    if (state.requiresNewManager) {
+                                        WarningCard(
+                                            stringResource(
+                                                id = R.string.require_manager_version
+                                            )
+                                        )
+                                    }
+                                    if (state.showLkmUpdate) {
+                                        WarningCard(
+                                            message = stringResource(R.string.home_lkm_update_available),
+                                            level = WarningLevel.Notice,
+                                            onClick = actions.onInstallClick,
+                                        )
+                                    }
+                                    if (state.showRootWarning) {
+                                        WarningCard(stringResource(id = R.string.grant_root_failed))
+                                    }
+                                    if (state.isLateLoadMode) {
+                                        JailbreakGuardCard(modifier = Modifier.fillMaxWidth())
+                                    }
+                                    }
+                                }
+                            }
                         }
                         StatusCard(
                             state = state,
@@ -519,10 +648,13 @@ private fun StatusCard(
 private fun JailbreakGuardCard(modifier: Modifier = Modifier) {
     // Shown while jailbreak (late-load) mode is running: the partition guard is
     // active, so this tells the user their system partitions are protected.
+    // Sits inside the notice glass pane on the home screen, where the pane is the
+    // background and this card has to keep off it.
+    val glassed = LocalGlassNotice.current
     Card(
         modifier = modifier,
         colors = CardDefaults.defaultColors(
-            color = colorScheme.tertiaryContainer,
+            color = if (glassed) Color.Transparent else colorScheme.tertiaryContainer,
         ),
         showIndication = false,
         pressFeedbackType = PressFeedbackType.Sink,
