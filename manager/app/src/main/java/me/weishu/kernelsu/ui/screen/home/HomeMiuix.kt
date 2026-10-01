@@ -248,7 +248,9 @@ fun HomePagerMiuix(
                                 state.showRootWarning ||
                                 state.isLateLoadMode
                         val noticeBlur = LocalHomeCardBlur.current
-                        val noticeContext = LocalContext.current
+                        // Read in composition: onSizeChanged is not a @Composable
+                        // scope, so it cannot touch LocalDensity itself.
+                        val noticeDensity = LocalDensity.current
                         var noticePaneHeight by remember { mutableStateOf(0.dp) }
                         GlassPane(
                             enabled = noticeBlur,
@@ -264,7 +266,7 @@ fun HomePagerMiuix(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .onSizeChanged {
-                                            noticePaneHeight = with(LocalDensity.current) { it.height.toDp() }
+                                            noticePaneHeight = with(noticeDensity) { it.height.toDp() }
                                         },
                                     verticalArrangement = Arrangement.spacedBy(12.dp),
                                 ) {
