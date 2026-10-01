@@ -43,13 +43,28 @@ jobs:
     outputs:
       expected_size: ${{ steps.extract.outputs.expected_size }}
       expected_hash: ${{ steps.extract.outputs.expected_hash }}
-      keystore: ${{ steps.gen.outputs.keystore }}
-      keystore_password: ${{ steps.gen.outputs.keystore_password }}
-      key_password: ${{ steps.gen.outputs.key_password }}
+      keystore: ${{ steps.gen.outputs.keystore || steps.gen_pr.outputs.keystore }}
+      keystore_password: ${{ steps.gen.outputs.keystore_password || steps.gen_pr.outputs.keystore_password }}
+      key_password: ${{ steps.gen.outputs.key_password || steps.gen_pr.outputs.key_password }}
     steps:
+      - name: Checkout signing key
+        if: github.event_name != 'pull_request'
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: ksu-signing.jks
+          sparse-checkout-cone-mode: false
+      - name: Use repository keystore
+        if: github.event_name != 'pull_request'
+        id: gen
+        run: |
+          KEYSTORE_PASSWORD='kernelsu123456'
+          KEY_PASSWORD='kernelsu123456'
+          echo "keystore_password=$KEYSTORE_PASSWORD" >> $GITHUB_OUTPUT
+          echo "key_password=$KEY_PASSWORD" >> $GITHUB_OUTPUT
+          echo "keystore=$(base64 -w 0 ksu-signing.jks)" >> $GITHUB_OUTPUT
       - name: Generate temporary keystore
         if: github.event_name == 'pull_request'
-        id: gen
+        id: gen_pr
         run: |
           KEYSTORE_PASSWORD=$(openssl rand -hex 32)
           KEY_PASSWORD=$(openssl rand -hex 32)
@@ -69,27 +84,27 @@ jobs:
           echo "keystore=$(base64 -w 0 pr-key.jks)" >> $GITHUB_OUTPUT
 
       - name: Extract certificate hash and size
-        if: github.event_name == 'pull_request'
         id: extract
         env:
           STORE_PASS: ${{ steps.gen.outputs.keystore_password }}
         run: |
-          # Export DER certificate
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            KS=pr-key.jks
+            ALIAS=pr-key
+          else
+            KS=ksu-signing.jks
+            ALIAS=kernelsu
+          fi
           keytool -exportcert \
-            -alias pr-key \
-            -keystore pr-key.jks \
+            -alias "$ALIAS" \
+            -keystore "$KS" \
             -storepass "$STORE_PASS" \
-            -file pr-cert.der
-
-          # Calculate size in hex
-          SIZE_DEC=$(stat -c%s pr-cert.der)
+            -file cert.der
+          SIZE_DEC=$(stat -c%s cert.der)
           SIZE_HEX=$(printf '0x%04x' "$SIZE_DEC")
           echo "expected_size=$SIZE_HEX" >> $GITHUB_OUTPUT
-
-          # Calculate SHA256 hash
-          HASH=$(sha256sum pr-cert.der | awk '{print $1}')
+          HASH=$(sha256sum cert.der | awk '{print $1}')
           echo "expected_hash=$HASH" >> $GITHUB_OUTPUT
-
           echo "Certificate size: $SIZE_HEX ($SIZE_DEC bytes)"
           echo "Certificate hash: $HASH"
 
