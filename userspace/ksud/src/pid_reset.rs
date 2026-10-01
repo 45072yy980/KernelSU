@@ -50,13 +50,15 @@ const TARGET_PID: i32 = 1700;
 
 /// How long the fork loop may run before we give up and let the reboot proceed.
 ///
-/// Matches the module's `MAX_WAIT_SEC`, and it is that value for the same
-/// reason: measured on a real device the loop needs ~7.7 s and ~14k forks to
-/// come back around from a counter in the mid-16k range (1863 forks/s). A
-/// smaller budget simply does not reach the wrap, and not reaching the wrap
-/// means doing nothing at all -- the counter has to come back down, and only a
-/// wrap brings it down.
-const FORK_LOOP_TIMEOUT: Duration = Duration::from_secs(10);
+/// Measured on a real device the loop does roughly 1800 forks a second. The
+/// worst case is a counter sitting just under `pid_max`: getting it back down
+/// means the rest of the lap plus the walk up to `TARGET_PID`, i.e. up to
+/// ~32k forks, or about 18 s. Ten seconds -- the module's `MAX_WAIT_SEC`, and
+/// what this used to be -- covers a counter around 16k and nothing above it,
+/// so on a device that had been up a while the loop timed out and left the
+/// counter untouched. The budget is deliberately generous now: overshooting
+/// costs a slower reboot, undershooting costs the whole point of the feature.
+const FORK_LOOP_TIMEOUT: Duration = Duration::from_secs(20);
 
 /// Fallback attempt cap, only used if `pid_max` cannot be read. One wrap plus
 /// the distance to `TARGET_PID` will never exceed this on a normal kernel.
@@ -73,15 +75,20 @@ fn read_pid_max() -> Option<i32> {
     read_i32(PID_MAX).filter(|v| *v > 0)
 }
 
-/// The PID the allocator most recently handed out.
+/// The counter's current position, learned by allocating one PID.
 ///
-/// `/proc/loadavg` ends with the last PID created, which is the only portable
-/// view of the counter on kernels without `ns_last_pid`. Field 5 of
-/// `"0.30 0.25 0.20 1/123 4567"` is `4567`.
-fn latest_pid() -> Option<i32> {
-    let s = fs::read_to_string("/proc/loadavg").ok()?;
-    let last = s.split_whitespace().nth(4)?;
-    last.parse::<i32>().ok()
+/// It has to be a real allocation, not a read. `/proc/loadavg`'s last field
+/// was the obvious candidate and turned out to be wrong on real devices: on
+/// the test device it reported 2196 while the same file said 7240 processes
+/// had been created, and a counter that has produced 7240 processes cannot be
+/// sitting at 2196. Starting the wrap detection from a number like that means
+/// the wrap is never observed, the loop runs out its whole ten-second budget
+/// and the counter is left exactly where it started -- a silent no-op.
+///
+/// Forking sidesteps all of it: whatever the kernel hands the child *is* the
+/// counter's position, by definition, on every kernel.
+fn probe_pid() -> Option<i32> {
+    allocate_one_pid()
 }
 
 /// One fork, returning the PID the kernel handed the child (or `None` on
@@ -154,13 +161,27 @@ fn fork_until_wrapped_to(target: i32) -> (bool, u32, i32) {
         .and_then(|v| v.checked_add(4096))
         .unwrap_or(FORK_LOOP_MAX_ATTEMPTS);
 
-    let mut prev = latest_pid().unwrap_or(0);
-    let mut attempts: u32 = 0;
-    let mut wrapped = false;
+    // The first allocation establishes where the counter is. `prev` is only
+    // ever compared against other fork results, never against a value read
+    // from procfs, so a wrong reading can no longer defeat the wrap check.
+    let Some(first) = probe_pid() else {
+        warn!("pid_reset: fork failed while probing the PID counter");
+        return (false, 0, 0);
+    };
+    let mut attempts: u32 = 1;
+    let mut prev = first;
 
+    // Already below the target: the counter sits in the low range a fresh
+    // boot would produce, which is exactly what we want. Pushing it forward
+    // from here would only wrap it around again.
+    if prev < target {
+        return (true, attempts, prev);
+    }
+
+    let mut wrapped = false;
     while attempts < max_attempts && Instant::now() < deadline {
         attempts += 1;
-        let Some(pid) = allocate_one_pid() else {
+        let Some(pid) = probe_pid() else {
             warn!("pid_reset: fork failed while rolling the PID counter");
             return (false, attempts, prev);
         };
@@ -199,8 +220,9 @@ pub fn reset_pid_counter() {
 }
 
 /// Hard ceiling on the whole routine, comfortably above the loop's own timeout
-/// so a normally-finishing loop is never cut short by this outer guard.
-const PID_RESET_DEADLINE: Duration = Duration::from_secs(12);
+/// so a normally-finishing loop is never cut short by this outer guard. The
+/// worker keeps running past it; only the wait on the soft-reboot side ends.
+const PID_RESET_DEADLINE: Duration = Duration::from_secs(25);
 
 fn reset_pid_counter_inner() {
     if write_ns_last_pid(TARGET_PID) {
@@ -208,29 +230,20 @@ fn reset_pid_counter_inner() {
         return;
     }
 
-    // No ns_last_pid on this kernel, so the fork loop is the only lever. First
-    // check where the allocator currently stands: if it is already below the
-    // target there is nothing to do, and forcing a wrap would be actively
-    // harmful -- from a low counter the wrap is a full 32k forks away, well past
-    // the budget, so we would spend ten seconds on a reboot that gains nothing.
-    let current = latest_pid();
-    if let Some(cur) = current
-        && cur < TARGET_PID
-    {
-        info!("pid_reset: allocator at {cur}, already below {TARGET_PID}; nothing to do");
-        return;
-    }
+    // No ns_last_pid on this kernel, so the fork loop is the only lever. The
+    // loop decides for itself whether anything needs doing: it probes the
+    // counter with a real fork and stops at once when it is already low.
 
     info!("pid_reset: ns_last_pid unavailable, rolling the PID counter via fork loop");
     let (reached, attempts, last) = fork_until_wrapped_to(TARGET_PID);
     if reached {
         info!(
-            "pid_reset: PID counter wrapped and reached {TARGET_PID} \
-             (last_pid={last}, {attempts} forks)"
+            "pid_reset: PID counter at {last} after {attempts} forks \
+             (target was to be at or below {TARGET_PID})"
         );
     } else {
         warn!(
-            "pid_reset: PID counter not rolled back (last_pid={last}, \
+            "pid_reset: PID counter not rolled back (stopped at {last}, \
              {attempts} forks); reboot continues with the old range"
         );
     }
