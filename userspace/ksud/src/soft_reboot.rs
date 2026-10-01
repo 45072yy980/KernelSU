@@ -149,7 +149,7 @@ fn wait_for_boot_completed() -> Result<()> {
     Ok(())
 }
 
-pub fn soft_reboot() -> Result<()> {
+pub fn soft_reboot(pid_reset: bool) -> Result<()> {
     // check it avoid user click "soft_reboot" in manager when version mismatch
     if let Err(e) = ksucalls::ensure_uapi_version_matched() {
         error!("{e:#}, skip soft_reboot");
@@ -171,12 +171,12 @@ pub fn soft_reboot() -> Result<()> {
     // PIDs far above what the uptime suggests -- a jailbreak tell. This is the
     // built-in replacement for the soft_restart_fix module.
     //
-    // Off by default: the Manager sets KSU_PID_RESET=1 only when the user turned
+    // Off by default: the Manager passes --pid-reset only when the user turned
     // the option on, so a plain soft reboot behaves exactly as before.
-    if std::env::var("KSU_PID_RESET").is_ok_and(|v| v == "1") {
+    if pid_reset {
         crate::pid_reset::reset_pid_counter();
     } else {
-        info!("pid_reset: disabled (KSU_PID_RESET not set)");
+        info!("pid_reset: disabled (--pid-reset not passed)");
     }
 
     run_stage("emulated-soft-reboot", true);

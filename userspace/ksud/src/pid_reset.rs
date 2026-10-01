@@ -41,11 +41,11 @@ const TARGET_PID: i32 = 1700;
 /// Upper bound on the fork-loop fallback, so a stuck counter can never hang a
 /// reboot. In practice the ns_last_pid write above succeeds, so this branch is
 /// a safety net rather than the normal path.
-const FORK_FALLBACK_TIMEOUT: Duration = Duration::from_secs(3);
+const FORK_FALLBACK_TIMEOUT: Duration = Duration::from_secs(2);
 /// Hard cap on how many children the fallback will spawn. Advancing the whole
 /// way to TARGET_PID one fork at a time is never worth a long stall, so give up
 /// early and leave the counter wherever it got to: a partial move still helps.
-const FORK_FALLBACK_MAX_ATTEMPTS: u32 = 256;
+const FORK_FALLBACK_MAX_ATTEMPTS: u32 = 128;
 
 fn read_current_last_pid() -> Option<i32> {
     fs::read_to_string(NS_LAST_PID)
@@ -54,15 +54,29 @@ fn read_current_last_pid() -> Option<i32> {
 }
 
 /// One fork, returning the PID the kernel handed the child (or `None` on
-/// failure). The child leaves immediately, so this is cheap.
+/// failure). The child leaves immediately.
+///
+/// The reap is non-blocking on purpose. This runs inside ksud's daemon, where
+/// SIGCHLD may be ignored: a blocking `waitpid` would then never return and the
+/// soft reboot would hang before it ever reached `stop`. We poll instead, and if
+/// the child is not collectable within a moment we simply walk away -- init
+/// adopts and reaps it anyway.
 fn allocate_one_pid() -> Option<i32> {
     // SAFETY: the child path only calls `_exit`, which is async-signal-safe.
     let pid = unsafe { libc::fork() };
     match pid {
         0 => unsafe { libc::_exit(0) },
         p if p > 0 => {
+            let deadline = Instant::now() + Duration::from_millis(200);
             let mut status = 0;
-            unsafe { libc::waitpid(p, &mut status, 0) };
+            loop {
+                // SAFETY: WNOHANG makes this a question, never a wait.
+                let reaped = unsafe { libc::waitpid(p, &mut status, libc::WNOHANG) };
+                if reaped == p || reaped == -1 || Instant::now() >= deadline {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(2));
+            }
             Some(p)
         }
         _ => None,
@@ -119,7 +133,26 @@ fn fork_until_past(target: i32) -> (bool, u32) {
 
 /// Advance the kernel's PID allocator so freshly started processes do not come
 /// out with low PIDs. Best-effort: every failure path just logs and returns.
+///
+/// Runs on a worker thread with a hard deadline. The soft reboot calls this
+/// right before it tears the framework down, and a hang here would leave the
+/// user staring at a button that does nothing, so the reboot must never depend
+/// on this finishing: if the deadline passes we abandon the thread and go on.
 pub fn reset_pid_counter() {
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        reset_pid_counter_inner();
+        let _ = tx.send(());
+    });
+    if rx.recv_timeout(PID_RESET_DEADLINE).is_err() {
+        warn!("pid_reset: gave up after {PID_RESET_DEADLINE:?}; reboot continues");
+    }
+}
+
+/// Hard ceiling on the whole routine.
+const PID_RESET_DEADLINE: Duration = Duration::from_secs(2);
+
+fn reset_pid_counter_inner() {
     let before = read_current_last_pid();
     if let Some(cur) = before
         && cur >= TARGET_PID

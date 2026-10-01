@@ -66,7 +66,12 @@ enum Commands {
     },
 
     /// Emulate system reboot
-    SoftReboot,
+    SoftReboot {
+        /// Also roll the kernel PID counter back first (hide the soft restart
+        /// from detectors that compare PIDs against the device uptime).
+        #[arg(long = "pid-reset")]
+        pid_reset: bool,
+    },
 
     /// Advance the kernel PID counter (hide a soft restart from detectors)
     PidReset,
@@ -526,7 +531,7 @@ pub fn run() -> Result<()> {
             Ok(())
         }
 
-        Commands::SoftReboot => crate::soft_reboot::soft_reboot(),
+        Commands::SoftReboot { pid_reset } => crate::soft_reboot::soft_reboot(pid_reset),
         Commands::PidReset => crate::pid_reset::pid_reset_command(),
 
         Commands::Insmod { module, params } => debug::insmod(&module, &params),

@@ -486,9 +486,12 @@ private fun readMagic(channel: DataSourceChannel): String {
 fun reboot(reason: String = "") {
     if (reason == "soft_reboot") {
         // Opt the soft reboot into the PID-counter reset when the user asked for
-        // it in Basic settings; ksud does the actual work.
-        val prefix = if (isPidResetOnSoftRebootEnabled()) "KSU_PID_RESET=1 " else ""
-        execKsud("${prefix}soft-reboot", true, true)
+        // it in Basic settings. This is a ksud flag, not an environment variable:
+        // execKsud builds a single "ksud <args>" command line, so a leading
+        // "VAR=value" would be parsed as the subcommand name and the soft reboot
+        // would silently do nothing.
+        val flag = if (isPidResetOnSoftRebootEnabled()) "--pid-reset" else ""
+        execKsud("soft-reboot $flag", true, true)
         return
     }
     val shell = getRootShell()
