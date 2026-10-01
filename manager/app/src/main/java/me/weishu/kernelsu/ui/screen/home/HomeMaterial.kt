@@ -62,10 +62,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import top.yukonga.miuix.kmp.blur.BlendColorEntry
-import top.yukonga.miuix.kmp.blur.BlurColors
-import top.yukonga.miuix.kmp.blur.textureBlur
-import top.yukonga.miuix.kmp.blur.LayerBackdrop
 import me.weishu.kernelsu.KernelVersion
 import me.weishu.kernelsu.Natives
 import me.weishu.kernelsu.R
@@ -78,8 +74,6 @@ import me.weishu.kernelsu.ui.component.material.TonalCard
 import me.weishu.kernelsu.ui.component.material.expressiveTopAppBarColors
 import me.weishu.kernelsu.ui.component.rebootlistpopup.RebootListPopup
 import me.weishu.kernelsu.ui.component.statustag.StatusTag
-import me.weishu.kernelsu.ui.theme.LocalHomeCardBlur
-import me.weishu.kernelsu.ui.theme.LocalCardBackdrop
 
 @Composable
 fun HomePagerMaterial(
@@ -88,9 +82,6 @@ fun HomePagerMaterial(
     bottomInnerPadding: Dp,
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
-    // The frosted backdrop is hosted by MainActivity above the whole pager, so the
-    // card samples the app background rather than the flat surface of its own page.
-    val cardBackdrop = LocalCardBackdrop.current
 
     ExpressiveScaffold(
         topBar = { TopBar(scrollBehavior = scrollBehavior) },
@@ -146,7 +137,6 @@ fun HomePagerMaterial(
             StatusCard(
                 state = state,
                 actions = actions,
-                backdrop = cardBackdrop,
             )
             InfoCard(systemInfo = state.systemInfo)
             SupportLinks(onOpenUrl = actions.onOpenUrl)
@@ -210,13 +200,7 @@ private fun TopBar(
 private fun StatusCard(
     state: HomeUiState,
     actions: HomeActions,
-    backdrop: LayerBackdrop? = null,
 ) {
-    // Optional frosted-glass background for the "working" card. It is a purely
-    // cosmetic layer: when off (the default) the card paints its solid container
-    // colour exactly as before. When on, we blur whatever is behind the card.
-    val homeCardBlur = LocalHomeCardBlur.current
-    val blurActive = homeCardBlur && backdrop != null
 
     Column(verticalArrangement = Arrangement.spacedBy(13.dp)) {
         val ksuActive = state.ksuVersion != null
@@ -280,33 +264,11 @@ private fun StatusCard(
         // backdrop here: sampling one from inside the card made the blur feed on
         // its own output and crash the app.
         Box(modifier = Modifier.fillMaxWidth()) {
-            if (blurActive) {
-                // Real frosted glass: sample what the page drew behind the card
-                // and paint a blurred, lightly tinted copy of it. The backdrop is
-                // hosted by HomePagerMaterial, so the card only consumes it and
-                // there is no self-sampling loop.
-                Box(
-                    modifier = Modifier
-                        .matchParentSize()
-                        .textureBlur(
-                            backdrop = backdrop!!,
-                            shape = cardShape,
-                            blurRadius = 25f,
-                            colors = BlurColors(
-                                blendColors = listOf(
-                                    // Light tint (option A: see-through)
-                                    BlendColorEntry(color = containerColor.copy(alpha = 0.55f)),
-                                ),
-                            ),
-                            enabled = true,
-                        ),
-                )
-            }
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 // With blur on the card goes semi-transparent so the frosted wash
                 // shows through; without it, the solid container colour as before.
-                color = if (blurActive) Color.Transparent else containerColor,
+                color = containerColor,
                 contentColor = contentColor,
                 shape = cardShape,
             onClick = {

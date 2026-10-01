@@ -1,5 +1,19 @@
 package me.weishu.kernelsu.ui.screen.home
 
+import me.weishu.kernelsu.ui.PanelMetrics
+import kotlin.math.roundToInt
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.blur
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import android.content.Context
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -49,7 +63,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.draw.BlurredEdgeTreatment
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -71,7 +84,6 @@ import me.weishu.kernelsu.ui.component.dialog.rememberConfirmDialog
 import me.weishu.kernelsu.ui.component.miuix.WarningCard
 import me.weishu.kernelsu.ui.component.statustag.StatusTag
 import me.weishu.kernelsu.ui.theme.LocalHomeCardBlur
-import me.weishu.kernelsu.ui.theme.LocalCardBackdrop
 import me.weishu.kernelsu.ui.util.module.LatestVersionInfo
 import me.weishu.kernelsu.ui.util.HomeWallpaperStore
 import me.weishu.kernelsu.ui.util.rememberWallpaperSet
@@ -83,10 +95,6 @@ import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
-import top.yukonga.miuix.kmp.blur.LayerBackdrop
-import top.yukonga.miuix.kmp.blur.BlendColorEntry
-import top.yukonga.miuix.kmp.blur.BlurColors
-import top.yukonga.miuix.kmp.blur.textureBlur
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme
@@ -94,15 +102,28 @@ import top.yukonga.miuix.kmp.utils.PressFeedbackType
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 
+/**
+ * Live alignment nudges for the frosted pane, dialled from the theme settings sliders and kept
+ * across restarts. Read during composition so dragging a slider retriggers the pane's layout.
+ */
+object GlassNudge {
+    private const val PREF = "glass_nudge"
+    val x = mutableFloatStateOf(15f)
+    val y = mutableFloatStateOf(375f)
+
+    fun load(context: Context) {
+        val sp = context.getSharedPreferences(PREF, Context.MODE_PRIVATE)
+        x.floatValue = sp.getFloat("x", 15f)
+        y.floatValue = sp.getFloat("y", 375f)
+    }
+}
+
 @Composable
 fun HomePagerMiuix(
     state: HomeUiState,
     actions: HomeActions,
     bottomInnerPadding: Dp,
 ) {
-    // The frosted backdrop is hosted by MainActivity above the whole pager, so the
-    // card samples the wallpaper and the page panel rather than a flat colour.
-    val backdrop = LocalCardBackdrop.current
     Scaffold(
         popupHost = { },
         contentWindowInsets = WindowInsets.systemBars.add(WindowInsets.displayCutout).only(WindowInsetsSides.Horizontal)
@@ -168,7 +189,6 @@ fun HomePagerMiuix(
                         StatusCard(
                             state = state,
                             actions = actions,
-                            backdrop = backdrop,
                         )
                         InfoCard(
                             systemInfo = state.systemInfo,
@@ -229,7 +249,6 @@ private fun UpdateCard(
 private fun StatusCard(
     state: HomeUiState,
     actions: HomeActions,
-    backdrop: LayerBackdrop? = null,
 ) {
     Column {
         when {
@@ -256,22 +275,31 @@ private fun StatusCard(
                 val statusImage = remember(statusContext, statusVersion) {
                     HomeWallpaperStore.load(HomeWallpaperStore.statusFile(statusContext))
                 }
-                // Blur is only meaningful when the card has no picture of its own
-                // and the page actually provides something to sample. The
-                // backdrop is hosted by HomePagerMiuix, one level up.
-                val statusBlurActive = homeCardBlur && statusImage == null && backdrop != null
-                val statusCardColor = lerp(colorScheme.primaryContainer, colorScheme.primary, 0.35f)
+                val homeWallpaper = remember(statusContext, statusVersion) {
+                    HomeWallpaperStore.load(HomeWallpaperStore.file(statusContext))
+                }
+                // The frosted pane: the card has no picture of its own, the user asked for the
+                // glass and there is a wallpaper to show through. Rather than sampling a backdrop
+                // (which would mean sampling the card's own output and crashing the renderer), the
+                // card draws a blurred copy of the whole wallpaper, aligned to the panel and then
+                // offset back to the card, so the slice under the card is the slice it shows.
+                val glassBackdrop = homeCardBlur && statusImage == null && homeWallpaper != null
+                var cardWindowPos by remember { mutableStateOf(Offset.Zero) }
                 // Over a picture the card is nothing but the picture, so the text carries the same
                 // bright tint the info card uses; on the card's own colour it is plain black.
+                val onPicture = statusImage != null || glassBackdrop
                 val statusTitleColor =
-                    if (statusImage != null) lerp(colorScheme.primary, Color.White, 0.65f) else colorScheme.onSurface
+                    if (onPicture) lerp(colorScheme.primary, Color.White, 0.65f) else colorScheme.onSurface
                 val statusSubColor =
-                    if (statusImage != null) lerp(colorScheme.primary, Color.White, 0.8f) else colorScheme.onSurfaceVariantSummary
+                    if (onPicture) lerp(colorScheme.primary, Color.White, 0.8f) else colorScheme.onSurfaceVariantSummary
 
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(IntrinsicSize.Min),
+                        .height(IntrinsicSize.Min)
+                        .onGloballyPositioned { coords ->
+                            cardWindowPos = coords.positionInWindow()
+                        },
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Card(
@@ -280,9 +308,7 @@ private fun StatusCard(
                             // Transparent over a picture, with the theme's own tint laid on top of
                             // it below so the card's dark text stays readable on any photo.
                             // Transparent too when the frosted layer paints the background.
-                            color = if (statusBlurActive) {
-                                Color.Transparent
-                            } else if (statusImage != null) {
+                            color = if (statusImage != null || glassBackdrop) {
                                 Color.Transparent
                             } else {
                                 // Off the theme, never a fixed green: with Monet off the app still has
@@ -302,30 +328,49 @@ private fun StatusCard(
                         pressFeedbackType = PressFeedbackType.Tilt
                     ) {
                         Box {
-                            if (statusBlurActive) {
-                                // Real frosted glass: sample what the page drew
-                                // behind the card and paint a blurred, lightly
-                                // tinted copy of it. The backdrop comes from
-                                // HomePagerMiuix - the card only consumes it, so
-                                // there is no self-sampling loop.
-                                Box(
-                                    modifier = Modifier
-                                        .matchParentSize()
-                                        .textureBlur(
-                                            backdrop = backdrop!!,
-                                            shape = RoundedCornerShape(16.dp),
-                                            blurRadius = 25f,
-                                            colors = BlurColors(
-                                                blendColors = listOf(
-                                                    BlendColorEntry(
-                                                        // Light tint (option A: see-through)
-                                                        color = statusCardColor.copy(alpha = 0.55f),
-                                                    ),
-                                                ),
-                                            ),
-                                            enabled = true,
-                                        ),
-                                )
+                            if (glassBackdrop) {
+                                val panelSize = PanelMetrics.size.value
+                                val panelPos = PanelMetrics.pos.value
+                                // Read in composition so scrolling retriggers layout.
+                                val cardPos = cardWindowPos
+                                if (panelSize != IntSize.Zero && cardPos != Offset.Zero) {
+                                    val paneDensity = LocalDensity.current
+                                    Box(
+                                        modifier = Modifier
+                                            .matchParentSize()
+                                            .clip(RoundedCornerShape(16.dp)),
+                                    ) {
+                                        Image(
+                                            bitmap = homeWallpaper,
+                                            contentDescription = null,
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier
+                                                .requiredSize(
+                                                    with(paneDensity) { (panelSize.width + 96).toDp() },
+                                                    with(paneDensity) { panelSize.height.toDp() },
+                                                )
+                                                .blur(16.dp)
+                                                .offset {
+                                                    IntOffset(
+                                                        panelPos.x.roundToInt() - cardPos.x.roundToInt()
+                                                            - 48
+                                                            + with(paneDensity) { GlassNudge.x.floatValue.dp.toPx() }
+                                                                .roundToInt(),
+                                                        panelPos.y.roundToInt() - cardPos.y.roundToInt()
+                                                            + with(paneDensity) { GlassNudge.y.floatValue.dp.toPx() }
+                                                                .roundToInt(),
+                                                    )
+                                                },
+                                        )
+                                        // Same dimming the panel applies over the wallpaper, so the
+                                        // pane matches the page rather than glowing out of it.
+                                        Box(
+                                            modifier = Modifier
+                                                .matchParentSize()
+                                                .background(Color.Black.copy(alpha = 0.28f)),
+                                        )
+                                    }
+                                }
                             }
                             if (statusImage != null) {
                                 Image(

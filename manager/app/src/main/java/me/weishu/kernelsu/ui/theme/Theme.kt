@@ -4,7 +4,6 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.staticCompositionLocalOf
-import top.yukonga.miuix.kmp.blur.LayerBackdrop
 import com.materialkolor.PaletteStyle
 import com.materialkolor.dynamiccolor.ColorSpec
 import me.weishu.kernelsu.data.repository.SettingsRepository
@@ -163,9 +162,3 @@ val LocalDisablePagerSwipe = staticCompositionLocalOf { false }
 
 /** When true the home "working" card draws its background with a blur (frosted) effect. */
 val LocalHomeCardBlur = staticCompositionLocalOf { false }
-/**
- * Page-level backdrop that the home "working" card samples when [LocalHomeCardBlur] is on.
- * It is hosted in MainActivity on top of the pager so it can capture the wallpaper and the
- * page content underneath the card; null when blur is unsupported or the flag is off.
- */
-val LocalCardBackdrop = staticCompositionLocalOf<LayerBackdrop?> { null }

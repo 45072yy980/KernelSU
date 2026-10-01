@@ -43,6 +43,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.Dp
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -93,7 +94,6 @@ import me.weishu.kernelsu.ui.theme.LocalColorMode
 import me.weishu.kernelsu.ui.theme.LocalDisablePagerSwipe
 import me.weishu.kernelsu.ui.theme.LocalEnableBlur
 import me.weishu.kernelsu.ui.theme.LocalHomeCardBlur
-import me.weishu.kernelsu.ui.theme.LocalCardBackdrop
 import me.weishu.kernelsu.ui.theme.LocalEnableFloatingBottomBar
 import me.weishu.kernelsu.ui.theme.LocalEnableFloatingBottomBarBlur
 import me.weishu.kernelsu.ui.theme.LocalEnableNavigationBadge
@@ -110,7 +110,6 @@ import me.weishu.kernelsu.ui.viewmodel.ModuleViewModel
 import me.weishu.kernelsu.ui.viewmodel.SuperUserViewModel
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.blur.layerBackdrop
-import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import top.yukonga.miuix.kmp.nav.core.NavDisplay
 import top.yukonga.miuix.kmp.nav.core.NavDisplayEffects
 import top.yukonga.miuix.kmp.nav.core.rememberNavSystemCornerRadius
@@ -131,6 +130,7 @@ import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import me.weishu.kernelsu.ui.util.HomeWallpaperStore
@@ -335,6 +335,16 @@ private val EDGE_SHADE = 12.dp
 private val EDGE_SHADOW = Color.Black.copy(alpha = 0.12f)
 private val PANEL_CORNER = 24.dp
 
+/**
+ * The page panel's real pixel size and window position. The frosted "working" card crops the
+ * wallpaper with exactly these numbers, so the slice it shows is the same crop the panel shows;
+ * any residual error is dialled out by the GlassNudge constants in HomeMiuix.
+ */
+object PanelMetrics {
+    val size = mutableStateOf(IntSize.Zero)
+    val pos = mutableStateOf(Offset.Zero)
+}
+
 @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
 @Composable
 fun MainScreen(
@@ -450,24 +460,7 @@ fun MainScreen(
     ) {
         val contentReady = rememberContentReady()
         val pagerContent = @Composable { bottomInnerPadding: Dp ->
-            // Backdrop for the home "working" card. It is hosted here, on the node that
-            // wraps the whole pager, so the card samples the wallpaper and the page
-            // panel underneath it instead of a flat colour. It is independent of
-            // enableBlur: the card has its own switch.
-            val cardSurfaceColor = when (uiMode) {
-                UiMode.Material -> MaterialTheme.colorScheme.surface
-                UiMode.Miuix -> MiuixTheme.colorScheme.surface
-            }
-            val cardBackdrop = rememberLayerBackdrop {
-                drawRect(cardSurfaceColor)
-                drawContent()
-            }
-            Box(
-                modifier = Modifier
-                    .then(if (blurBackdrop != null) Modifier.layerBackdrop(blurBackdrop) else Modifier)
-                    .layerBackdrop(cardBackdrop)
-            ) {
-                CompositionLocalProvider(LocalCardBackdrop provides cardBackdrop) {
+            Box(modifier = if (blurBackdrop != null) Modifier.layerBackdrop(blurBackdrop) else Modifier) {
                 HorizontalPager(
                     modifier = Modifier
                         .pagerGestureOverride(
@@ -502,7 +495,6 @@ fun MainScreen(
                     }
                 }
             }
-        }
         }
 
         if (useNavigationRail) {
@@ -616,7 +608,11 @@ fun MainScreen(
                                         width = 1.dp,
                                         color = MiuixTheme.colorScheme.dividerLine,
                                         shape = pagePanelShape,
-                                    ),
+                                    )
+                                    .onGloballyPositioned { coords ->
+                                        PanelMetrics.size.value = coords.size
+                                        PanelMetrics.pos.value = coords.positionInWindow()
+                                    },
                             ) {
                                 // The same picture inside the line, sharp: the blur belongs to the
                                 // frame outside it, and the page sits on the untouched photograph.
