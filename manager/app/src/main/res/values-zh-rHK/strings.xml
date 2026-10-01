@@ -313,4 +313,10 @@
     <string name="settings_partition_guard">系統分區保護</string>
     <string name="settings_partition_guard_summary">攔截會真正寫入系統分區的模組安裝（dd 寫區塊裝置、remount rw、刷寫、mkfs 等）。越獄模式下始終開啟，其他情況可在此開關。</string>
     <string name="settings_partition_guard_summary_jailbreak">越獄模式下始終開啟，無法在此關閉——晚期載入的會話無法撤銷對分區的真實寫入。</string>
+    <string name="settings_runtime_guard">執行時防護（核心攔截）</string>
+    <string name="settings_runtime_guard_summary">在安裝時掃描之外額外加一層：掛鉤 openat/openat2/mount/write，即時攔截已獲 root 的程序寫系統分區。預設關閉；它會掛鉤極高頻系統呼叫，理解風險後再開啟。</string>
+    <string name="settings_home_card_blur">狀態卡片使用模糊背景</string>
+    <string name="settings_home_card_blur_summary">主介面狀態卡片以高斯模糊（毛玻璃）渲染背景，取代純色。若裝置不支援模糊渲染，或卡片已設定自訂圖片，則此開關無效。</string>
+    <string name="settings_disable_pager_swipe">停用左右滑動切換頁面</string>
+    <string name="settings_disable_pager_swipe_summary">主介面不再跟隨左右滑動切換頁面；仍可透過底部欄或導覽列切換。</string>
 </resources>

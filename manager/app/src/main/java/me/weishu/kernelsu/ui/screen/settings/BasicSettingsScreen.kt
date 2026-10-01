@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.automirrored.filled.CompareArrows
+import androidx.compose.material.icons.filled.BlurOn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Article
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -161,6 +163,22 @@ private fun basicRows(uiState: SettingsUiState, viewModel: SettingsViewModel): L
         enabled = uiState.isLateLoadMode,
         checked = uiState.autoJailbreak,
         onCheckedChange = viewModel::setAutoJailbreak,
+    ),
+    BasicRow(
+        icon = Icons.Filled.BlurOn,
+        title = R.string.settings_home_card_blur,
+        summary = stringResource(R.string.settings_home_card_blur_summary),
+        enabled = true,
+        checked = uiState.homeCardBlur,
+        onCheckedChange = viewModel::setHomeCardBlur,
+    ),
+    BasicRow(
+        icon = Icons.AutoMirrored.Filled.CompareArrows,
+        title = R.string.settings_disable_pager_swipe,
+        summary = stringResource(R.string.settings_disable_pager_swipe_summary),
+        enabled = true,
+        checked = uiState.disablePagerSwipe,
+        onCheckedChange = viewModel::setDisablePagerSwipe,
     ),
 )
 

@@ -84,6 +84,8 @@ import kotlin.math.roundToInt
 import me.weishu.kernelsu.KernelVersion
 import me.weishu.kernelsu.Natives
 import me.weishu.kernelsu.R
+import me.weishu.kernelsu.ui.theme.LocalHomeCardBlur
+import me.weishu.kernelsu.ui.theme.LocalGlassNotice
 import me.weishu.kernelsu.ui.PanelMetrics
 import me.weishu.kernelsu.ui.component.WarningLevel
 import me.weishu.kernelsu.ui.component.dialog.rememberConfirmDialog
@@ -292,7 +294,11 @@ private fun StatusCard(
                 // With no picture of its own, the card over a wallpaper is frosted glass: the
                 // backdrop itself, aligned to the window and blurred under the same dimming, so
                 // the card is a pane of the page rather than a colour sampled out of it.
-                val glassBackdrop = statusImage == null && homeWallpaper != null
+                // The frost is opt-in: the home card blur switch has to be on, and
+                // then a wallpaper has to be behind the card with no per-card image
+                // of its own. Same shape as upstream, just gated on the setting.
+                val homeCardBlur = LocalHomeCardBlur.current
+                val glassBackdrop = homeCardBlur && statusImage == null && homeWallpaper != null
                 // A video backdrop has no still to sample, but the card must not fall back to
                 // the theme gradient over a photograph — a smoked pane suits the moving picture.
                 val movingBackdrop = statusImage == null &&

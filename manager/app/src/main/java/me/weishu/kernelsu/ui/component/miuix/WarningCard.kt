@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import me.weishu.kernelsu.ui.component.WarningLevel
+import me.weishu.kernelsu.ui.theme.LocalGlassNotice
 import me.weishu.kernelsu.ui.theme.isInDarkTheme
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.CardDefaults
@@ -33,6 +34,47 @@ fun WarningCard(
     onClick: (() -> Unit)? = null,
     action: (@Composable () -> Unit)? = null,
 ) {
+    // Inside a frosted pane the card must not paint its own tinted container:
+    // the pane is the background, and a container on top of it would hide the
+    // glass entirely.
+    //
+    // The text colour has to change with it. "onErrorContainer" and
+    // "onTertiaryContainer" are near-black browns and reds, chosen to sit on
+    // their own pale containers; over a blurred photo they disappear. Over the
+    // glass the page uses the same bright tint every other card on the home
+    // screen uses, so this one matches instead of inventing its own.
+    if (LocalGlassNotice.current) {
+        val textColor = lerp(colorScheme.primary, Color.White, 0.75f)
+        Card(
+            modifier = modifier,
+            onClick = { onClick?.invoke() },
+            colors = CardDefaults.defaultColors(
+                color = Color.Transparent,
+                contentColor = textColor,
+            ),
+            showIndication = onClick != null,
+            pressFeedbackType = PressFeedbackType.Sink
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = message,
+                    // The page's body size. Miuix's body2 is what every other home
+                    // card uses for running text, so this matches instead of sitting
+                    // at a one-off 14.sp that read smaller than everything around it.
+                    fontSize = MiuixTheme.textStyles.body2.fontSize,
+                    color = textColor,
+                )
+                action?.invoke()
+            }
+        }
+        return
+    }
     if (me.weishu.kernelsu.ui.LocalUiMode.current != me.weishu.kernelsu.ui.UiMode.Miuix) {
         // Stock miuix (and any shared surface): the plain card the official app ships.
         Card(

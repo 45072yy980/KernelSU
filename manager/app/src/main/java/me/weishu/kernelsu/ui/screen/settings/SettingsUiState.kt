@@ -55,6 +55,8 @@ data class SettingsUiState(
 
     // Auto Jailbreak
     val autoJailbreak: Boolean = false,
+    val homeCardBlur: Boolean = false,
+    val disablePagerSwipe: Boolean = false,
 
     // Soft Reboot
     val useSoftReboot: Boolean = false

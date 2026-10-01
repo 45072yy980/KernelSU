@@ -156,3 +156,16 @@ val LocalEnableFloatingBottomBarBlur = staticCompositionLocalOf { false }
 val LocalEnableNavigationBadge = staticCompositionLocalOf { true }
 
 val LocalModuleDescriptionMaxLines = staticCompositionLocalOf { 4 }
+
+/** When true the home pager ignores left/right swipes; the bottom bar still navigates. */
+val LocalDisablePagerSwipe = staticCompositionLocalOf { false }
+
+/** When true the home "working" card draws its background with a blur (frosted) effect. */
+val LocalHomeCardBlur = staticCompositionLocalOf { false }
+/**
+ * When true a card is sitting inside the home notice glass pane: it must not
+ * paint its own container, or it would cover the frosted background behind it.
+ * The flag is on only for the notice cards, which is why it is separate from
+ * [LocalHomeCardBlur] -- the setting can be on while some card is elsewhere.
+ */
+val LocalGlassNotice = staticCompositionLocalOf { false }
