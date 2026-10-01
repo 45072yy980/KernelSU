@@ -322,6 +322,7 @@ class SettingsViewModel(
         repo.useSoftReboot = enabled
         _uiState.update { it.copy(useSoftReboot = enabled) }
 
+    }
     fun setHomeCardBlur(enabled: Boolean) {
         repo.homeCardBlur = enabled
         _uiState.update { it.copy(homeCardBlur = enabled) }
@@ -329,7 +330,6 @@ class SettingsViewModel(
     fun setDisablePagerSwipe(enabled: Boolean) {
         repo.disablePagerSwipe = enabled
         _uiState.update { it.copy(disablePagerSwipe = enabled) }
-    }
     }
 
     fun setSulogEnabled(enabled: Boolean) {
