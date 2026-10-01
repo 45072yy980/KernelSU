@@ -32,6 +32,8 @@ android-bootimg = { git = "https://github.com/5ec1cff/android_bootimg", rev = "1
 # target, not just Android, and the ksud-extra jobs cross-build ksud for
 # linux-musl / macOS / Windows. Keeping it under the android table would make
 # those jobs fail with "cannot find crate `zip`".
+libc = "0.2"
+encoding_rs = "0.8"
 zip = { version = "8",  features = [
     "deflate",
     "deflate64",
@@ -51,9 +53,7 @@ zip-extensions = { version = "0.14", features = [
     "xz",
 ], default-features = false }
 java-properties = { git = "https://github.com/KernelSU2/java-properties.git", branch = "master", default-features = false }
-encoding_rs = "0.8"
 humansize = "2"
-libc = "0.2"
 extattr = "1"
 jwalk = "0.9"
 is_executable = "1"

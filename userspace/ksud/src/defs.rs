@@ -1,3 +1,30 @@
+#![allow(dead_code)]
+// ---------------------------------------------------------------------------
+// Paths the kernel module loader and the WebUI both need.
+//
+// These used to live only inside the android-only `android` module, but the
+// WebUI is built for every target (the ksud-extra cross builds produce the
+// desktop binaries too), and it reads WORKING_DIR and friends unconditionally.
+// On a non-Android host the tree is rooted at /data/adb/ksu as well, which is
+// harmless: those builds only ever drive the WebUI against a device.
+// ---------------------------------------------------------------------------
+
+#[cfg(not(target_os = "android"))]
+mod non_android {
+    pub const ADB_DIR: &str = "/data/adb/";
+    pub const WORKING_DIR: &str = "/data/adb/ksu/";
+    pub const BINARY_DIR: &str = "/data/adb/ksu/bin/";
+    pub const LIBRARY_DIR: &str = "/data/adb/ksu/lib/";
+    pub const LOG_DIR: &str = "/data/adb/ksu/log/";
+    pub const WEBUI_PORT_PATH: &str = "/data/adb/ksu/webui.port";
+    pub const WEBUI_TOKEN_PATH: &str = "/data/adb/ksu/webui.token";
+    pub const MODULE_DIR: &str = "/data/adb/modules/";
+    pub const MODULE_UPDATE_DIR: &str = "/data/adb/modules_update/";
+    pub const PROFILE_DIR: &str = "/data/adb/ksu/profile/";
+}
+#[cfg(not(target_os = "android"))]
+pub use non_android::*;
+
 /// The panel's three own state files.
 pub const WEBUI_JUMPS_PATH: &str = "/data/adb/ksu/webui_jumps.json";
 pub const WEBUI_QUICK_RUN_PATH: &str = "/data/adb/ksu/webui_quickrun.json";
