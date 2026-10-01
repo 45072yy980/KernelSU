@@ -28,12 +28,10 @@ chrono = "0.4"
 regex-lite = "0.1"
 memmap2 = "0.9"
 android-bootimg = { git = "https://github.com/5ec1cff/android_bootimg", rev = "150425b027c76ea104c82e408571651f2181b2c2" }
-
-[target.'cfg(target_os = "android")'.dependencies]
-rustix = { version = "1", features = [
-    "all-apis",
-] }
-android_logger = { version = "0.15", default-features = false }
+# NOTE: the WebUI/APK-parsing code (webui_*.rs, apkparser.rs) uses `zip` on every
+# target, not just Android, and the ksud-extra jobs cross-build ksud for
+# linux-musl / macOS / Windows. Keeping it under the android table would make
+# those jobs fail with "cannot find crate `zip`".
 zip = { version = "8",  features = [
     "deflate",
     "deflate64",
@@ -41,6 +39,12 @@ zip = { version = "8",  features = [
     "lzma",
     "xz",
 ], default-features = false }
+
+[target.'cfg(target_os = "android")'.dependencies]
+rustix = { version = "1", features = [
+    "all-apis",
+] }
+android_logger = { version = "0.15", default-features = false }
 zip-extensions = { version = "0.14", features = [
     "deflate",
     "lzma",
