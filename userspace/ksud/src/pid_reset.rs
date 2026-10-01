@@ -50,9 +50,12 @@ const TARGET_PID: i32 = 1700;
 
 /// How long the fork loop may run before we give up and let the reboot proceed.
 ///
-/// Matches the module's `MAX_WAIT_SEC`. Reaching the wrap from a high counter
-/// genuinely takes tens of thousands of forks, so this is not a generous
-/// ceiling -- it is the amount of time the job actually needs.
+/// Matches the module's `MAX_WAIT_SEC`, and it is that value for the same
+/// reason: measured on a real device the loop needs ~7.7 s and ~14k forks to
+/// come back around from a counter in the mid-16k range (1863 forks/s). A
+/// smaller budget simply does not reach the wrap, and not reaching the wrap
+/// means doing nothing at all -- the counter has to come back down, and only a
+/// wrap brings it down.
 const FORK_LOOP_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Fallback attempt cap, only used if `pid_max` cannot be read. One wrap plus
@@ -68,6 +71,17 @@ fn read_i32(path: &str) -> Option<i32> {
 
 fn read_pid_max() -> Option<i32> {
     read_i32(PID_MAX).filter(|v| *v > 0)
+}
+
+/// The PID the allocator most recently handed out.
+///
+/// `/proc/loadavg` ends with the last PID created, which is the only portable
+/// view of the counter on kernels without `ns_last_pid`. Field 5 of
+/// `"0.30 0.25 0.20 1/123 4567"` is `4567`.
+fn latest_pid() -> Option<i32> {
+    let s = fs::read_to_string("/proc/loadavg").ok()?;
+    let last = s.split_whitespace().nth(4)?;
+    last.parse::<i32>().ok()
 }
 
 /// One fork, returning the PID the kernel handed the child (or `None` on
@@ -140,7 +154,7 @@ fn fork_until_wrapped_to(target: i32) -> (bool, u32, i32) {
         .and_then(|v| v.checked_add(4096))
         .unwrap_or(FORK_LOOP_MAX_ATTEMPTS);
 
-    let mut prev = 0i32;
+    let mut prev = latest_pid().unwrap_or(0);
     let mut attempts: u32 = 0;
     let mut wrapped = false;
 
@@ -189,13 +203,21 @@ pub fn reset_pid_counter() {
 const PID_RESET_DEADLINE: Duration = Duration::from_secs(12);
 
 fn reset_pid_counter_inner() {
-    let before = read_i32(NS_LAST_PID);
-
     if write_ns_last_pid(TARGET_PID) {
-        info!(
-            "pid_reset: ns_last_pid set to {TARGET_PID} (was {})",
-            before.map_or_else(|| "unknown".to_string(), |v| v.to_string())
-        );
+        info!("pid_reset: ns_last_pid set to {TARGET_PID}");
+        return;
+    }
+
+    // No ns_last_pid on this kernel, so the fork loop is the only lever. First
+    // check where the allocator currently stands: if it is already below the
+    // target there is nothing to do, and forcing a wrap would be actively
+    // harmful -- from a low counter the wrap is a full 32k forks away, well past
+    // the budget, so we would spend ten seconds on a reboot that gains nothing.
+    let current = latest_pid();
+    if let Some(cur) = current
+        && cur < TARGET_PID
+    {
+        info!("pid_reset: allocator at {cur}, already below {TARGET_PID}; nothing to do");
         return;
     }
 
