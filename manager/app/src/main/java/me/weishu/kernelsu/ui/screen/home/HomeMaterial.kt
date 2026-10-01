@@ -93,8 +93,11 @@ fun HomePagerMaterial(
     // drawn under it; the card samples that copy with textureBlur. Host and
     // consumer must be different nodes (hosting the backdrop inside the card
     // itself made the blur sample its own output and crash).
+    // Read the colour outside the lambda: the backdrop body is not a @Composable
+    // scope, so MaterialTheme cannot be touched inside it.
+    val cardSurfaceColor = MaterialTheme.colorScheme.surface
     val cardBackdrop = rememberLayerBackdrop {
-        drawRect(MaterialTheme.colorScheme.surface)
+        drawRect(cardSurfaceColor)
         drawContent()
     }
 
