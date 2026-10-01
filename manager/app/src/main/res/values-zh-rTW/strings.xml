@@ -200,8 +200,6 @@
     <string name="profile_flags_desc_no_new_privs">防止在此 Root Profile 的上下文中透過 KernelSU 進一步提升權限</string>
     <string name="install_force_backup">備份為原廠映像</string>
     <string name="install_force_backup_summary">請確保你選擇的 boot 映像是原廠映像</string>
-    <string name="settings_pid_reset">軟重啟前重置 PID 計數器</string>
-    <string name="settings_pid_reset_summary">軟重啟前把核心 PID 計數器向前推進，讓隨後啟動的行程不會拿到「剛開機」那種很小的 PID，有助於避開部分 root 偵測。預設關閉。</string>
     <string name="settings_home_card_blur">狀態卡片使用模糊背景</string>
     <string name="settings_home_card_blur_summary">主介面狀態卡片以高斯模糊（毛玻璃）渲染背景，取代純色。若裝置不支援模糊渲染，或卡片已設定自訂圖片，則此開關無效。</string>
     <string name="settings_disable_pager_swipe">停用左右滑動切換頁面</string>

@@ -395,8 +395,6 @@
     <string name="nav_rail_collapse">收起导航栏</string>
     <string name="settings_navigation_badge">导航栏角标</string>
     <string name="settings_navigation_badge_summary">在导航栏显示已授权应用和已启用模块数量</string>
-    <string name="settings_pid_reset">软重启前重置 PID 计数器</string>
-    <string name="settings_pid_reset_summary">软重启前把内核 PID 计数器向前推进，使随后启动的进程不会拿到“刚刚开机”那种很小的 PID，有助于躲过部分 root 检测。默认关闭。</string>
     <string name="settings_home_card_blur">状态卡片使用模糊背景</string>
     <string name="settings_home_card_blur_summary">主界面状态卡片以高斯模糊（毛玻璃）渲染背景，替代纯色。若设备不支持模糊渲染，或卡片已设置自定义图片，则此开关无效。</string>
     <string name="settings_disable_pager_swipe">禁用左右滑动切换页面</string>

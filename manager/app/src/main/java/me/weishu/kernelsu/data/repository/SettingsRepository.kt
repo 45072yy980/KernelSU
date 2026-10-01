@@ -29,7 +29,6 @@ interface SettingsRepository {
     var suLogFilters: Set<String>?
     var autoJailbreak: Boolean
     var useSoftReboot: Boolean
-    var pidResetOnSoftReboot: Boolean
     var homeCardBlur: Boolean
     var disablePagerSwipe: Boolean
     val intentToken: String

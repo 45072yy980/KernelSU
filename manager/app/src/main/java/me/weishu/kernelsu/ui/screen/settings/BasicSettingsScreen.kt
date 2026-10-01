@@ -165,14 +165,6 @@ private fun basicRows(uiState: SettingsUiState, viewModel: SettingsViewModel): L
         onCheckedChange = viewModel::setAutoJailbreak,
     ),
     BasicRow(
-        icon = Icons.Filled.RestartAlt,
-        title = R.string.settings_pid_reset,
-        summary = stringResource(R.string.settings_pid_reset_summary),
-        enabled = true,
-        checked = uiState.pidResetOnSoftReboot,
-        onCheckedChange = viewModel::setPidResetOnSoftReboot,
-    ),
-    BasicRow(
         icon = Icons.Filled.BlurOn,
         title = R.string.settings_home_card_blur,
         summary = stringResource(R.string.settings_home_card_blur_summary),

@@ -59,7 +59,6 @@ data class SettingsUiState(
     // Soft Reboot
     val useSoftReboot: Boolean = false,
     // Hide-root helpers (all default off)
-    val pidResetOnSoftReboot: Boolean = false,
     val homeCardBlur: Boolean = false,
     val disablePagerSwipe: Boolean = false,
 )

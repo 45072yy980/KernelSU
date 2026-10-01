@@ -22,7 +22,6 @@ private const val SETTINGS_PREFS = "settings"
 private const val KEY_USE_SOFT_REBOOT = "soft_reboot"
 private const val KEY_PARTITION_GUARD = "partition_guard"
 private const val KEY_RUNTIME_GUARD = "runtime_partition_guard"
-private const val KEY_PID_RESET_ON_SOFT_REBOOT = "pid_reset_on_soft_reboot"
 private const val KEY_HOME_CARD_BLUR = "home_card_blur"
 private const val KEY_DISABLE_PAGER_SWIPE = "disable_pager_swipe"
 /** Prefer soft reboot: always in jailbreak mode, or when the setting is enabled. */
@@ -89,20 +88,6 @@ fun syncRuntimeGuardToKernel(enabled: Boolean) {
  * from Basic settings.
  */
 
-/**
- * Before a soft reboot, roll the kernel's PID counter forward so freshly started
- * processes do not come out with tiny PIDs - a visible "this device just
- * restarted" tell to some detectors. Mirrors what the standalone soft_restart_fix
- * module does, but built into ksud so no module (and no extra binary) is needed.
- */
-fun isPidResetOnSoftRebootEnabled(): Boolean =
-    ksuApp.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
-        .getBoolean(KEY_PID_RESET_ON_SOFT_REBOOT, false)
-
-fun setPidResetOnSoftRebootEnabled(enabled: Boolean) {
-    ksuApp.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
-        .edit().putBoolean(KEY_PID_RESET_ON_SOFT_REBOOT, enabled).commit()
-}
 
 /** Render the "working" status card on the home page with a blurred (frosted) background. */
 fun isHomeCardBlurEnabled(): Boolean =
@@ -262,9 +247,6 @@ class SettingsRepositoryImpl : SettingsRepository {
         get() = prefs.getBoolean(KEY_USE_SOFT_REBOOT, false)
         set(value) = prefs.edit { putBoolean(KEY_USE_SOFT_REBOOT, value) }
 
-    override var pidResetOnSoftReboot: Boolean
-        get() = prefs.getBoolean(KEY_PID_RESET_ON_SOFT_REBOOT, false)
-        set(value) = prefs.edit { putBoolean(KEY_PID_RESET_ON_SOFT_REBOOT, value) }
 
     override var homeCardBlur: Boolean
         get() = prefs.getBoolean(KEY_HOME_CARD_BLUR, false)
