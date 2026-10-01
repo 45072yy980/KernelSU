@@ -401,4 +401,10 @@
     <string name="nav_rail_collapse">Collapse navigation rail</string>
     <string name="settings_navigation_badge">Navigation badge</string>
     <string name="settings_navigation_badge_summary">Show granted app and enabled module counts on the navigation bar</string>
+    <string name="settings_pid_reset">Reset PID counter before soft reboot</string>
+    <string name="settings_pid_reset_summary">Before a soft reboot, move the kernel PID counter forward so freshly started processes do not get the low PIDs a fresh boot would hand out. Helps hide the restart from some root detectors. Off by default.</string>
+    <string name="settings_home_card_blur">Blurred background for the status card</string>
+    <string name="settings_home_card_blur_summary">Draw the home page status card with a frosted (blurred) background instead of a solid colour. Ignored when the device cannot render a blur or the card has a custom picture.</string>
+    <string name="settings_disable_pager_swipe">Disable left/right swipe between pages</string>
+    <string name="settings_disable_pager_swipe_summary">Stop the home pager from following a left/right swipe. Switching pages still works through the bottom bar or navigation rail.</string>
 </resources>

@@ -68,6 +68,9 @@ enum Commands {
     /// Emulate system reboot
     SoftReboot,
 
+    /// Advance the kernel PID counter (hide a soft restart from detectors)
+    PidReset,
+
     /// Load a kernel module with kallsyms access
     Insmod {
         /// kernel module path
@@ -524,6 +527,7 @@ pub fn run() -> Result<()> {
         }
 
         Commands::SoftReboot => crate::soft_reboot::soft_reboot(),
+        Commands::PidReset => crate::pid_reset::pid_reset_command(),
 
         Commands::Insmod { module, params } => debug::insmod(&module, &params),
 

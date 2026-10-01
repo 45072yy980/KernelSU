@@ -67,10 +67,12 @@ import me.weishu.kernelsu.ui.component.dialog.rememberConfirmDialog
 import me.weishu.kernelsu.ui.component.miuix.WarningCard
 import me.weishu.kernelsu.ui.component.statustag.StatusTag
 import me.weishu.kernelsu.ui.theme.LocalEnableBlur
+import me.weishu.kernelsu.ui.theme.LocalHomeCardBlur
 import me.weishu.kernelsu.ui.util.module.LatestVersionInfo
 import me.weishu.kernelsu.ui.util.HomeWallpaperStore
 import me.weishu.kernelsu.ui.util.rememberWallpaperSet
 import me.weishu.kernelsu.ui.util.rememberBlurBackdrop
+import me.weishu.kernelsu.ui.util.isBlurSupported
 import top.yukonga.miuix.kmp.basic.BasicComponent
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
@@ -81,6 +83,10 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.blur.LayerBackdrop
 import top.yukonga.miuix.kmp.blur.layerBackdrop
+import top.yukonga.miuix.kmp.blur.BlendColorEntry
+import top.yukonga.miuix.kmp.blur.BlurColors
+import top.yukonga.miuix.kmp.blur.textureBlur
+import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme
@@ -241,11 +247,15 @@ private fun StatusCard(
                 val workingText = "${stringResource(id = R.string.home_working)}$workingState"
 
                 // The status card may carry a picture of its own; re-read when it is replaced.
+                val homeCardBlur = LocalHomeCardBlur.current
                 val statusContext = LocalContext.current
                 val statusVersion = HomeWallpaperStore.version
                 val statusImage = remember(statusContext, statusVersion) {
                     HomeWallpaperStore.load(HomeWallpaperStore.statusFile(statusContext))
                 }
+                // Blur is only meaningful when the card has no picture of its own.
+                val statusBlurActive = homeCardBlur && statusImage == null && isBlurSupported()
+                val statusBackdrop = rememberLayerBackdrop { drawRect(Color.Transparent); drawContent() }
                 // Over a picture the card is nothing but the picture, so the text carries the same
                 // bright tint the info card uses; on the card's own colour it is plain black.
                 val statusTitleColor =
@@ -260,11 +270,20 @@ private fun StatusCard(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Card(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .then(
+                                if (statusBlurActive) {
+                                    Modifier.layerBackdrop(statusBackdrop)
+                                } else {
+                                    Modifier
+                                }
+                            ),
                         colors = CardDefaults.defaultColors(
                             // Transparent over a picture, with the theme's own tint laid on top of
                             // it below so the card's dark text stays readable on any photo.
-                            color = if (statusImage != null) {
+                            // Transparent too when the frosted layer paints the background.
+                            color = if (statusImage != null || statusBlurActive) {
                                 Color.Transparent
                             } else {
                                 // Off the theme, never a fixed green: with Monet off the app still has
@@ -284,6 +303,24 @@ private fun StatusCard(
                         pressFeedbackType = PressFeedbackType.Tilt
                     ) {
                         Box {
+                            if (statusBlurActive) {
+                                Box(
+                                    modifier = Modifier
+                                        .matchParentSize()
+                                        .textureBlur(
+                                            backdrop = statusBackdrop,
+                                            blurRadius = 25f,
+                                            colors = BlurColors(
+                                                blendColors = listOf(
+                                                    BlendColorEntry(
+                                                        color = lerp(colorScheme.primaryContainer, colorScheme.primary, 0.35f)
+                                                            .copy(alpha = 0.75f),
+                                                    ),
+                                                ),
+                                            ),
+                                        ),
+                                )
+                            }
                             if (statusImage != null) {
                                 Image(
                                     bitmap = statusImage,

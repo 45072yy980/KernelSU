@@ -47,6 +47,7 @@ mod restorecon;
 #[cfg(target_os = "android")]
 mod sepolicy;
 #[cfg(target_os = "android")]
+mod pid_reset;
 mod soft_reboot;
 #[cfg(target_os = "android")]
 mod su;

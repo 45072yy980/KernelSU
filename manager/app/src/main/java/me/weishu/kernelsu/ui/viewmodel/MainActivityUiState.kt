@@ -16,4 +16,6 @@ data class MainActivityUiState(
     val pagerInterceptionMode: Int,
     val moduleDescriptionMaxLines: Int = 4,
     val uiMode: UiMode,
+    val disablePagerSwipe: Boolean = false,
+    val homeCardBlur: Boolean = false,
 )

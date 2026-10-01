@@ -156,3 +156,9 @@ val LocalEnableFloatingBottomBarBlur = staticCompositionLocalOf { false }
 val LocalEnableNavigationBadge = staticCompositionLocalOf { true }
 
 val LocalModuleDescriptionMaxLines = staticCompositionLocalOf { 4 }
+
+/** When true the home pager ignores left/right swipes; the bottom bar still navigates. */
+val LocalDisablePagerSwipe = staticCompositionLocalOf { false }
+
+/** When true the home "working" card draws its background with a blur (frosted) effect. */
+val LocalHomeCardBlur = staticCompositionLocalOf { false }

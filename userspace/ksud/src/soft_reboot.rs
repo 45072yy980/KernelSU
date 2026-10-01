@@ -166,6 +166,18 @@ pub fn soft_reboot() -> Result<()> {
     if let Err(e) = reset_boot_completed() {
         warn!("reset boot completed failed: {e}");
     }
+    // Advance the PID counter before the process tree is torn down, so the
+    // framework that comes back up does not get the low PIDs a fresh boot would
+    // hand out. This is the built-in replacement for the soft_restart_fix module.
+    //
+    // Off by default: the Manager sets KSU_PID_RESET=1 only when the user turned
+    // the option on, so a plain soft reboot behaves exactly as before.
+    if std::env::var("KSU_PID_RESET").is_ok_and(|v| v == "1") {
+        crate::pid_reset::reset_pid_counter();
+    } else {
+        info!("pid_reset: disabled (KSU_PID_RESET not set)");
+    }
+
     run_stage("emulated-soft-reboot", true);
 
     let mut waitsys = match Waitsys::spawn() {

@@ -58,6 +58,9 @@ data class SettingsUiState(
 
     // Soft Reboot
     val useSoftReboot: Boolean = false
+    val pidResetOnSoftReboot: Boolean = false
+    val homeCardBlur: Boolean = false
+    val disablePagerSwipe: Boolean = false
 )
 
 @Immutable

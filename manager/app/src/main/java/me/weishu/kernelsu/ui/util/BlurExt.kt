@@ -12,6 +12,13 @@ import top.yukonga.miuix.kmp.blur.textureBlur
 import top.yukonga.miuix.kmp.shader.isRenderEffectSupported
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
+/**
+ * Whether the device can actually render a blur. Callers use this to decide
+ * between a frosted background and a plain solid one; it is a plain (non-composable)
+ * check so it can be called from anywhere.
+ */
+fun isBlurSupported(): Boolean = isRenderEffectSupported()
+
 @Composable
 fun rememberBlurBackdrop(enableBlur: Boolean): LayerBackdrop? {
     if (!enableBlur || !isRenderEffectSupported()) return null

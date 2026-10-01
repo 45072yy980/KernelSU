@@ -22,6 +22,9 @@ private const val SETTINGS_PREFS = "settings"
 private const val KEY_USE_SOFT_REBOOT = "soft_reboot"
 private const val KEY_PARTITION_GUARD = "partition_guard"
 private const val KEY_RUNTIME_GUARD = "runtime_partition_guard"
+private const val KEY_PID_RESET_ON_SOFT_REBOOT = "pid_reset_on_soft_reboot"
+private const val KEY_HOME_CARD_BLUR = "home_card_blur"
+private const val KEY_DISABLE_PAGER_SWIPE = "disable_pager_swipe"
 /** Prefer soft reboot: always in jailbreak mode, or when the setting is enabled. */
 fun isSoftRebootPreferred(): Boolean =
     Natives.isLateLoadMode || ksuApp.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
@@ -78,6 +81,47 @@ fun setRuntimeGuardEnabled(enabled: Boolean) {
  */
 fun syncRuntimeGuardToKernel(enabled: Boolean) {
     execKsud("feature set partition_guard_runtime ${if (enabled) 1 else 0}", newShell = true)
+}
+
+/**
+ * Hide-root helpers that the jailbreak workflow benefits from. All three default
+ * to OFF, so a plain install behaves exactly like upstream until the user opts in
+ * from Basic settings.
+ */
+
+/**
+ * Before a soft reboot, roll the kernel's PID counter forward so freshly started
+ * processes do not come out with tiny PIDs - a visible "this device just
+ * restarted" tell to some detectors. Mirrors what the standalone soft_restart_fix
+ * module does, but built into ksud so no module (and no extra binary) is needed.
+ */
+fun isPidResetOnSoftRebootEnabled(): Boolean =
+    ksuApp.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
+        .getBoolean(KEY_PID_RESET_ON_SOFT_REBOOT, false)
+
+fun setPidResetOnSoftRebootEnabled(enabled: Boolean) {
+    ksuApp.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
+        .edit().putBoolean(KEY_PID_RESET_ON_SOFT_REBOOT, enabled).commit()
+}
+
+/** Render the "working" status card on the home page with a blurred (frosted) background. */
+fun isHomeCardBlurEnabled(): Boolean =
+    ksuApp.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
+        .getBoolean(KEY_HOME_CARD_BLUR, false)
+
+fun setHomeCardBlurEnabled(enabled: Boolean) {
+    ksuApp.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
+        .edit().putBoolean(KEY_HOME_CARD_BLUR, enabled).commit()
+}
+
+/** Stop the home pager from following a left/right swipe; navigation stays on the bottom bar. */
+fun isPagerSwipeDisabled(): Boolean =
+    ksuApp.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
+        .getBoolean(KEY_DISABLE_PAGER_SWIPE, false)
+
+fun setPagerSwipeDisabled(enabled: Boolean) {
+    ksuApp.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
+        .edit().putBoolean(KEY_DISABLE_PAGER_SWIPE, enabled).commit()
 }
 
 class SettingsRepositoryImpl : SettingsRepository {
@@ -217,6 +261,18 @@ class SettingsRepositoryImpl : SettingsRepository {
     override var useSoftReboot: Boolean
         get() = prefs.getBoolean(KEY_USE_SOFT_REBOOT, false)
         set(value) = prefs.edit { putBoolean(KEY_USE_SOFT_REBOOT, value) }
+
+    override var pidResetOnSoftReboot: Boolean
+        get() = prefs.getBoolean(KEY_PID_RESET_ON_SOFT_REBOOT, false)
+        set(value) = prefs.edit { putBoolean(KEY_PID_RESET_ON_SOFT_REBOOT, value) }
+
+    override var homeCardBlur: Boolean
+        get() = prefs.getBoolean(KEY_HOME_CARD_BLUR, false)
+        set(value) = prefs.edit { putBoolean(KEY_HOME_CARD_BLUR, value) }
+
+    override var disablePagerSwipe: Boolean
+        get() = prefs.getBoolean(KEY_DISABLE_PAGER_SWIPE, false)
+        set(value) = prefs.edit { putBoolean(KEY_DISABLE_PAGER_SWIPE, value) }
 
     override val intentToken: String
         get() {

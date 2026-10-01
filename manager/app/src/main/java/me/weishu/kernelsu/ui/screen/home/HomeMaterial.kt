@@ -6,6 +6,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -73,6 +74,13 @@ import me.weishu.kernelsu.ui.component.material.TonalCard
 import me.weishu.kernelsu.ui.component.material.expressiveTopAppBarColors
 import me.weishu.kernelsu.ui.component.rebootlistpopup.RebootListPopup
 import me.weishu.kernelsu.ui.component.statustag.StatusTag
+import me.weishu.kernelsu.ui.theme.LocalHomeCardBlur
+import me.weishu.kernelsu.ui.util.isBlurSupported
+import top.yukonga.miuix.kmp.blur.BlendColorEntry
+import top.yukonga.miuix.kmp.blur.BlurColors
+import top.yukonga.miuix.kmp.blur.layerBackdrop
+import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
+import top.yukonga.miuix.kmp.blur.textureBlur
 
 @Composable
 fun HomePagerMaterial(
@@ -200,6 +208,13 @@ private fun StatusCard(
     state: HomeUiState,
     actions: HomeActions,
 ) {
+    // Optional frosted-glass background for the "working" card. It is a purely
+    // cosmetic layer: when off (the default) the card paints its solid container
+    // colour exactly as before. When on, we blur whatever is behind the card.
+    val homeCardBlur = LocalHomeCardBlur.current
+    val blurActive = homeCardBlur && isBlurSupported()
+    val cardBackdrop = rememberLayerBackdrop { drawRect(Color.Transparent); drawContent() }
+
     Column(verticalArrangement = Arrangement.spacedBy(13.dp)) {
         val ksuActive = state.ksuVersion != null
         val notInstalled = !ksuActive && state.kernelVersion.isGKI()
@@ -256,9 +271,39 @@ private fun StatusCard(
             }
         } else null
 
+        val cardShape = MaterialTheme.shapes.large
+        // The frosted layer sits *behind* the card: it samples the backdrop and
+        // paints a blurred, tinted copy of it. The card itself then goes
+        // transparent so only the blur shows through.
+        val blurLayer: Modifier = if (blurActive) {
+            Modifier.textureBlur(
+                backdrop = cardBackdrop,
+                shape = cardShape,
+                blurRadius = 25f,
+                colors = BlurColors(
+                    blendColors = listOf(
+                        BlendColorEntry(color = containerColor.copy(alpha = 0.75f)),
+                    ),
+                ),
+            )
+        } else {
+            Modifier
+        }
+        Box(modifier = Modifier.fillMaxWidth()) {
+        Box(modifier = blurLayer) {
         Surface(
-            modifier = Modifier.fillMaxWidth(),
-            color = containerColor,
+            modifier = Modifier
+                .fillMaxWidth()
+                .then(
+                    if (blurActive) {
+                        Modifier.layerBackdrop(cardBackdrop)
+                    } else {
+                        Modifier
+                    }
+                ),
+            // With blur on we let the frosted layer do the tinting, so the solid
+            // container colour drops to transparent to avoid double-painting.
+            color = if (blurActive) Color.Transparent else containerColor,
             contentColor = contentColor,
             shape = MaterialTheme.shapes.large,
             onClick = {
@@ -326,6 +371,8 @@ private fun StatusCard(
                     }
                 },
             )
+        }
+        }
         }
     }
 }

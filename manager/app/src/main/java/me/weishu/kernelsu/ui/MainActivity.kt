@@ -90,7 +90,9 @@ import me.weishu.kernelsu.ui.screen.template.AppProfileTemplateScreen
 import me.weishu.kernelsu.ui.screen.templateeditor.TemplateEditorScreen
 import me.weishu.kernelsu.ui.theme.KernelSUTheme
 import me.weishu.kernelsu.ui.theme.LocalColorMode
+import me.weishu.kernelsu.ui.theme.LocalDisablePagerSwipe
 import me.weishu.kernelsu.ui.theme.LocalEnableBlur
+import me.weishu.kernelsu.ui.theme.LocalHomeCardBlur
 import me.weishu.kernelsu.ui.theme.LocalEnableFloatingBottomBar
 import me.weishu.kernelsu.ui.theme.LocalEnableFloatingBottomBarBlur
 import me.weishu.kernelsu.ui.theme.LocalEnableNavigationBadge
@@ -238,6 +240,8 @@ open class MainActivity : ComponentActivity() {
                 LocalEnableFloatingBottomBarBlur provides uiState.enableFloatingBottomBarBlur,
                 LocalEnableNavigationBadge provides uiState.enableNavigationBadge,
                 LocalModuleDescriptionMaxLines provides uiState.moduleDescriptionMaxLines,
+                LocalDisablePagerSwipe provides uiState.disablePagerSwipe,
+                LocalHomeCardBlur provides uiState.homeCardBlur,
                 LocalUiMode provides uiMode,
             ) {
                 KernelSUTheme(appSettings = themeSettings, uiMode = uiMode) {
@@ -352,7 +356,15 @@ fun MainScreen(
         PagerInterceptionMode.Native
     }
     val interceptPagerGestures = pagerMode == PagerInterceptionMode.CrossAxisInterceptor
-    var userScrollEnabled by remember(isFullFeatured) { mutableStateOf(isFullFeatured) }
+    // Swipe between pages is only offered to full-featured builds, and the user
+    // can turn it off entirely (navigation then happens through the bottom bar /
+    // navigation rail, which stays available). The setting comes in through the
+    // pager composable parameter below; reading it here too keeps the gesture
+    // override in step with it.
+    val disablePagerSwipe = LocalDisablePagerSwipe.current
+    var userScrollEnabled by remember(isFullFeatured, disablePagerSwipe) {
+        mutableStateOf(isFullFeatured && !disablePagerSwipe)
+    }
 
     val enableNavigationBadge = LocalEnableNavigationBadge.current
     val badgeEnabled = enableNavigationBadge && isFullFeatured

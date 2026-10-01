@@ -54,6 +54,8 @@ class MainActivityViewModel(
             pagerInterceptionMode = settingRepo.pagerInterceptionMode,
             moduleDescriptionMaxLines = settingRepo.moduleDescriptionMaxLines,
             uiMode = UiMode.fromValue(settingRepo.uiMode),
+            disablePagerSwipe = settingRepo.disablePagerSwipe,
+            homeCardBlur = settingRepo.homeCardBlur,
         )
     }
 
@@ -72,6 +74,8 @@ class MainActivityViewModel(
             "enable_swipe_dismiss",
             "pager_interception_mode",
             "ui_mode",
+            "disable_pager_swipe",
+            "home_card_blur",
         )
     }
 }

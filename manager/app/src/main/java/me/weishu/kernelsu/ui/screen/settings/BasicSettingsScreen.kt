@@ -11,7 +11,9 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.Rule
 import androidx.compose.material.icons.filled.Adb
+import androidx.compose.material.icons.automirrored.filled.Swipe
 import androidx.compose.material.icons.filled.AdminPanelSettings
+import androidx.compose.material.icons.filled.BlurOn
 import androidx.compose.material.icons.filled.DeveloperMode
 import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.LayersClear
@@ -161,6 +163,30 @@ private fun basicRows(uiState: SettingsUiState, viewModel: SettingsViewModel): L
         enabled = uiState.isLateLoadMode,
         checked = uiState.autoJailbreak,
         onCheckedChange = viewModel::setAutoJailbreak,
+    ),
+    BasicRow(
+        icon = Icons.Filled.RestartAlt,
+        title = R.string.settings_pid_reset,
+        summary = stringResource(R.string.settings_pid_reset_summary),
+        enabled = true,
+        checked = uiState.pidResetOnSoftReboot,
+        onCheckedChange = viewModel::setPidResetOnSoftReboot,
+    ),
+    BasicRow(
+        icon = Icons.Filled.BlurOn,
+        title = R.string.settings_home_card_blur,
+        summary = stringResource(R.string.settings_home_card_blur_summary),
+        enabled = true,
+        checked = uiState.homeCardBlur,
+        onCheckedChange = viewModel::setHomeCardBlur,
+    ),
+    BasicRow(
+        icon = Icons.AutoMirrored.Filled.Swipe,
+        title = R.string.settings_disable_pager_swipe,
+        summary = stringResource(R.string.settings_disable_pager_swipe_summary),
+        enabled = true,
+        checked = uiState.disablePagerSwipe,
+        onCheckedChange = viewModel::setDisablePagerSwipe,
     ),
 )
 

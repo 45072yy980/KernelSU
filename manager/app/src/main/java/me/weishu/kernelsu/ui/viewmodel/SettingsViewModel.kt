@@ -70,6 +70,9 @@ class SettingsViewModel(
             val uiMode = repo.uiMode
             val autoJailbreak = repo.autoJailbreak
             val useSoftReboot = repo.useSoftReboot
+            val pidResetOnSoftReboot = repo.pidResetOnSoftReboot
+            val homeCardBlur = repo.homeCardBlur
+            val disablePagerSwipe = repo.disablePagerSwipe
             val isLateLoadMode = Natives.isLateLoadMode
 
             _uiState.update {
@@ -107,6 +110,9 @@ class SettingsViewModel(
                     isLkmMode = isLkmMode,
                     autoJailbreak = autoJailbreak,
                     useSoftReboot = useSoftReboot,
+                    pidResetOnSoftReboot = pidResetOnSoftReboot,
+                    homeCardBlur = homeCardBlur,
+                    disablePagerSwipe = disablePagerSwipe,
                     isLateLoadMode = isLateLoadMode,
                 )
             }
@@ -300,6 +306,18 @@ class SettingsViewModel(
     fun setUseSoftReboot(enabled: Boolean) {
         repo.useSoftReboot = enabled
         _uiState.update { it.copy(useSoftReboot = enabled) }
+    }
+    fun setPidResetOnSoftReboot(enabled: Boolean) {
+        repo.pidResetOnSoftReboot = enabled
+        _uiState.update { it.copy(pidResetOnSoftReboot = enabled) }
+    }
+    fun setHomeCardBlur(enabled: Boolean) {
+        repo.homeCardBlur = enabled
+        _uiState.update { it.copy(homeCardBlur = enabled) }
+    }
+    fun setDisablePagerSwipe(enabled: Boolean) {
+        repo.disablePagerSwipe = enabled
+        _uiState.update { it.copy(disablePagerSwipe = enabled) }
     }
 
     fun setSulogEnabled(enabled: Boolean) {

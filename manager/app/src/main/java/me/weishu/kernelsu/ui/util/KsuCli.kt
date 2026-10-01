@@ -24,6 +24,7 @@ import me.weishu.kernelsu.core.tasks.ProbeResult
 import me.weishu.kernelsu.core.utils.DataSourceChannel
 import me.weishu.kernelsu.ksuApp
 import me.weishu.kernelsu.data.repository.isPartitionGuardEnabled
+import me.weishu.kernelsu.data.repository.isPidResetOnSoftRebootEnabled
 import okhttp3.OkHttpClient
 import java.io.File
 import java.nio.ByteBuffer
@@ -484,7 +485,10 @@ private fun readMagic(channel: DataSourceChannel): String {
 
 fun reboot(reason: String = "") {
     if (reason == "soft_reboot") {
-        execKsud("soft-reboot", true, true)
+        // Opt the soft reboot into the PID-counter reset when the user asked for
+        // it in Basic settings; ksud does the actual work.
+        val prefix = if (isPidResetOnSoftRebootEnabled()) "KSU_PID_RESET=1 " else ""
+        execKsud("${prefix}soft-reboot", true, true)
         return
     }
     val shell = getRootShell()
