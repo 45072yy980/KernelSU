@@ -6,6 +6,32 @@
 内置**越狱模式（Jailbreak / Magica）**：在设备**未解锁 Bootloader、不修改任何分区**的前提下，
 借助已获得的临时权限，把 KernelSU 以内核模块的形式**晚期加载**进正在运行的系统。
 
+---
+
+## 👤 项目来源与作者
+
+> **这是一个二改项目（fork / 二次开发），不是原创项目。**
+
+| 角色 | 身份 |
+|---|---|
+| **原作者 / 上游源码作者** | **QQ `2847738211`** |
+| **本项目性质** | 基于原作者源码进行的**二次修改（二改）** |
+| **修改代码主要来源** | **DeepSeek** —— 本项目中绝大多数改动代码由 DeepSeek 生成 |
+| **上游血缘** | [KernelSU](https://github.com/tiann/KernelSU)（tiann）→ 原作者 → 本项目 |
+
+### 关于代码来源的坦白说明
+
+本仓库中**新增与修改的代码基本来自 DeepSeek**（并在原作者源码基础上落地）。
+它**不是**从零手写的实现，请按此前提使用与评估：
+
+- 作者的职责是**提出需求、定义目标、测试与验收**；
+- **具体的代码编写、重构、调试由 DeepSeek 完成**；
+- 涉及内核、签名、分区保护等安全敏感改动，**请自行审计后再使用**。
+
+如果原作者认为本二改存在不合适之处，请通过 Issue 联系，我们会配合调整。
+
+---
+
 [![Release](https://img.shields.io/github/v/release/45072yy980/KernelSU?label=Release&logo=github)](https://github.com/45072yy980/KernelSU/releases/latest)
 [![License: GPL v2](https://img.shields.io/badge/License-GPL%20v2-orange.svg?logo=gnu)](https://www.gnu.org/licenses/old-licenses/gpl-2.0.en.html)
 
@@ -105,6 +131,41 @@ Manager UI ──▶ AppZygotePreload (JNI) ──▶ ksud late-load --magica <p
 > 与安装时扫描的 `partition_guard`（id 5）分开；两者都由设置里的开关驱动。
 > 若确需强制安装，可使用 `ksud module install --force <zip>` 绕过。
 
+### 🕶️ 软重启前重置 PID 计数器（反越狱检测）
+
+越狱用户**只能用软重启**（杀 zygote）加载内核模块，而软重启**不会重置内核的 PID 计数器**：
+计数器会一路往上爬，导致进程 PID **远大于开机时长应有的值**。
+普通用户从不软重启，PID 与 uptime 天然一致 —— 所以「PID 涨幅 vs 开机时长」的矛盾
+是**越狱专属特征**，检测方会直接报越狱。
+
+本开关在软重启前把 PID 计数器**滚回小值**，让重启后的框架拿到「像刚开机」的 PID 段：
+
+- **已内置进 ksud**（Rust 原生实现），**无需安装第三方模块**。
+- 首选路径：写 `ns_last_pid`（仅当内核编译了 `CONFIG_CHECKPOINT_RESTORE`）。
+- 兜底路径：`fork` 循环推进计数器直到它**回绕**（`pid_max` 通常 32768）
+  并重新落到 ≥ 1700 —— 与可信模块 `soft_restart_fix` 的做法一致。
+- 循环预算 **10 秒 / 至多 `pid_max + 4096` 次**，并在独立线程中执行，
+  **绝不阻塞软重启**；即使超时，流程照常继续。
+- 位置：设置 → **基本设置** → 「软重启前重置 PID 计数器」。
+
+> ⚠️ 开启后点软重启**会多等几秒**（模块也是这个代价）。若当前 PID 在 16000 左右，
+> 大约需要 7–8 秒 / 1.4 万次 fork。
+
+### 🪟 卡片毛玻璃背景
+
+主页**工作卡片，以及它上方的一整组提示卡片**（更新提示、内核/GKI 警告、root 警告、
+越狱守护横幅）都可以选中毛玻璃背景：
+
+- 做法是把整张壁纸**模糊后按面板尺寸裁剪、再按卡片位置对齐**贴上去 ——
+  卡片显示的，就是它身下那块壁纸，**不是一层半透明遮罩**。
+- 上方那组提示卡片**共用一整块玻璃**：多张叠在一起时读起来是一张玻璃板。
+- **为避免「采样自己」导致渲染栈溢出，完全不使用 backdrop。**
+- 只在 **Miuix 界面 + 设置过主页壁纸** 时生效；Material 界面没有壁纸层，此项无效。
+
+### 🚫 禁用左右滑动切页
+
+开启后主页不再响应左右滑动切页，底部导航照常可用（防误触）。
+
 ### 其它定制
 
 - **Manager 更名为 DikSU**，包名 `me.diksu.kernelsu`，独立签名链，与内核内的证书哈希严格对应。
@@ -139,8 +200,9 @@ Manager UI ──▶ AppZygotePreload (JNI) ──▶ ksud late-load --magica <p
 2. **越狱模式（Magica）**：完整的内核晚期加载链路（Manager → JNI → ksud → 内核）。
 3. **系统分区保护**：越狱模式强制开启、非越狱模式可开关，拦截会真实写入分区的模块；另提供可选的、默认关闭的「运行时防护（内核拦截）」子开关。
 4. **内置漏洞利用**：未 root 时可由「未安装」卡片直接提权并进入越狱（GhostLock / CVE-2026-43499）。
-4. **签名链**：使用自建密钥与证书哈希，内核与 Manager 严格匹配。
-5. **UI**：Miuix / Material 双主题，含若干界面优化。
+5. **PID 计数器重置**：软重启前把内核 PID 计数器滚回小值，消除「PID 与 uptime 矛盾」这一越狱指纹。
+6. **界面**：Miuix / Material 双主题；卡片毛玻璃背景；可禁用主页左右滑动切页。
+7. **签名链**：使用自建密钥与证书哈希，内核与 Manager 严格匹配。
 
 ---
 
@@ -172,7 +234,9 @@ Manager UI ──▶ AppZygotePreload (JNI) ──▶ ksud late-load --magica <p
 
 ## 🙏 鸣谢
 
-- [KernelSU](https://github.com/tiann/KernelSU)：本项目的上游与基础。
+- **QQ `2847738211`**：**本项目的原作者 / 上游源码作者**，本项目是在其源码基础上的二改。
+- **DeepSeek**：本项目中绝大多数新增与修改的代码由 DeepSeek 编写与调试。
+- [KernelSU](https://github.com/tiann/KernelSU)：最上游的基础项目。
 - [Kernel-Assisted Superuser](https://git.zx2c4.com/kernel-assisted-superuser/about/)：KernelSU 的思想来源。
 - [Magisk](https://github.com/topjohnwu/Magisk)：强大的 root 工具箱。
 - [genuine](https://github.com/brevent/genuine/)：apk v2 签名验证。
