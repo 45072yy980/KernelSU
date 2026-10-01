@@ -33,8 +33,13 @@ const NS_LAST_PID: &str = "/proc/sys/kernel/ns_last_pid";
 /// so there is plenty of room left for real work.
 const TARGET_PID: i32 = 1700;
 /// Upper bound on the fork-loop fallback, so a stuck counter can never hang a
-/// reboot.
-const FORK_FALLBACK_TIMEOUT: Duration = Duration::from_secs(5);
+/// reboot. In practice the ns_last_pid write above succeeds, so this branch is
+/// a safety net rather than the normal path.
+const FORK_FALLBACK_TIMEOUT: Duration = Duration::from_secs(3);
+/// Hard cap on how many children the fallback will spawn. Advancing the whole
+/// way to TARGET_PID one fork at a time is never worth a long stall, so give up
+/// early and leave the counter wherever it got to: a partial move still helps.
+const FORK_FALLBACK_MAX_ATTEMPTS: u32 = 256;
 
 fn read_current_last_pid() -> Option<i32> {
     fs::read_to_string(NS_LAST_PID)
@@ -61,13 +66,17 @@ fn write_ns_last_pid(target: i32) -> bool {
     }
 }
 
-/// Fork children until the allocator hands out a PID at or past `target`.
-fn fork_until_past(target: i32) -> bool {
+/// Fork children until the allocator hands out a PID at or past `target`, the
+/// attempt cap is hit, or time runs out. Returns whether the target was reached,
+/// plus how many children were spawned (for the log line).
+fn fork_until_past(target: i32) -> (bool, u32) {
     let deadline = Instant::now() + FORK_FALLBACK_TIMEOUT;
     let mut last = 0;
-    while Instant::now() < deadline {
+    let mut attempts: u32 = 0;
+    while attempts < FORK_FALLBACK_MAX_ATTEMPTS && Instant::now() < deadline {
         // SAFETY: the child path only calls `_exit`, which is async-signal-safe.
         let pid = unsafe { libc::fork() };
+        attempts += 1;
         match pid {
             0 => {
                 // Child: leave immediately, no shared state touched.
@@ -79,17 +88,19 @@ fn fork_until_past(target: i32) -> bool {
                 unsafe { libc::waitpid(p, &mut status, 0) };
                 last = p;
                 if p >= target {
-                    return true;
+                    return (true, attempts);
                 }
             }
             _ => {
                 warn!("pid_reset: fork failed while advancing the PID counter");
-                return false;
+                return (false, attempts);
             }
         }
     }
-    warn!("pid_reset: fork fallback timed out at pid {last} (target {target})");
-    false
+    warn!(
+        "pid_reset: fork fallback stopped at pid {last} (target {target}, {attempts} forks)"
+    );
+    (false, attempts)
 }
 
 /// Advance the kernel's PID allocator so freshly started processes do not come
@@ -112,10 +123,13 @@ pub fn reset_pid_counter() {
     }
 
     info!("pid_reset: ns_last_pid not usable, falling back to fork loop");
-    if fork_until_past(TARGET_PID) {
-        info!("pid_reset: PID counter advanced past {TARGET_PID} via fork");
+    let (reached, attempts) = fork_until_past(TARGET_PID);
+    if reached {
+        info!("pid_reset: PID counter reached {TARGET_PID} via fork ({attempts} forks)");
     } else {
-        warn!("pid_reset: could not advance the PID counter");
+        warn!(
+            "pid_reset: PID counter not fully advanced ({attempts} forks); partial move kept"
+        );
     }
 }
 
