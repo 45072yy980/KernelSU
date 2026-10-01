@@ -1,5 +1,6 @@
 package me.weishu.kernelsu.ui.screen.home
 
+import androidx.compose.foundation.layout.requiredSize
 import me.weishu.kernelsu.ui.PanelMetrics
 import kotlin.math.roundToInt
 import androidx.compose.ui.unit.IntSize
