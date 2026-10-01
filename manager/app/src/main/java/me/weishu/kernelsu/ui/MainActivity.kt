@@ -93,6 +93,7 @@ import me.weishu.kernelsu.ui.theme.LocalColorMode
 import me.weishu.kernelsu.ui.theme.LocalDisablePagerSwipe
 import me.weishu.kernelsu.ui.theme.LocalEnableBlur
 import me.weishu.kernelsu.ui.theme.LocalHomeCardBlur
+import me.weishu.kernelsu.ui.theme.LocalCardBackdrop
 import me.weishu.kernelsu.ui.theme.LocalEnableFloatingBottomBar
 import me.weishu.kernelsu.ui.theme.LocalEnableFloatingBottomBarBlur
 import me.weishu.kernelsu.ui.theme.LocalEnableNavigationBadge
@@ -449,7 +450,24 @@ fun MainScreen(
     ) {
         val contentReady = rememberContentReady()
         val pagerContent = @Composable { bottomInnerPadding: Dp ->
-            Box(modifier = if (blurBackdrop != null) Modifier.layerBackdrop(blurBackdrop) else Modifier) {
+            // Backdrop for the home "working" card. It is hosted here, on the node that
+            // wraps the whole pager, so the card samples the wallpaper and the page
+            // panel underneath it instead of a flat colour. It is independent of
+            // enableBlur: the card has its own switch.
+            val cardSurfaceColor = when (uiMode) {
+                UiMode.Material -> MaterialTheme.colorScheme.surface
+                UiMode.Miuix -> MiuixTheme.colorScheme.surface
+            }
+            val cardBackdrop = rememberLayerBackdrop {
+                drawRect(cardSurfaceColor)
+                drawContent()
+            }
+            Box(
+                modifier = Modifier
+                    .then(if (blurBackdrop != null) Modifier.layerBackdrop(blurBackdrop) else Modifier)
+                    .layerBackdrop(cardBackdrop)
+            ) {
+                CompositionLocalProvider(LocalCardBackdrop provides cardBackdrop) {
                 HorizontalPager(
                     modifier = Modifier
                         .pagerGestureOverride(
@@ -484,6 +502,7 @@ fun MainScreen(
                     }
                 }
             }
+        }
         }
 
         if (useNavigationRail) {

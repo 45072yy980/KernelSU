@@ -65,8 +65,6 @@ import androidx.compose.ui.unit.dp
 import top.yukonga.miuix.kmp.blur.BlendColorEntry
 import top.yukonga.miuix.kmp.blur.BlurColors
 import top.yukonga.miuix.kmp.blur.textureBlur
-import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
-import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.blur.LayerBackdrop
 import me.weishu.kernelsu.KernelVersion
 import me.weishu.kernelsu.Natives
@@ -81,6 +79,7 @@ import me.weishu.kernelsu.ui.component.material.expressiveTopAppBarColors
 import me.weishu.kernelsu.ui.component.rebootlistpopup.RebootListPopup
 import me.weishu.kernelsu.ui.component.statustag.StatusTag
 import me.weishu.kernelsu.ui.theme.LocalHomeCardBlur
+import me.weishu.kernelsu.ui.theme.LocalCardBackdrop
 
 @Composable
 fun HomePagerMaterial(
@@ -89,23 +88,14 @@ fun HomePagerMaterial(
     bottomInnerPadding: Dp,
 ) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
-    // Page-level host for the status card frosted glass. The host records what is
-    // drawn under it; the card samples that copy with textureBlur. Host and
-    // consumer must be different nodes (hosting the backdrop inside the card
-    // itself made the blur sample its own output and crash).
-    // Read the colour outside the lambda: the backdrop body is not a @Composable
-    // scope, so MaterialTheme cannot be touched inside it.
-    val cardSurfaceColor = MaterialTheme.colorScheme.surface
-    val cardBackdrop = rememberLayerBackdrop {
-        drawRect(cardSurfaceColor)
-        drawContent()
-    }
+    // The frosted backdrop is hosted by MainActivity above the whole pager, so the
+    // card samples the app background rather than the flat surface of its own page.
+    val cardBackdrop = LocalCardBackdrop.current
 
     ExpressiveScaffold(
         topBar = { TopBar(scrollBehavior = scrollBehavior) },
         contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)
     ) { innerPadding ->
-        Box(modifier = Modifier.layerBackdrop(cardBackdrop)) {
         Column(
             modifier = Modifier
                 .padding(innerPadding)
@@ -166,7 +156,6 @@ fun HomePagerMaterial(
                         WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() else 0.dp
                 )
             )
-        }
         }
     }
 }
