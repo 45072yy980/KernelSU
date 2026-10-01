@@ -642,11 +642,27 @@ private fun JailbreakGuardCard(modifier: Modifier = Modifier) {
     // active, so this tells the user their system partitions are protected.
     // Sits inside the notice glass pane on the home screen, where the pane is the
     // background and this card has to keep off it.
+    //
+    // Over a picture the container tints are the wrong way round: onTertiaryContainer
+    // is a dark brown meant for a pale container, and against a blurred photo it is
+    // unreadable. Over the glass the card borrows the same bright tint and the same
+    // type scale as every other card on the page.
     val glassed = LocalGlassNotice.current
+    val onGlass = glassed
+    val titleColor = if (onGlass) {
+        lerp(colorScheme.primary, Color.White, 0.65f)
+    } else {
+        colorScheme.onTertiaryContainer
+    }
+    val summaryColor = if (onGlass) {
+        lerp(colorScheme.primary, Color.White, 0.8f)
+    } else {
+        colorScheme.onTertiaryContainer.copy(alpha = 0.8f)
+    }
     Card(
         modifier = modifier,
         colors = CardDefaults.defaultColors(
-            color = if (glassed) Color.Transparent else colorScheme.tertiaryContainer,
+            color = if (onGlass) Color.Transparent else colorScheme.tertiaryContainer,
         ),
         showIndication = false,
         pressFeedbackType = PressFeedbackType.Sink,
@@ -663,19 +679,19 @@ private fun JailbreakGuardCard(modifier: Modifier = Modifier) {
                 modifier = Modifier
                     .padding(end = 12.dp)
                     .size(28.dp),
-                tint = colorScheme.onTertiaryContainer,
+                tint = if (onGlass) titleColor else colorScheme.onTertiaryContainer,
             )
             Column {
                 Text(
                     text = stringResource(R.string.jailbreak_guard_running_title),
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = colorScheme.onTertiaryContainer,
+                    fontSize = MiuixTheme.textStyles.headline1.fontSize,
+                    fontWeight = FontWeight.Medium,
+                    color = titleColor,
                 )
                 Text(
                     text = stringResource(R.string.jailbreak_guard_running_summary),
-                    fontSize = 12.sp,
-                    color = colorScheme.onTertiaryContainer.copy(alpha = 0.8f),
+                    fontSize = MiuixTheme.textStyles.body2.fontSize,
+                    color = summaryColor,
                     modifier = Modifier.padding(top = 2.dp),
                 )
             }
