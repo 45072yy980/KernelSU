@@ -248,26 +248,16 @@ fun HomePagerMiuix(
                                 state.showRootWarning ||
                                 state.isLateLoadMode
                         val noticeBlur = LocalHomeCardBlur.current
-                        // Read in composition: onSizeChanged is not a @Composable
-                        // scope, so it cannot touch LocalDensity itself.
-                        val noticeDensity = LocalDensity.current
-                        var noticePaneHeight by remember { mutableStateOf(0.dp) }
                         GlassPane(
                             enabled = noticeBlur,
                             wallpaper = noticeWallpaper,
                             onPositioned = { },
                             cornerRadius = 16.dp,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(noticePaneHeight),
+                            modifier = Modifier.fillMaxWidth(),
                         ) {
                             if (showsNotice) {
                                 Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .onSizeChanged {
-                                            noticePaneHeight = with(noticeDensity) { it.height.toDp() }
-                                        },
+                                    modifier = Modifier.fillMaxWidth(),
                                     verticalArrangement = Arrangement.spacedBy(12.dp),
                                 ) {
                                     // The cards go transparent only when the glass is really
