@@ -7,6 +7,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -53,7 +54,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.BlurredEdgeTreatment
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalUriHandler
@@ -76,11 +80,6 @@ import me.weishu.kernelsu.ui.component.rebootlistpopup.RebootListPopup
 import me.weishu.kernelsu.ui.component.statustag.StatusTag
 import me.weishu.kernelsu.ui.theme.LocalHomeCardBlur
 import me.weishu.kernelsu.ui.util.isBlurSupported
-import top.yukonga.miuix.kmp.blur.BlendColorEntry
-import top.yukonga.miuix.kmp.blur.BlurColors
-import top.yukonga.miuix.kmp.blur.layerBackdrop
-import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
-import top.yukonga.miuix.kmp.blur.textureBlur
 
 @Composable
 fun HomePagerMaterial(
@@ -213,7 +212,6 @@ private fun StatusCard(
     // colour exactly as before. When on, we blur whatever is behind the card.
     val homeCardBlur = LocalHomeCardBlur.current
     val blurActive = homeCardBlur && isBlurSupported()
-    val cardBackdrop = rememberLayerBackdrop { drawRect(Color.Transparent); drawContent() }
 
     Column(verticalArrangement = Arrangement.spacedBy(13.dp)) {
         val ksuActive = state.ksuVersion != null
@@ -272,41 +270,35 @@ private fun StatusCard(
         } else null
 
         val cardShape = MaterialTheme.shapes.large
-        // The frosted layer sits *behind* the card: it samples the backdrop and
-        // paints a blurred, tinted copy of it. The card itself then goes
-        // transparent so only the blur shows through.
-        val blurLayer: Modifier = if (blurActive) {
-            Modifier.textureBlur(
-                backdrop = cardBackdrop,
-                shape = cardShape,
-                blurRadius = 25f,
-                colors = BlurColors(
-                    blendColors = listOf(
-                        BlendColorEntry(color = containerColor.copy(alpha = 0.75f)),
-                    ),
-                ),
-                enabled = true,
-            )
-        } else {
-            Modifier
-        }
+        // Optional frosted look. We blur a soft colour wash drawn *behind* the
+        // card and let the card sit on top, half transparent. Deliberately no
+        // backdrop here: sampling one from inside the card made the blur feed on
+        // its own output and crash the app.
         Box(modifier = Modifier.fillMaxWidth()) {
-        Box(modifier = blurLayer) {
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .then(
-                    if (blurActive) {
-                        Modifier.layerBackdrop(cardBackdrop)
-                    } else {
-                        Modifier
-                    }
-                ),
-            // With blur on we let the frosted layer do the tinting, so the solid
-            // container colour drops to transparent to avoid double-painting.
-            color = if (blurActive) Color.Transparent else containerColor,
-            contentColor = contentColor,
-            shape = MaterialTheme.shapes.large,
+            if (blurActive) {
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .blur(24.dp, edgeTreatment = BlurredEdgeTreatment.Unbounded)
+                        .background(
+                            Brush.linearGradient(
+                                listOf(
+                                    containerColor.copy(alpha = 0.85f),
+                                    containerColor.copy(alpha = 0.55f),
+                                    containerColor.copy(alpha = 0.85f),
+                                ),
+                            ),
+                            shape = cardShape,
+                        ),
+                )
+            }
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                // With blur on the card goes semi-transparent so the frosted wash
+                // shows through; without it, the solid container colour as before.
+                color = if (blurActive) containerColor.copy(alpha = 0.35f) else containerColor,
+                contentColor = contentColor,
+                shape = cardShape,
             onClick = {
                 if (!state.isLateLoadMode) {
                     // Offer the exploit jailbreak or the ordinary install flow.
@@ -372,7 +364,6 @@ private fun StatusCard(
                     }
                 },
             )
-        }
         }
         }
     }

@@ -8,6 +8,7 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
@@ -47,6 +48,9 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.BlurredEdgeTreatment
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -84,10 +88,6 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.blur.LayerBackdrop
 import top.yukonga.miuix.kmp.blur.layerBackdrop
-import top.yukonga.miuix.kmp.blur.BlendColorEntry
-import top.yukonga.miuix.kmp.blur.BlurColors
-import top.yukonga.miuix.kmp.blur.textureBlur
-import top.yukonga.miuix.kmp.blur.rememberLayerBackdrop
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme
@@ -256,7 +256,7 @@ private fun StatusCard(
                 }
                 // Blur is only meaningful when the card has no picture of its own.
                 val statusBlurActive = homeCardBlur && statusImage == null && isBlurSupported()
-                val statusBackdrop = rememberLayerBackdrop { drawRect(Color.Transparent); drawContent() }
+                val statusCardColor = lerp(colorScheme.primaryContainer, colorScheme.primary, 0.35f)
                 // Over a picture the card is nothing but the picture, so the text carries the same
                 // bright tint the info card uses; on the card's own colour it is plain black.
                 val statusTitleColor =
@@ -271,20 +271,14 @@ private fun StatusCard(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .then(
-                                if (statusBlurActive) {
-                                    Modifier.layerBackdrop(statusBackdrop)
-                                } else {
-                                    Modifier
-                                }
-                            ),
+                        modifier = Modifier.fillMaxWidth(),
                         colors = CardDefaults.defaultColors(
                             // Transparent over a picture, with the theme's own tint laid on top of
                             // it below so the card's dark text stays readable on any photo.
                             // Transparent too when the frosted layer paints the background.
-                            color = if (statusImage != null || statusBlurActive) {
+                            color = if (statusBlurActive) {
+                                statusCardColor.copy(alpha = 0.35f)
+                            } else if (statusImage != null) {
                                 Color.Transparent
                             } else {
                                 // Off the theme, never a fixed green: with Monet off the app still has
@@ -305,23 +299,22 @@ private fun StatusCard(
                     ) {
                         Box {
                             if (statusBlurActive) {
+                                // A soft colour wash behind the card, blurred. No
+                                // backdrop: sampling one from inside the card made
+                                // the blur feed on itself and crash the app.
                                 Box(
                                     modifier = Modifier
                                         .matchParentSize()
-                                        .textureBlur(
-                                            backdrop = statusBackdrop,
-                                            // Match the card's own rounding (Miuix cards use a large radius).
-                                            shape = RoundedCornerShape(16.dp),
-                                            blurRadius = 25f,
-                                            colors = BlurColors(
-                                                blendColors = listOf(
-                                                    BlendColorEntry(
-                                                        color = lerp(colorScheme.primaryContainer, colorScheme.primary, 0.35f)
-                                                            .copy(alpha = 0.75f),
-                                                    ),
+                                        .blur(24.dp, edgeTreatment = BlurredEdgeTreatment.Unbounded)
+                                        .background(
+                                            Brush.linearGradient(
+                                                listOf(
+                                                    statusCardColor.copy(alpha = 0.85f),
+                                                    statusCardColor.copy(alpha = 0.55f),
+                                                    statusCardColor.copy(alpha = 0.85f),
                                                 ),
                                             ),
-                                            enabled = true,
+                                            shape = RoundedCornerShape(16.dp),
                                         ),
                                 )
                             }
