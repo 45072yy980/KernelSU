@@ -1,9 +1,15 @@
 //! Built-in equivalent of the standalone `soft_restart_fix` module.
 //!
-//! Why this exists: after a soft reboot the process table is rebuilt from PID 1
-//! upwards, so short-lived processes get small PIDs that look exactly like a
-//! "device just restarted" fingerprint. Some root detectors watch for that.
-//! Rolling the kernel's PID allocator forward before the restart hides it.
+//! Why this exists: a jailbroken device can only load the kernel module by
+//! *soft* rebooting (killing zygote), and a soft reboot never resets the
+//! kernel's PID counter the way a real reboot does. The counter keeps climbing
+//! from wherever it was, so after a while every process carries a PID far larger
+//! than the device's uptime justifies -- and "uptime says hours, PIDs say days"
+//! is a fingerprint ordinary users never produce. Detectors flag it outright.
+//!
+//! The fix is to roll the allocator *back* to a small value just before the
+//! restart, so the framework that comes back up looks like it took the low PIDs
+//! a fresh boot would have handed out.
 //!
 //! Two ways to do it, tried in order:
 //!
@@ -47,7 +53,29 @@ fn read_current_last_pid() -> Option<i32> {
         .and_then(|s| s.trim().parse::<i32>().ok())
 }
 
+/// One fork, returning the PID the kernel handed the child (or `None` on
+/// failure). The child leaves immediately, so this is cheap.
+fn allocate_one_pid() -> Option<i32> {
+    // SAFETY: the child path only calls `_exit`, which is async-signal-safe.
+    let pid = unsafe { libc::fork() };
+    match pid {
+        0 => unsafe { libc::_exit(0) },
+        p if p > 0 => {
+            let mut status = 0;
+            unsafe { libc::waitpid(p, &mut status, 0) };
+            Some(p)
+        }
+        _ => None,
+    }
+}
+
 /// Ask the kernel to award the next PID after `target` by writing ns_last_pid.
+///
+/// The write is verified the way the trusted module does it: by allocating a
+/// real PID and looking at the value, not by reading the file back. Kernels
+/// differ in how they treat the written value (some clamp it to the current
+/// counter, some hand out `value + 1`), and only the allocated PID tells us
+/// what the next process will actually get.
 fn write_ns_last_pid(target: i32) -> bool {
     if !Path::new(NS_LAST_PID).exists() {
         return false;
@@ -59,11 +87,10 @@ fn write_ns_last_pid(target: i32) -> bool {
         return false;
     }
     let _ = file.flush();
-    // Read back: some kernels accept the write but clamp or ignore it.
-    match read_current_last_pid() {
-        Some(v) => v >= target,
-        None => false,
-    }
+    let Some(allocated) = allocate_one_pid() else {
+        return false;
+    };
+    allocated >= target
 }
 
 /// Fork children until the allocator hands out a PID at or past `target`, the
@@ -74,27 +101,14 @@ fn fork_until_past(target: i32) -> (bool, u32) {
     let mut last = 0;
     let mut attempts: u32 = 0;
     while attempts < FORK_FALLBACK_MAX_ATTEMPTS && Instant::now() < deadline {
-        // SAFETY: the child path only calls `_exit`, which is async-signal-safe.
-        let pid = unsafe { libc::fork() };
         attempts += 1;
-        match pid {
-            0 => {
-                // Child: leave immediately, no shared state touched.
-                unsafe { libc::_exit(0) };
-            }
-            p if p > 0 => {
-                // Parent: reap the child so it does not linger as a zombie.
-                let mut status = 0;
-                unsafe { libc::waitpid(p, &mut status, 0) };
-                last = p;
-                if p >= target {
-                    return (true, attempts);
-                }
-            }
-            _ => {
-                warn!("pid_reset: fork failed while advancing the PID counter");
-                return (false, attempts);
-            }
+        let Some(pid) = allocate_one_pid() else {
+            warn!("pid_reset: fork failed while advancing the PID counter");
+            return (false, attempts);
+        };
+        last = pid;
+        if pid >= target {
+            return (true, attempts);
         }
     }
     warn!(

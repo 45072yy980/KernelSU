@@ -166,9 +166,10 @@ pub fn soft_reboot() -> Result<()> {
     if let Err(e) = reset_boot_completed() {
         warn!("reset boot completed failed: {e}");
     }
-    // Advance the PID counter before the process tree is torn down, so the
-    // framework that comes back up does not get the low PIDs a fresh boot would
-    // hand out. This is the built-in replacement for the soft_restart_fix module.
+    // Roll the PID counter back before the process tree is torn down. A soft
+    // reboot leaves it climbing, so without this the framework comes back with
+    // PIDs far above what the uptime suggests -- a jailbreak tell. This is the
+    // built-in replacement for the soft_restart_fix module.
     //
     // Off by default: the Manager sets KSU_PID_RESET=1 only when the user turned
     // the option on, so a plain soft reboot behaves exactly as before.
