@@ -5,7 +5,9 @@ import android.os.Looper
 import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -41,6 +43,7 @@ fun ManagerHiddenRecovery(content: @Composable () -> Unit) {
     var taps by remember { mutableIntStateOf(0) }
     var asking by remember { mutableStateOf(false) }
     var typed by remember { mutableStateOf("") }
+    var wrong by remember { mutableStateOf(false) }
 
     Box(
         modifier = Modifier
@@ -50,6 +53,7 @@ fun ManagerHiddenRecovery(content: @Composable () -> Unit) {
                 if (taps >= 5) {
                     taps = 0
                     typed = ""
+                    wrong = false
                     asking = true
                 }
             },
@@ -60,26 +64,48 @@ fun ManagerHiddenRecovery(content: @Composable () -> Unit) {
     if (asking) {
         AlertDialog(
             onDismissRequest = { asking = false },
-            title = { Text("密码") },
+            title = { Text("解除伪装") },
             text = {
-                OutlinedTextField(
-                    value = typed,
-                    onValueChange = { entry -> typed = entry.filter { it.isDigit() } },
-                    singleLine = true,
-                    visualTransformation = PasswordVisualTransformation(),
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                Column {
+                    Text("输入解除码。忘了的话，在计算器里输入的也是同一个码。")
+                    OutlinedTextField(
+                        value = typed,
+                        onValueChange = { entry ->
+                            typed = entry.filter { it.isDigit() }
+                            wrong = false
+                        },
+                        singleLine = true,
+                        isError = wrong,
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    if (wrong) {
+                        // The old behaviour said nothing at all, which left "wrong code" and
+                        // "nothing happened" looking identical. The code is still not revealed:
+                        // this only says the entry was not it.
+                        Text(
+                            "解除码不对",
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
+                    }
+                }
             },
             confirmButton = {
                 TextButton(onClick = {
-                    asking = false
                     val entry = typed
-                    // Off the main thread: clearing the disguise runs two root commands.
+                    // Off the main thread: this reads the trigger file and may run two root
+                    // commands.
                     Thread {
-                        if (matchesTriggerCode(entry)) {
+                        val ok = matchesTriggerCode(entry)
+                        if (ok) {
                             clearManagerHidden()
-                            Handler(Looper.getMainLooper()).post {
+                        }
+                        Handler(Looper.getMainLooper()).post {
+                            if (ok) {
+                                asking = false
                                 Toast.makeText(context, "已解除", Toast.LENGTH_SHORT).show()
+                            } else {
+                                wrong = true
                             }
                         }
                     }.start()

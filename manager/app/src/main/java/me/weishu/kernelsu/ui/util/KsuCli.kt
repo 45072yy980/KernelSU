@@ -709,8 +709,19 @@ fun matchesTriggerCode(typed: String): Boolean {
     if (clean.isEmpty()) {
         return false
     }
+    return clean == triggerCode()
+}
+
+/**
+ * The code the recovery prompt expects.
+ *
+ * Read from the file the calculator watches, so there is one secret rather than two. The
+ * fallback is what the calculator is built with: a device whose file was never written would
+ * otherwise have no way out at all.
+ */
+fun triggerCode(): String {
     val stored = runCatching {
         ShellUtils.fastCmd(getRootShell(), "cat /data/adb/ksu/webui.trigger 2>/dev/null")
     }.getOrDefault("").filter { it.isDigit() }
-    return clean == stored.ifEmpty { "1234" }
+    return stored.ifEmpty { "1234" }
 }

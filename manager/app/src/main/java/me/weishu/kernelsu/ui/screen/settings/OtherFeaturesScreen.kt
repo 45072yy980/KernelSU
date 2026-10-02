@@ -1,5 +1,6 @@
 package me.weishu.kernelsu.ui.screen.settings
 
+import android.widget.Toast
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -129,6 +130,17 @@ fun OtherFeaturesScreen() {
             stealthEnabled = withContext(Dispatchers.IO) { isStealthEnabled() }
             if (!ok) {
                 stealthEnabled = false
+            }
+            // Say where the way back is, once, at the moment it starts to matter. Turning
+            // stealth on hides this screen along with the rest of the app, so the reminder
+            // has to be given now or not at all. The code itself is not printed: whoever is
+            // looking over a shoulder should not learn it from a toast.
+            if (stealthEnabled) {
+                Toast.makeText(
+                    context,
+                    R.string.settings_stealth_enabled_toast,
+                    Toast.LENGTH_LONG,
+                ).show()
             }
         }
     }

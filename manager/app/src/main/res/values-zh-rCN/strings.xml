@@ -397,6 +397,7 @@
     <string name="settings_runtime_guard_summary">在安装时扫描之外额外加一层：挂钩 openat/openat2/mount/write，实时拦截已获 root 的进程写系统分区。默认关闭；它会挂钩极高频系统调用，理解风险后再开启。</string>
     <string name="settings_stealth">隐身模式（隐藏管理器）</string>
     <string name="settings_stealth_summary">不再上报“装了管理器”和“开机后才加载”。其它进程（包括查 root 的）只会看到一台普通设备。管理器仍保有 root 权限，所以这个开关仍然能关掉；也可以在终端执行 ksud stealth set 0。</string>
+    <string name="settings_stealth_enabled_toast">隐身已开启。如果管理器界面消失，在首页连点 5 下“管理器版本”，输入和计算器相同的那个码即可解除。</string>
     <string name="settings_home_card_blur">状态卡片使用模糊背景</string>
     <string name="settings_home_card_blur_summary">主界面状态卡片以高斯模糊（毛玻璃）渲染背景，替代纯色。若设备不支持模糊渲染，或卡片已设置自定义图片，则此开关无效。</string>
     <string name="settings_disable_pager_swipe">禁用左右滑动切换页面</string>
