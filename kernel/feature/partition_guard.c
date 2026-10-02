@@ -95,6 +95,7 @@ static bool is_protected_block_path(const char *path)
  */
 static bool is_system_mount_target(const char *path)
 {
+    /* clang-format off */
     static const char *const targets[] = {
         "/system",
         "/system_ext",
@@ -110,6 +111,7 @@ static bool is_system_mount_target(const char *path)
         "/my_bigball",
         "/my_manifest",
     };
+    /* clang-format on */
     int i;
 
     if (!path || path[0] != '/')
@@ -241,12 +243,10 @@ long __nocfi ksu_hook_mount(int orig_nr, const struct pt_regs *regs)
         copy_path_from_user((const char __user *)PT_REGS_PARM2(regs), tgt, sizeof(tgt));
 
         if (is_system_mount_target(tgt)) {
-            pr_info("partition_guard: blocked remount rw of %s (src %s)\n",
-                    tgt, src[0] ? src : "?");
+            pr_info("partition_guard: blocked remount rw of %s (src %s)\n", tgt, src[0] ? src : "?");
             return -EACCES;
         }
-        pr_info("partition_guard: allowing remount rw of non-system %s\n",
-                tgt[0] ? tgt : "?");
+        pr_info("partition_guard: allowing remount rw of non-system %s\n", tgt[0] ? tgt : "?");
     }
 
     return ksu_syscall_table[orig_nr](regs);
