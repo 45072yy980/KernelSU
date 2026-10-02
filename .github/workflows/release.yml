@@ -4,6 +4,11 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      auto_publish:
+        description: "Also create the GitHub Release (default: off, publish manually)"
+        type: boolean
+        default: false
 
 jobs:
   build-manager:
@@ -12,7 +17,11 @@ jobs:
   release:
     needs:
       - build-manager
+    # 默认不自动发布：手工发布用 rel 脚本，或 workflow_dispatch 勾 auto_publish
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.auto_publish }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Download artifacts
         uses: actions/download-artifact@v8
