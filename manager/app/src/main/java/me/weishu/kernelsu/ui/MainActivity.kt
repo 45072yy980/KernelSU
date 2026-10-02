@@ -754,7 +754,12 @@ fun MainScreen(
                                         )
                                     },
                                 ) {
-                                    pagerContent(0.dp)
+                                    // The panel already reserves this much below the page, but the
+                                    // page does not know it: its own bottom spacer is what decides
+                                    // how far the last card can be scrolled, and with 0.dp the list
+                                    // simply ran out of room and refused to reach the end. Hand it
+                                    // the same inset the panel is padded by.
+                                    pagerContent(panelInsets.calculateBottomPadding() + 8.dp)
                                 }
                                 // Depth painted straight onto the canvas: one open path down the top,
                                 // around the two rounded corners and along the bottom — the right edge
