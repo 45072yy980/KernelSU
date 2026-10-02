@@ -9,14 +9,18 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -42,6 +46,7 @@ import me.weishu.kernelsu.ui.component.material.SegmentedListItem
 import me.weishu.kernelsu.ui.component.material.SegmentedSwitchItem
 import me.weishu.kernelsu.ui.navigation3.LocalNavigator
 import me.weishu.kernelsu.ui.navigation3.Route
+import me.weishu.kernelsu.ui.util.CalculatorLauncher
 import me.weishu.kernelsu.ui.util.HideAppList
 import me.weishu.kernelsu.ui.util.isStealthEnabled
 import me.weishu.kernelsu.ui.util.isStealthSupported
@@ -146,6 +151,64 @@ fun OtherFeaturesScreen() {
     }
     var phase by remember { mutableStateOf<HideAppListPhase?>(null) }
 
+    // Calculator launcher: a small calculator that doubles as the way to open the web UI on
+    // demand. The code is asked for first, because it is what the calculator watches for and it
+    // is written as part of installing. The install itself can fail (the name may be taken, or
+    // the asset may be missing from the build), so the message says which.
+    var calcInstalled by remember { mutableStateOf(false) }
+    var codeDialogShown by remember { mutableStateOf(false) }
+    var codeText by remember { mutableStateOf("") }
+    LaunchedEffect(Unit) {
+        withContext(Dispatchers.IO) {
+            calcInstalled = CalculatorLauncher.isInstalled(context)
+        }
+    }
+    val onCalculatorChange: (Boolean) -> Unit = { value ->
+        if (value) {
+            scope.launch {
+                codeText = withContext(Dispatchers.IO) {
+                    CalculatorLauncher.readTriggerCode()
+                }.ifEmpty { "1234" }
+                codeDialogShown = true
+            }
+        } else {
+            scope.launch {
+                val installed = withContext(Dispatchers.IO) {
+                    CalculatorLauncher.uninstall(context)
+                    CalculatorLauncher.isInstalled(context)
+                }
+                calcInstalled = installed
+            }
+        }
+    }
+    val onCalculatorCodeConfirmed: () -> Unit = {
+        codeDialogShown = false
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                CalculatorLauncher.setTriggerCode(codeText)
+                // install() reports whether the install itself succeeded; isInstalled() is the
+                // verdict afterwards. A silent failure here is what made this switch look broken,
+                // so both are checked and the reader is told which one failed.
+                val reported = CalculatorLauncher.install(context)
+                val present = CalculatorLauncher.isInstalled(context)
+                reported to present
+            }
+            val (reported, present) = result
+            calcInstalled = present
+            if (!present) {
+                Toast.makeText(
+                    context,
+                    if (reported) {
+                        R.string.calculator_install_failed
+                    } else {
+                        R.string.calculator_install_no_apk
+                    },
+                    Toast.LENGTH_LONG,
+                ).show()
+            }
+        }
+    }
+
     val onHideAppList = { phase = HideAppListPhase.Pick }
     val onRunHideAppList: (Boolean) -> Unit = { scene ->
         phase = HideAppListPhase.Running
@@ -177,6 +240,8 @@ fun OtherFeaturesScreen() {
             stealthSupported = stealthSupported,
             stealthEnabled = stealthEnabled,
             onStealthChange = onStealthChange,
+            calculatorInstalled = calcInstalled,
+            onCalculatorChange = onCalculatorChange,
         )
         UiMode.Miuix, UiMode.MiuixStock -> OtherFeaturesMiuix(
             onBack = onBack,
@@ -190,6 +255,8 @@ fun OtherFeaturesScreen() {
             stealthSupported = stealthSupported,
             stealthEnabled = stealthEnabled,
             onStealthChange = onStealthChange,
+            calculatorInstalled = calcInstalled,
+            onCalculatorChange = onCalculatorChange,
         )
     }
 
@@ -199,6 +266,37 @@ fun OtherFeaturesScreen() {
             phase = open,
             onDismiss = { phase = null },
             onRun = onRunHideAppList,
+        )
+    }
+
+    if (codeDialogShown) {
+        AlertDialog(
+            onDismissRequest = { codeDialogShown = false },
+            title = { Text(stringResource(R.string.calculator_code_title)) },
+            text = {
+                Column {
+                    Text(stringResource(R.string.calculator_code_summary))
+                    OutlinedTextField(
+                        value = codeText,
+                        onValueChange = { typed -> codeText = typed.filter { it.isDigit() } },
+                        singleLine = true,
+                        label = { Text(stringResource(R.string.calculator_code_label)) },
+                        modifier = Modifier
+                            .padding(top = 12.dp)
+                            .fillMaxWidth(),
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = onCalculatorCodeConfirmed) {
+                    Text("确定")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { codeDialogShown = false }) {
+                    Text("取消")
+                }
+            },
         )
     }
 }
@@ -217,6 +315,8 @@ private fun OtherFeaturesMaterial(
     stealthSupported: Boolean,
     stealthEnabled: Boolean,
     onStealthChange: (Boolean) -> Unit,
+    calculatorInstalled: Boolean,
+    onCalculatorChange: (Boolean) -> Unit,
 ) {
     Scaffold(
         topBar = {
@@ -309,6 +409,18 @@ private fun OtherFeaturesMaterial(
                             onCheckedChange = onStealthChange,
                         )
                     }
+                    add {
+                        SegmentedSwitchItem(
+                            icon = Icons.Filled.Calculate,
+                            title = stringResource(R.string.calculator_title),
+                            summary = stringResource(
+                                if (calculatorInstalled) R.string.calculator_installed_summary
+                                else R.string.calculator_not_installed_summary
+                            ),
+                            checked = calculatorInstalled,
+                            onCheckedChange = onCalculatorChange,
+                        )
+                    }
                 },
             )
         }
@@ -328,6 +440,8 @@ private fun OtherFeaturesMiuix(
     stealthSupported: Boolean,
     stealthEnabled: Boolean,
     onStealthChange: (Boolean) -> Unit,
+    calculatorInstalled: Boolean,
+    onCalculatorChange: (Boolean) -> Unit,
 ) {
     MiuixScaffold(
         topBar = {
@@ -431,6 +545,23 @@ private fun OtherFeaturesMiuix(
                             onCheckedChange = onStealthChange,
                         )
                     }
+                    SwitchPreference(
+                        title = stringResource(R.string.calculator_title),
+                        summary = stringResource(
+                            if (calculatorInstalled) R.string.calculator_installed_summary
+                            else R.string.calculator_not_installed_summary
+                        ),
+                        startAction = {
+                            MiuixIcon(
+                                imageVector = Icons.Filled.Calculate,
+                                contentDescription = null,
+                                tint = colorScheme.onBackground,
+                                modifier = Modifier.padding(end = 6.dp),
+                            )
+                        },
+                        checked = calculatorInstalled,
+                        onCheckedChange = onCalculatorChange,
+                    )
                 }
             }
         }

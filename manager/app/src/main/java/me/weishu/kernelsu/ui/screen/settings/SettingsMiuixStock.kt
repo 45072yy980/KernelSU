@@ -39,23 +39,18 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.weishu.kernelsu.R
 import me.weishu.kernelsu.ui.UiMode
 import me.weishu.kernelsu.ui.component.KsuIsValid
-import me.weishu.kernelsu.ui.util.CalculatorLauncher
 import me.weishu.kernelsu.ui.component.dialog.rememberLoadingDialog
 import me.weishu.kernelsu.ui.component.miuix.SendLogDialog
 import me.weishu.kernelsu.ui.component.uninstalldialog.UninstallDialog
@@ -259,111 +254,6 @@ fun SettingPagerMiuixStock(
                             )
                         }
                     }
-
-                    // Calculator: the same on-demand server, reached from a calculator
-                    KsuIsValid {
-                        val scope = rememberCoroutineScope()
-                        val context = LocalContext.current
-                        var calcInstalled by remember { mutableStateOf(false) }
-                        var codeDialogShown by remember { mutableStateOf(false) }
-                        var codeText by remember { mutableStateOf("") }
-                        LaunchedEffect(Unit) {
-                            withContext(Dispatchers.IO) {
-                                calcInstalled = CalculatorLauncher.isInstalled(context)
-                            }
-                        }
-                        Card(
-                            modifier = Modifier
-                                .padding(top = 12.dp)
-                                .fillMaxWidth(),
-                        ) {
-                        SwitchPreference(
-                            title = "计算器启动器",
-                                summary = if (calcInstalled) {
-                                    "已安装。在计算器里输入触发码按 = 即启动网页端；从最近任务划掉就关闭端口"
-                                } else {
-                                    "装一个计算器当入口：输入触发码按 = 启动网页端，不用时端口不监听"
-                                },
-                                startAction = {
-                                    Icon(
-                                        Icons.Rounded.Calculate,
-                                        modifier = Modifier.padding(end = 6.dp),
-                                        contentDescription = "Calculator",
-                                        tint = colorScheme.onBackground
-                                    )
-                                },
-                                checked = calcInstalled,
-                                onCheckedChange = { enabled ->
-                                    if (enabled) {
-                                        // The code is asked for first: it is what the calculator
-                                        // watches for, and it is written as part of installing.
-                                        scope.launch {
-                                            codeText = withContext(Dispatchers.IO) {
-                                                CalculatorLauncher.readTriggerCode()
-                                            }.ifEmpty { "1234" }
-                                            codeDialogShown = true
-                                        }
-                                    } else {
-                                        scope.launch {
-                                            val installed = withContext(Dispatchers.IO) {
-                                                CalculatorLauncher.uninstall(context)
-                                                CalculatorLauncher.isInstalled(context)
-                                            }
-                                            calcInstalled = installed
-                                        }
-                                    }
-                                }
-                            )
-                        }
-
-                        if (codeDialogShown) {
-                            androidx.compose.material3.AlertDialog(
-                                onDismissRequest = { codeDialogShown = false },
-                                title = { androidx.compose.material3.Text("自定义密码") },
-                                text = {
-                                    androidx.compose.foundation.layout.Column {
-                                        androidx.compose.material3.Text(
-                                            "在计算器里输入这串数字再按 = 就会打开网页管理器。只能填数字；留空表示用内置的默认值。"
-                                        )
-                                        androidx.compose.material3.OutlinedTextField(
-                                            value = codeText,
-                                            onValueChange = { typed ->
-                                                codeText = typed.filter { it.isDigit() }
-                                            },
-                                            singleLine = true,
-                                            label = { androidx.compose.material3.Text("密码") },
-                                            modifier = Modifier
-                                                .padding(top = 12.dp)
-                                                .fillMaxWidth(),
-                                        )
-                                    }
-                                },
-                                confirmButton = {
-                                    androidx.compose.material3.TextButton(onClick = {
-                                        codeDialogShown = false
-                                        scope.launch {
-                                            val installed = withContext(Dispatchers.IO) {
-                                                CalculatorLauncher.setTriggerCode(codeText)
-                                                CalculatorLauncher.install(context)
-                                                CalculatorLauncher.isInstalled(context)
-                                            }
-                                            calcInstalled = installed
-                                        }
-                                    }) {
-                                        androidx.compose.material3.Text("确定")
-                                    }
-                                },
-                                dismissButton = {
-                                    androidx.compose.material3.TextButton(onClick = {
-                                        codeDialogShown = false
-                                    }) {
-                                        androidx.compose.material3.Text("取消")
-                                    }
-                                },
-                            )
-                        }
-                    }
-
                     KsuIsValid {
                         Card(
                             modifier = Modifier
