@@ -21,6 +21,8 @@
 - [声明与致谢](#声明与致谢)
 - [License](#license)
 
+> 代码整治的排期与判据见 [`docs/refactor-plan.md`](docs/refactor-plan.md)（**待办，未开始**）。
+
 ---
 
 # 一、这个分支做了什么
