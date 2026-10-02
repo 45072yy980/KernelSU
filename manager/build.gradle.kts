@@ -12,8 +12,6 @@ extra["androidBuildToolsVersion"] = "37.0.0"
 extra["androidCompileNdkVersion"] = libs.versions.ndk.get()
 extra["androidSourceCompatibility"] = JavaVersion.VERSION_21
 extra["androidTargetCompatibility"] = JavaVersion.VERSION_21
-extra["managerVersionCode"] = getVersionCode()
-extra["managerVersionName"] = getVersionName()
 
 fun gitLines(vararg args: String): String {
     val process = Runtime.getRuntime().exec(arrayOf("git") + args)
@@ -72,3 +70,9 @@ fun getVersionName(): String {
     val (major, minor, patch) = parseVersionTag()
     return "$major.$minor.$patch-${getGitShortHash()}"
 }
+
+// Must come last: the version helpers read VERSION_TAG_PATTERN, which is only
+// initialised where it is declared. Reading them from the top of the script
+// would hand a null pattern to find() and fail the build.
+extra["managerVersionCode"] = getVersionCode()
+extra["managerVersionName"] = getVersionName()
