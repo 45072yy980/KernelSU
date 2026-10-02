@@ -2,7 +2,8 @@
 
 # DikSU
 
-- GitHub：https://github.com/wuhudiao/DikSU
+- GitHub：https://github.com/45072yy980/KernelSU
+- Original baseline: https://github.com/wuhudiao/DikSU
 - Telegram：https://t.me/DIKSU66
 - QQ 交流群：`864553367`
 
@@ -101,6 +102,111 @@ KernelSU 答复 Magisk 的 "Hide the App"。因为包名是烘焙进签名 APK �
 - **美化版 UI**：图片 / 视频壁纸背景、玻璃拟态导航与面板、可调背景暗度
 
 ---
+
+---
+
+## Jailbreak mode (Magica / late-load)
+
+**For devices with a locked bootloader: no boot image, no system image, no flashing -- the kernel module is loaded into the running system through an exploit.**
+
+Stock KernelSU asks you to unlock the bootloader and flash a boot image. On plenty of devices that road is closed. This fork takes another one.
+
+### How it works
+
+```
+MagicaService / BootCompletedReceiver
+        |  triggers an app process start
+        v
+AppZygotePreload.doPreload()                 <- Android's ZygotePreload interface
+        |  System.loadLibrary("kernelsu")
+        |  native: forkDontCareAndExecKsud(libksud.so, packageName)
+        v
+fork() a child, then exec ksud
+        |  ksud escalates through a device-specific exploit
+        v
+ksud  insmod kernelsu.ko                     <- the module is loaded right here
+        |  current->pid != 1, so the module knows:
+        v
+ksu_late_loaded == true                      <- we are in jailbreak mode
+```
+
+KernelSU assumes it was loaded during **init** (`pid == 1`), where it can rewrite SELinux policy, take over mounts and install hooks at leisure. **A late load breaks that assumption**: by the time the module appears the system has been up for a while, SELinux is loaded, and many processes are running with stale state.
+
+This fork makes that path work end to end:
+
+| Subsystem | What it does under late load |
+|---|---|
+| `core/init.c` | Detects the load style with `current->pid != 1` and adapts initialisation |
+| `feature/selinux_hide.c` | Checks whether the loader already touched sepolicy, then rebuilds hiding rules for the late-load case |
+| `runtime/ksud_integration.c` | Adjusts the handshake with ksud |
+| `supercall/dispatch.c` | Reports `KSU_GET_INFO_FLAG_LATE_LOAD` so the Manager knows |
+
+### What you see in the app
+
+- The home status card reads **"Working (jailbreak mode)"**
+- A **jailbreak guard card** below it explains that system-partition writes are protected and **a reboot restores everything**
+- Module installs have the parts that would write to a system partition refused
+
+### The trade-off
+
+- Needs a **usable privilege-escalation exploit** on the device
+- **You re-trigger it after every reboot**
+- It never touches **boot or system**, so nothing can be bricked; uninstalling the Manager leaves nothing behind
+
+---
+
+## Partition guard
+
+Jailbreak itself does not modify partitions -- but the root it grants can. So a runtime write guard sits on top of it, in `kernel/feature/partition_guard.c`.
+
+### What it blocks
+
+| Path | Blocked |
+|---|---|
+| `openat` / `openat2` | Opening `/dev/block/*` for **writing** |
+| `mount` | **Remounting** a system partition read-write |
+| `write` / `pwrite64` | Writing through an **already-open** block-device fd |
+
+### What it leaves alone
+
+Loop devices, overlayfs, tmpfs, bind mounts, namespaced mounts, anything under `/data`, `/mnt`, `/sdcard`, and normal module mounting -- **all untouched**.
+
+### Partitions covered
+
+```
+/system  /system_ext  /system_dlkm
+/vendor  /vendor_dlkm
+/product /odm
+/my_product  /my_stock  /my_carrier  /my_region  /my_bigball  /my_manifest
+```
+
+(`/my_*` are the vendor partitions common on Chinese ROMs.)
+
+### Switches
+
+- The top-level switch lives in **Manager settings** and defaults to **on**
+- The runtime interception is a **second switch**, **off by default** -- it hooks `write`, so it has to be enabled deliberately from the UI
+
+A blocked write logs `partition_guard: blocked ...` and returns `-EACCES`. **A reboot puts the partitions back exactly as they were.**
+
+---
+
+## Versioning
+
+No hand-written version numbers. Both sides derive it from the git tag, with the **same formula**:
+
+```
+versionCode = major * 10000 + minor * 1000 + patch * 100 + commits since the tag
+```
+
+| tag | versionCode |
+|---|---|
+| `v3.5.0-diksu` | `35000` |
+| `v3.5.0-diksu` + 1 commit | `35001` |
+| `v3.5.1-diksu` | `35100` |
+| `v4.0.0` | `40000` |
+
+The Manager reads it in `manager/build.gradle.kts`, the kernel in `kernel/Kbuild` (`KSU_VERSION`). Same tag on both sides, so the status card and the about page can no longer disagree.
 
 ## 致谢
 

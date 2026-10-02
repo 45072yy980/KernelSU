@@ -2,7 +2,8 @@
 
 # DikSU
 
-- GitHub：https://github.com/wuhudiao/DikSU
+- GitHub：https://github.com/45072yy980/KernelSU
+- 原基线（感谢原作者）：https://github.com/wuhudiao/DikSU
 - Telegram：https://t.me/DIKSU66
 - QQ 交流群：`864553367`
 
@@ -101,6 +102,111 @@ KernelSU 答复 Magisk 的 "Hide the App"。因为包名是烘焙进签名 APK �
 - **美化版 UI**：图片 / 视频壁纸背景、玻璃拟态导航与面板、可调背景暗度
 
 ---
+
+---
+
+## 越狱模式（Jailbreak / Magica / late-load）
+
+**面向未解锁 Bootloader 设备：不改 boot，不刷 system，靠漏洞把内核模块挂进去。**
+
+官方 KernelSU 要求解锁 BL 并刷入 boot 镜像；对很多设备这条路是堵死的。本分支提供了另一条路。
+
+### 工作原理
+
+```
+MagicaService / BootCompletedReceiver
+        │  触发一次应用进程启动
+        ▼
+AppZygotePreload.doPreload()                 ← Android 的 ZygotePreload 接口
+        │  System.loadLibrary("kernelsu")
+        │  native: forkDontCareAndExecKsud(libksud.so, packageName)
+        ▼
+fork() 出一个子进程，随即 exec ksud
+        │  ksud 利用设备上的提权漏洞拿到 root
+        ▼
+ksud  insmod kernelsu.ko                     ← 内核模块在这一刻被挂载
+        │  此时 current->pid != 1
+        ▼
+ksu_late_loaded == true                      ← 进入「越狱模式」
+```
+
+KernelSU 原本假定自己在 **init 阶段**（`pid == 1`）被加载，因此可以随意改动 SELinux 策略、接管挂载、注册钩子。**late load 破坏了这个假设** —— 模块挂载时系统已运行很久，SELinux 已加载完毕，很多进程已带着旧状态在跑。
+
+本分支把这条链路整个理顺了：
+
+| 子系统 | 在 late load 下做的适配 |
+|---|---|
+| `core/init.c` | 用 `current->pid != 1` 判定加载方式，据此调整初始化流程 |
+| `feature/selinux_hide.c` | 重新加载 sepolicy 前先确认加载器是否动过；按 late-load 场景重建隐藏规则 |
+| `runtime/ksud_integration.c` | 调整与 ksud 的对接时序 |
+| `supercall/dispatch.c` | 上报 `KSU_GET_INFO_FLAG_LATE_LOAD`，让管理器知道当前处于越狱模式 |
+
+### App 里能看到什么
+
+- 首页状态卡片显示 **「工作中（越狱模式）」**
+- 下方有 **越狱守卫卡片**，说明系统分区写入受保护、**重启即还原**
+- 越狱模式下的模块安装会拦掉真正写入分区的部分
+
+### 代价
+
+- 生效依赖设备上存在**可用的提权漏洞**；漏洞被修补后新设备可能不行
+- **重启后需要重新触发一次**
+- 全程**不碰 boot / system**，不存在"刷坏"的风险，卸载管理器即可完全退出
+
+---
+
+## 系统分区保护（Partition Guard）
+
+越狱本身不改分区，但**越狱后拿到的 root 可以改**。于是加了一层运行时分区写保护，代码在 `kernel/feature/partition_guard.c`。
+
+### 拦什么
+
+| 路径 | 拦截内容 |
+|---|---|
+| `openat` / `openat2` | 以**写模式**打开 `/dev/block/*` 原始块设备 |
+| `mount` | 把系统分区**重挂为读写** |
+| `write` / `pwrite64` | 通过**已打开的**块设备 fd 写入 |
+
+### 不拦什么
+
+loop 设备、overlayfs、tmpfs、bind mount、命名空间挂载、`/data` / `/mnt` / `/sdcard` 下的任何操作、正常的模块挂载 —— **全部照旧**。
+
+### 覆盖的分区
+
+```
+/system  /system_ext  /system_dlkm
+/vendor  /vendor_dlkm
+/product /odm
+/my_product  /my_stock  /my_carrier  /my_region  /my_bigball  /my_manifest
+```
+
+（`/my_*` 是国产 ROM 常见的一批厂商分区。）
+
+### 开关
+
+- 顶层开关在**管理器设置**里，默认**开启**
+- 运行时拦截是**第二层开关**，**默认关闭**（挂在 `write` 这种极热系统调用上，需在 UI 里显式确认）
+
+拦截时内核日志打印 `partition_guard: blocked ...`，写入方拿到 `-EACCES`。**重启即回到分区原本的样子。**
+
+---
+
+## 版本号
+
+不再手写，从 git tag 推导，管理器与内核**用同一个公式**：
+
+```
+versionCode = major × 10000 + minor × 1000 + patch × 100 + tag 之后的提交数
+```
+
+| tag | versionCode |
+|---|---|
+| `v3.5.0-diksu` | `35000` |
+| `v3.5.0-diksu` + 1 个提交 | `35001` |
+| `v3.5.1-diksu` | `35100` |
+| `v4.0.0` | `40000` |
+
+管理器在 `manager/build.gradle.kts`，内核在 `kernel/Kbuild`（`KSU_VERSION`）。两边读同一个 tag，因此不会再出现「状态卡片与关于页版本对不上」。
 
 ## 致谢
 
