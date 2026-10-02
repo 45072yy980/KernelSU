@@ -24,10 +24,35 @@ private const val KEY_PARTITION_GUARD = "partition_guard"
 private const val KEY_RUNTIME_GUARD = "runtime_partition_guard"
 private const val KEY_HOME_CARD_BLUR = "home_card_blur"
 private const val KEY_DISABLE_PAGER_SWIPE = "disable_pager_swipe"
+
+private fun settingsPrefs() =
+    ksuApp.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
+
+/**
+ * Prefix for the settings that only mean something to one UI mode.
+ *
+ * The three modes each draw their own colour scheme and their own blur, and a
+ * value picked in one of them says nothing about the other two. They used to
+ * share these keys, so switching modes carried a setting across and the screen
+ * that owned it changed underneath. Each mode now keeps its own copy.
+ *
+ * The prefix is derived from the stored mode rather than from any in-memory
+ * state, so a read never depends on who is asking. `ui_mode` is never itself
+ * prefixed: it has to be one shared value for the app to know which set of the
+ * rest to use.
+ */
+private fun uiPrefix(): String = when (settingsPrefs().getString("ui_mode", UiMode.DEFAULT_VALUE)) {
+    UiMode.Material.value -> "material_"
+    UiMode.MiuixStock.value -> "miuix_stock_"
+    else -> "miuix_"
+}
+
+/** Namespace a mode-specific key for the mode that is currently selected. */
+private fun modeKey(key: String) = uiPrefix() + key
+
 /** Prefer soft reboot: always in jailbreak mode, or when the setting is enabled. */
 fun isSoftRebootPreferred(): Boolean =
-    Natives.isLateLoadMode || ksuApp.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
-        .getBoolean(KEY_USE_SOFT_REBOOT, false)
+    Natives.isLateLoadMode || settingsPrefs().getBoolean(KEY_USE_SOFT_REBOOT, false)
 
 /**
  * Whether the system-partition guard should run for a module install.
@@ -36,16 +61,14 @@ fun isSoftRebootPreferred(): Boolean =
  * real partition write - and optional otherwise, following the user setting.
  */
 fun isPartitionGuardEnabled(): Boolean =
-    Natives.isLateLoadMode || ksuApp.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
-        .getBoolean(KEY_PARTITION_GUARD, false)
+    Natives.isLateLoadMode || settingsPrefs().getBoolean(KEY_PARTITION_GUARD, false)
 
 
 fun setPartitionGuardEnabled(enabled: Boolean) {
     // commit() for the same reason as setRuntimeGuardEnabled(): the settings
     // screen re-reads this right after the call and an async apply() could make
     // the parent switch snap back.
-    ksuApp.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
-        .edit().putBoolean(KEY_PARTITION_GUARD, enabled).commit()
+    settingsPrefs().edit().putBoolean(KEY_PARTITION_GUARD, enabled).commit()
     // Turning the top-level protection off also disables the runtime layer: the
     // child switch is only meaningful while the parent is on.
     if (!enabled) {
@@ -60,14 +83,12 @@ fun setPartitionGuardEnabled(enabled: Boolean) {
  * the kernel. Users enable it deliberately.
  */
 fun isRuntimeGuardEnabled(): Boolean =
-    ksuApp.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
-        .getBoolean(KEY_RUNTIME_GUARD, false)
+    settingsPrefs().getBoolean(KEY_RUNTIME_GUARD, false)
 
 fun setRuntimeGuardEnabled(enabled: Boolean) {
     // commit(), not apply(): the settings screen reads the value back right after
     // this returns, so an async write could make the switch snap back.
-    ksuApp.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
-        .edit().putBoolean(KEY_RUNTIME_GUARD, enabled).commit()
+    settingsPrefs().edit().putBoolean(KEY_RUNTIME_GUARD, enabled).commit()
     // NOTE: pushing the value to the kernel is deliberately left to the caller
     // (the settings screen's LaunchedEffect). Pushing here too would fire the
     // same "ksud feature set" twice per toggle.
@@ -91,22 +112,18 @@ fun syncRuntimeGuardToKernel(enabled: Boolean) {
 
 /** Render the "working" status card on the home page with a blurred (frosted) background. */
 fun isHomeCardBlurEnabled(): Boolean =
-    ksuApp.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
-        .getBoolean(KEY_HOME_CARD_BLUR, false)
+    settingsPrefs().getBoolean(modeKey(KEY_HOME_CARD_BLUR), false)
 
 fun setHomeCardBlurEnabled(enabled: Boolean) {
-    ksuApp.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
-        .edit().putBoolean(KEY_HOME_CARD_BLUR, enabled).commit()
+    settingsPrefs().edit().putBoolean(modeKey(KEY_HOME_CARD_BLUR), enabled).commit()
 }
 
 /** Stop the home pager from following a left/right swipe; navigation stays on the bottom bar. */
 fun isPagerSwipeDisabled(): Boolean =
-    ksuApp.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
-        .getBoolean(KEY_DISABLE_PAGER_SWIPE, false)
+    settingsPrefs().getBoolean(KEY_DISABLE_PAGER_SWIPE, false)
 
 fun setPagerSwipeDisabled(enabled: Boolean) {
-    ksuApp.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
-        .edit().putBoolean(KEY_DISABLE_PAGER_SWIPE, enabled).commit()
+    settingsPrefs().edit().putBoolean(KEY_DISABLE_PAGER_SWIPE, enabled).commit()
 }
 
 class SettingsRepositoryImpl : SettingsRepository {
@@ -117,7 +134,7 @@ class SettingsRepositoryImpl : SettingsRepository {
     }
 
     private val prefs by lazy {
-        ksuApp.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
+        settingsPrefs()
     }
 
     override var uiMode: String
@@ -135,24 +152,24 @@ class SettingsRepositoryImpl : SettingsRepository {
     // Light, not "follow the system": the mode is settled by whether a picture is behind the pages
     // (see withWallpaperMode), and an app with no picture of its own is the light one.
     override var themeMode: Int
-        get() = prefs.getInt("color_mode", 1)
-        set(value) = prefs.edit { putInt("color_mode", value) }
+        get() = prefs.getInt(modeKey("color_mode"), 1)
+        set(value) = prefs.edit { putInt(modeKey("color_mode"), value) }
 
     override var miuixMonet: Boolean
-        get() = prefs.getBoolean("miuix_monet", false)
-        set(value) = prefs.edit { putBoolean("miuix_monet", value) }
+        get() = prefs.getBoolean(modeKey("miuix_monet"), false)
+        set(value) = prefs.edit { putBoolean(modeKey("miuix_monet"), value) }
 
     override var keyColor: Int
-        get() = prefs.getInt("key_color", 0)
-        set(value) = prefs.edit { putInt("key_color", value) }
+        get() = prefs.getInt(modeKey("key_color"), 0)
+        set(value) = prefs.edit { putInt(modeKey("key_color"), value) }
 
     override var colorStyle: String
-        get() = prefs.getString("color_style", PaletteStyle.TonalSpot.name) ?: PaletteStyle.TonalSpot.name
-        set(value) = prefs.edit { putString("color_style", value) }
+        get() = prefs.getString(modeKey("color_style"), PaletteStyle.TonalSpot.name) ?: PaletteStyle.TonalSpot.name
+        set(value) = prefs.edit { putString(modeKey("color_style"), value) }
 
     override var colorSpec: String
-        get() = prefs.getString("color_spec", ColorSpec.SpecVersion.SPEC_2025.name) ?: ColorSpec.SpecVersion.SPEC_2025.name
-        set(value) = prefs.edit { putString("color_spec", value) }
+        get() = prefs.getString(modeKey("color_spec"), ColorSpec.SpecVersion.SPEC_2025.name) ?: ColorSpec.SpecVersion.SPEC_2025.name
+        set(value) = prefs.edit { putString(modeKey("color_spec"), value) }
 
     override var enablePredictiveBack: Boolean
         get() = prefs.getBoolean("enable_predictive_back", false)
@@ -167,16 +184,16 @@ class SettingsRepositoryImpl : SettingsRepository {
         set(value) = prefs.edit { putInt("pager_interception_mode", value.coerceIn(0, 2)) }
 
     override var enableBlur: Boolean
-        get() = prefs.getBoolean("enable_blur", false)
-        set(value) = prefs.edit { putBoolean("enable_blur", value) }
+        get() = prefs.getBoolean(modeKey("enable_blur"), false)
+        set(value) = prefs.edit { putBoolean(modeKey("enable_blur"), value) }
 
     override var enableFloatingBottomBar: Boolean
-        get() = prefs.getBoolean("enable_floating_bottom_bar", false)
-        set(value) = prefs.edit { putBoolean("enable_floating_bottom_bar", value) }
+        get() = prefs.getBoolean(modeKey("enable_floating_bottom_bar"), false)
+        set(value) = prefs.edit { putBoolean(modeKey("enable_floating_bottom_bar"), value) }
 
     override var enableFloatingBottomBarBlur: Boolean
-        get() = prefs.getBoolean("enable_floating_bottom_bar_blur", false)
-        set(value) = prefs.edit { putBoolean("enable_floating_bottom_bar_blur", value) }
+        get() = prefs.getBoolean(modeKey("enable_floating_bottom_bar_blur"), false)
+        set(value) = prefs.edit { putBoolean(modeKey("enable_floating_bottom_bar_blur"), value) }
 
     override var enableNavigationBadge: Boolean
         get() = prefs.getBoolean("enable_navigation_badge", true)
@@ -247,8 +264,8 @@ class SettingsRepositoryImpl : SettingsRepository {
         get() = prefs.getBoolean(KEY_USE_SOFT_REBOOT, false)
         set(value) = prefs.edit { putBoolean(KEY_USE_SOFT_REBOOT, value) }
     override var homeCardBlur: Boolean
-        get() = prefs.getBoolean(KEY_HOME_CARD_BLUR, false)
-        set(value) = prefs.edit { putBoolean(KEY_HOME_CARD_BLUR, value) }
+        get() = prefs.getBoolean(modeKey(KEY_HOME_CARD_BLUR), false)
+        set(value) = prefs.edit { putBoolean(modeKey(KEY_HOME_CARD_BLUR), value) }
     override var disablePagerSwipe: Boolean
         get() = prefs.getBoolean(KEY_DISABLE_PAGER_SWIPE, false)
         set(value) = prefs.edit { putBoolean(KEY_DISABLE_PAGER_SWIPE, value) }

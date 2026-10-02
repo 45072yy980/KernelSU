@@ -82,8 +82,13 @@ fun ColorSpec.SpecVersion.effectiveFor(style: PaletteStyle): ColorSpec.SpecVersi
 object ThemeController {
     fun getAppSettings(repo: SettingsRepository = SettingsRepositoryImpl()): AppSettings {
         val uiMode = repo.uiMode
-        var colorModeValue = repo.themeMode
 
+        // colorMode and miuixMonet say overlapping things: isMonet() is true
+        // exactly when Monet was chosen. Both are kept readable, so a caller
+        // that only flipped the Monet switch still gets a Monet colour mode.
+        // Each UI mode has its own pair now, so this only ever reconciles a
+        // mode with itself and cannot leak a change into another mode.
+        var colorModeValue = repo.themeMode
         if (uiMode != "material") {
             val miuixMonet = repo.miuixMonet
             val colorMode = ColorMode.fromValue(colorModeValue)

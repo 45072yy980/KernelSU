@@ -123,35 +123,16 @@ class SettingsViewModel(
     }
 
     fun setUiMode(mode: String) {
-        val oldMode = repo.uiMode
-        val currentThemeMode = repo.themeMode
-
-        val enteringMiuix = oldMode == "material" && mode != "material"
-        val leavingMiuix = oldMode != "material" && mode == "material"
-        val newThemeMode = when {
-            enteringMiuix -> {
-                val colorMode = ColorMode.fromValue(currentThemeMode)
-                val baseMode = if (colorMode == ColorMode.DARK_AMOLED) 2 else currentThemeMode
-                if (repo.miuixMonet && !colorMode.isMonet) {
-                    ColorMode.fromValue(baseMode).toMonetMode()
-                } else if (!repo.miuixMonet && colorMode.isMonet) {
-                    ColorMode.fromValue(baseMode).toNonMonetMode()
-                } else baseMode
-            }
-
-            leavingMiuix -> {
-                val colorMode = ColorMode.fromValue(currentThemeMode)
-                if (colorMode.isMonet) {
-                    colorMode.toNonMonetMode()
-                } else currentThemeMode
-            }
-
-            else -> currentThemeMode
-        }
-
+        // Nothing to carry over any more. Colour mode, Monet, blur and the
+        // others each live in a per-mode namespace now, so the mode being left
+        // keeps its settings and the mode being entered still has its own from
+        // last time. This used to nudge themeMode as it went, which is what
+        // made a change in one mode show up in another.
         repo.uiMode = mode
-        repo.themeMode = newThemeMode
-        _uiState.update { it.copy(uiMode = mode, themeMode = newThemeMode) }
+        // Re-read the whole set, because every mode-specific key has just
+        // changed namespace: what the UI holds now belongs to the mode that
+        // was left, and would show the wrong switches until the next visit.
+        refresh()
     }
 
     fun setCheckModuleUpdate(enabled: Boolean) {
@@ -162,7 +143,10 @@ class SettingsViewModel(
     fun setThemeMode(mode: Int) {
         val currentUiMode = repo.uiMode
         val effectiveMode = if (currentUiMode != "material" && _uiState.value.miuixMonet) {
-            mode + 3
+            // Keep the Monet variant of the same brightness. Adding 3 is right
+            // for SYSTEM/LIGHT/DARK (0/1/2 -> 3/4/5) but wrong for DARK_AMOLED
+            // (6), which has no Monet counterpart; that one is left as it is.
+            ColorMode.fromValue(mode).let { if (it.isMonet || it.isAmoled) mode else mode + 3 }
         } else {
             mode
         }
@@ -171,8 +155,11 @@ class SettingsViewModel(
     }
 
     fun setColorMode(mode: ColorMode) {
+        // Choosing Monet (or not) here has to move the Monet switch with it, or
+        // the two disagree and the next theme read quietly undoes the choice.
         repo.themeMode = mode.value
-        _uiState.update { it.copy(themeMode = mode.value) }
+        repo.miuixMonet = mode.isMonet
+        _uiState.update { it.copy(themeMode = mode.value, miuixMonet = mode.isMonet) }
     }
 
     fun setMiuixMonet(enabled: Boolean) {
