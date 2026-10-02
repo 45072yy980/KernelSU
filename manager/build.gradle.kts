@@ -26,10 +26,12 @@ fun getGitDescribe(): String {
 }
 
 fun getVersionCode(): Int {
-    val commitCount = getGitCommitCount()
-    return 30000 + commitCount
+    // 换用 wuhudiao/DikSU 作为基线后，本仓库的 git 历史很浅（rev-list 只数到 10 左右），
+    // 继续用 `30000 + commitCount` 会让 versionCode 反过来低于 v3.4.x 的 62668~62707，
+    // 已装旧版的设备会 INSTALL_FAILED_VERSION_DOWNGRADE。这里改成固定的发布号。
+    // 约定：34500=v3.5.0，之后 34501、34502… 依次递增；换大版本再用 34600/34700…
+    return 34500
 }
-
 fun getVersionName(): String {
     return getGitDescribe()
 }
