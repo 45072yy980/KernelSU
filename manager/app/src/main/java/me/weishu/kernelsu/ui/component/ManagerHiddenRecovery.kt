@@ -21,6 +21,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.unit.dp
 import me.weishu.kernelsu.ui.util.clearManagerHidden
 import me.weishu.kernelsu.ui.util.matchesTriggerCode
 
@@ -32,7 +33,8 @@ import me.weishu.kernelsu.ui.util.matchesTriggerCode
  * row on the version row opens a code prompt; the right code turns both disguises off.
  *
  * The code comes first because five taps is a gesture anyone holding the phone could make and the
- * code is not. A wrong code does nothing and says nothing.
+ * code is not. A wrong code marks the field and says so; it is never printed anywhere, including
+ * in the toast that announces stealth mode, so a glance over the shoulder learns nothing.
  *
  * This used to live inline in the stock miuix home screen only, which meant a reader who had
  * picked either of the other two skins had no way out at all.
