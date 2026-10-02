@@ -117,10 +117,34 @@ endif
 
 # Calculate version if git version is available
 ifdef KSU_GIT_VERSION_VALID
-# ksu_version: major * 10000 + git version + 200 for historical reasons
-$(eval KSU_VERSION=$(shell expr 30000 + $(KSU_GIT_VERSION)))
+# The version comes from the release tag, not the commit count: this tree is a
+# shallow fork, so `rev-list --count HEAD` sits at a handful while the history it
+# was cut from runs into the tens of thousands. Counting from a tag keeps the
+# number moving forward and matches what manager/build.gradle.kts computes, so
+# the kernel and the manager always report the same release.
+#
+#     v3.5.0-diksu             -> 35000
+#     v3.5.0-diksu + 4 commits -> 35004
+#     v3.5.1-diksu             -> 35100
+KSU_TAG := $(shell cd $(GIT_ROOT) && $(GIT) describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null)
+KSU_TAG_NUMBERS := $(shell echo '$(KSU_TAG)' | sed -n 's/^v\([0-9][0-9]*\)\.\([0-9][0-9]*\)\.\([0-9][0-9]*\).*/\1 \2 \3/p')
+ifneq ($(KSU_TAG_NUMBERS),)
+KSU_TAG_MAJOR := $(word 1,$(KSU_TAG_NUMBERS))
+KSU_TAG_MINOR := $(word 2,$(KSU_TAG_NUMBERS))
+KSU_TAG_PATCH := $(word 3,$(KSU_TAG_NUMBERS))
+KSU_COMMITS_AFTER_TAG := $(shell cd $(GIT_ROOT) && $(GIT) rev-list --count '$(KSU_TAG)'..HEAD 2>/dev/null)
+# Arithmetic through the shell's own $(( )) so no bare `*` ever reaches a glob.
+KSU_VERSION := $(shell echo $$(( $(KSU_TAG_MAJOR) * 10000 + $(KSU_TAG_MINOR) * 1000 + $(KSU_TAG_PATCH) * 100 + $(KSU_COMMITS_AFTER_TAG) )))
+$(info -- KernelSU version: $(KSU_VERSION) (from tag $(KSU_TAG) + $(KSU_COMMITS_AFTER_TAG) commits))
+ccflags-y += -DKSU_VERSION=$(KSU_VERSION)
+else
+# No usable tag: fall back to the plain commit count so a local build still
+# produces something, and say so loudly.
+$(warning "KernelSU: no v<major>.<minor>.<patch> tag found, falling back to 30000 + commit count!")
+$(eval KSU_VERSION=$(shell echo $$(( 30000 + $(KSU_GIT_VERSION) ))))
 $(info -- KernelSU version: $(KSU_VERSION))
 ccflags-y += -DKSU_VERSION=$(KSU_VERSION)
+endif
 else
 # If there is no .git directory, use default version
 $(warning "KSU_GIT_VERSION not defined! It is better to make KernelSU a git repository!")

@@ -34,6 +34,11 @@ jobs:
     steps:
     - name: Checkout source code
       uses: actions/checkout@v7
+      with:
+        # The kernel version comes from the release tag (see kernel/Kbuild), so
+        # the tag and the commits after it have to be present. The default
+        # depth of one leaves the tree with no tags at all.
+        fetch-depth: 0
 
     - name: Build kernelsu.ko
       env:

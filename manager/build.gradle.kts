@@ -15,23 +15,60 @@ extra["androidTargetCompatibility"] = JavaVersion.VERSION_21
 extra["managerVersionCode"] = getVersionCode()
 extra["managerVersionName"] = getVersionName()
 
-fun getGitCommitCount(): Int {
-    val process = Runtime.getRuntime().exec(arrayOf("git", "rev-list", "--count", "HEAD"))
-    return process.inputStream.bufferedReader().use { it.readText().trim().toInt() }
+fun gitLines(vararg args: String): String {
+    val process = Runtime.getRuntime().exec(arrayOf("git") + args)
+    val out = process.inputStream.bufferedReader().use { it.readText().trim() }
+    process.waitFor()
+    return out
 }
 
-fun getGitDescribe(): String {
-    val process = Runtime.getRuntime().exec(arrayOf("git", "describe", "--tags", "--always"))
-    return process.inputStream.bufferedReader().use { it.readText().trim() }
+// The version lives in the tags, not in the commit count. This repository is a
+// shallow fork -- `rev-list --count HEAD` sees a handful of commits, while the
+// KernelSU history it was cut from has tens of thousands -- so an offset-based
+// number would slide backwards and every install would be refused as a
+// downgrade. A tag names the release explicitly and the commits after it are
+// counted on top, which keeps the number moving forward without ever needing a
+// hand-written constant:
+//
+//     v3.5.0-diksu             -> 3*10000 + 5*1000 + 0*100 = 35000
+//     v3.5.0-diksu + 4 commits -> 35004
+//     v3.5.1-diksu             -> 35100
+//     v4.0.0                   -> 40000
+//
+// The kernel derives KSU_VERSION from this very same tag (see kernel/Kbuild),
+// so the number the manager reports and the number the kernel reports agree.
+private val VERSION_TAG_PATTERN = Regex("""^v(\d+)\.(\d+)\.(\d+)""")
+
+fun getGitTag(): String = gitLines("describe", "--tags", "--abbrev=0", "--match", "v[0-9]*")
+
+fun getGitCommitCount(): Int {
+    return gitLines("rev-list", "--count", "HEAD").toInt()
+}
+
+// How many commits sit on top of the nearest version tag.
+fun getCommitsSinceTag(): Int {
+    val tag = getGitTag()
+    if (tag.isEmpty()) return 0
+    return gitLines("rev-list", "--count", "$tag..HEAD").toInt()
+}
+
+// The short hash of HEAD, for the version name only.
+fun getGitShortHash(): String = gitLines("rev-parse", "--short=9", "HEAD")
+
+private fun parseVersionTag(): Triple<Int, Int, Int> {
+    val tag = getGitTag()
+    val m = VERSION_TAG_PATTERN.find(tag)
+        ?: error("No version tag found. Tag the release first, e.g. `git tag v3.5.0-diksu`.")
+    val (major, minor, patch) = m.destructured
+    return Triple(major.toInt(), minor.toInt(), patch.toInt())
 }
 
 fun getVersionCode(): Int {
-    // 换用 wuhudiao/DikSU 作为基线后，本仓库的 git 历史很浅（rev-list 只数到 10 左右），
-    // 继续用 `30000 + commitCount` 会让 versionCode 反过来低于 v3.4.x 的 62668~62707，
-    // 已装旧版的设备会 INSTALL_FAILED_VERSION_DOWNGRADE。这里改成固定的发布号。
-    // 约定：34500=v3.5.0，之后 34501、34502… 依次递增；换大版本再用 34600/34700…
-    return 34500
+    val (major, minor, patch) = parseVersionTag()
+    return major * 10000 + minor * 1000 + patch * 100 + getCommitsSinceTag()
 }
+
 fun getVersionName(): String {
-    return getGitDescribe()
+    val (major, minor, patch) = parseVersionTag()
+    return "$major.$minor.$patch-${getGitShortHash()}"
 }
