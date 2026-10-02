@@ -169,3 +169,14 @@ val LocalHomeCardBlur = staticCompositionLocalOf { false }
  * [LocalHomeCardBlur] -- the setting can be on while some card is elsewhere.
  */
 val LocalGlassNotice = staticCompositionLocalOf { false }
+
+/**
+ * The picture a frosted notice card should sample its backdrop from, or null
+ * when there is nothing to blur and the card must keep its own opaque face.
+ *
+ * The home screen owns the wallpaper, but the cards that need it are shared
+ * components, so the bitmap travels down through this local instead of every
+ * card reaching back for it. Null is the safe default: a card rendered outside
+ * the home notice area then simply behaves as before.
+ */
+val LocalGlassWallpaper = staticCompositionLocalOf<androidx.compose.ui.graphics.ImageBitmap?> { null }

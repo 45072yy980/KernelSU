@@ -396,7 +396,12 @@ fun MainScreen(
         PagerInterceptionMode.Native
     }
     val interceptPagerGestures = pagerMode == PagerInterceptionMode.CrossAxisInterceptor
-    var userScrollEnabled by remember(isFullFeatured) { mutableStateOf(isFullFeatured) }
+    // The "disable pager swipe" switch: read it here and fold it into the pager's
+    // scroll flag, otherwise the setting is stored and provided but never acted on.
+    val disablePagerSwipe = LocalDisablePagerSwipe.current
+    var userScrollEnabled by remember(isFullFeatured, disablePagerSwipe) {
+        mutableStateOf(isFullFeatured && !disablePagerSwipe)
+    }
 
     val enableNavigationBadge = LocalEnableNavigationBadge.current
     val badgeEnabled = enableNavigationBadge && isFullFeatured

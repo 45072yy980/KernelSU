@@ -86,6 +86,7 @@ import me.weishu.kernelsu.Natives
 import me.weishu.kernelsu.R
 import me.weishu.kernelsu.ui.theme.LocalHomeCardBlur
 import me.weishu.kernelsu.ui.theme.LocalGlassNotice
+import me.weishu.kernelsu.ui.theme.LocalGlassWallpaper
 import me.weishu.kernelsu.ui.PanelMetrics
 import me.weishu.kernelsu.ui.component.WarningLevel
 import me.weishu.kernelsu.ui.component.dialog.rememberConfirmDialog
@@ -156,11 +157,27 @@ fun HomePagerMiuix(
                 overscrollEffect = null,
             ) {
                 item {
+                    // The notice cards are the same frosted panes as the status card below
+                    // them, so they sample the very same wallpaper: read it here, once, and
+                    // hand it down through LocalGlassWallpaper. When there is nothing to
+                    // blur -- the switch is off, or no wallpaper is set -- glassed stays
+                    // false and every card keeps its own tinted face.
+                    val noticeContext = LocalContext.current
+                    val noticeVersion = HomeWallpaperStore.version
+                    val noticeWallpaper = remember(noticeContext, noticeVersion) {
+                        HomeWallpaperStore.load(HomeWallpaperStore.file(noticeContext))
+                    }
+                    val noticeBlur = LocalHomeCardBlur.current
+                    val noticeGlassed = noticeBlur && noticeWallpaper != null
                     Column(
                         modifier = Modifier.padding(top = 12.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
+                        CompositionLocalProvider(
+                            LocalGlassNotice provides noticeGlassed,
+                            LocalGlassWallpaper provides if (noticeGlassed) noticeWallpaper else null,
+                        ) {
                         if (state.checkUpdateEnabled) {
                             UpdateCard(state = state, actions = actions)
                         }
@@ -199,6 +216,7 @@ fun HomePagerMiuix(
                         }
                         if (state.isLateLoadMode) {
                             JailbreakGuardCard(modifier = Modifier.fillMaxWidth())
+                        }
                         }
                         StatusCard(
                             state = state,
@@ -872,6 +890,11 @@ private fun JailbreakGuardCard(modifier: Modifier = Modifier) {
     // type scale as every other card on the page.
     val glassed = LocalGlassNotice.current
     val onGlass = glassed
+    // Same frosted face as the notice cards: sample the page's wallpaper, blur it
+    // and dim it, so this banner is a pane of the page rather than a tint on top
+    // of it. Null wallpaper means there is nothing to blur and the card keeps the
+    // opaque tertiary container.
+    val guardWallpaper = LocalGlassWallpaper.current
     val titleColor = if (onGlass) {
         lerp(colorScheme.primary, Color.White, 0.65f)
     } else {
@@ -882,41 +905,93 @@ private fun JailbreakGuardCard(modifier: Modifier = Modifier) {
     } else {
         colorScheme.onTertiaryContainer.copy(alpha = 0.8f)
     }
-    Card(
-        modifier = modifier,
-        colors = CardDefaults.defaultColors(
-            color = if (onGlass) Color.Transparent else colorScheme.tertiaryContainer,
-        ),
-        showIndication = false,
-        pressFeedbackType = PressFeedbackType.Sink,
+    val guardShape = RoundedCornerShape(16.dp)
+    var guardWindowPos by remember { mutableStateOf(Offset.Zero) }
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .onGloballyPositioned { coords -> guardWindowPos = coords.positionInWindow() }
+            .shadow(8.dp, guardShape, clip = true)
+            .background(
+                color = if (onGlass) Color.Transparent else colorScheme.tertiaryContainer,
+                shape = guardShape,
+            ),
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
+        if (onGlass && guardWallpaper != null) {
+            val panelSize = PanelMetrics.size.value
+            val panelPos = PanelMetrics.pos.value
+            val cardPos = guardWindowPos
+            if (panelSize != IntSize.Zero) {
+                val guardDensity = LocalDensity.current
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .clip(guardShape)
+                ) {
+                    Image(
+                        bitmap = guardWallpaper,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .requiredSize(
+                                with(guardDensity) { (panelSize.width + 96).toDp() },
+                                with(guardDensity) { panelSize.height.toDp() },
+                            )
+                            .blur(16.dp)
+                            .offset {
+                                IntOffset(
+                                    panelPos.x.roundToInt() - cardPos.x.roundToInt()
+                                        - 48
+                                        + with(guardDensity) { GlassNudge.x.floatValue.dp.toPx() }.roundToInt(),
+                                    panelPos.y.roundToInt() - cardPos.y.roundToInt()
+                                        + with(guardDensity) { GlassNudge.y.floatValue.dp.toPx() }.roundToInt(),
+                                )
+                            },
+                    )
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .background(Color.Black.copy(alpha = 0.28f)),
+                    )
+                }
+            }
+        }
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.defaultColors(
+                color = Color.Transparent,
+            ),
+            showIndication = false,
+            pressFeedbackType = PressFeedbackType.Sink,
         ) {
-            Icon(
-                imageVector = Icons.Filled.Security,
-                contentDescription = null,
+            Row(
                 modifier = Modifier
-                    .padding(end = 12.dp)
-                    .size(28.dp),
-                tint = if (onGlass) titleColor else colorScheme.onTertiaryContainer,
-            )
-            Column {
-                Text(
-                    text = stringResource(R.string.jailbreak_guard_running_title),
-                    fontSize = MiuixTheme.textStyles.headline1.fontSize,
-                    fontWeight = FontWeight.Medium,
-                    color = titleColor,
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Security,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .padding(end = 12.dp)
+                        .size(28.dp),
+                    tint = if (onGlass) titleColor else colorScheme.onTertiaryContainer,
                 )
-                Text(
-                    text = stringResource(R.string.jailbreak_guard_running_summary),
-                    fontSize = MiuixTheme.textStyles.body2.fontSize,
-                    color = summaryColor,
-                    modifier = Modifier.padding(top = 2.dp),
-                )
+                Column {
+                    Text(
+                        text = stringResource(R.string.jailbreak_guard_running_title),
+                        fontSize = MiuixTheme.textStyles.headline1.fontSize,
+                        fontWeight = FontWeight.Medium,
+                        color = titleColor,
+                    )
+                    Text(
+                        text = stringResource(R.string.jailbreak_guard_running_summary),
+                        fontSize = MiuixTheme.textStyles.body2.fontSize,
+                        color = summaryColor,
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
+                }
             }
         }
     }
