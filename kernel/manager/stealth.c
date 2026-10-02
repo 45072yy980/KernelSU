@@ -88,8 +88,7 @@ void ksu_stealth_load(void)
     ksu_stealth_enabled = (kernel_read(fp, &c, 1, &pos) == 1 && c == '1');
     filp_close(fp, NULL);
 
-    pr_info("stealth: loaded, %s\n",
-        ksu_stealth_enabled ? "enabled" : "disabled");
+    pr_info("stealth: loaded, %s\n", ksu_stealth_enabled ? "enabled" : "disabled");
 }
 
 bool ksu_stealth_is_enabled(void)

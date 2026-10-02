@@ -1,4 +1,3 @@
-
 #![allow(clippy::all, clippy::pedantic, clippy::nursery)]
 
 use std::fs;
@@ -112,7 +111,9 @@ pub fn default_google_scoop() -> Vec<String> {
     parse_scoop(&text)
         .unwrap_or_default()
         .into_iter()
-        .filter(|package| package.starts_with("com.google.") || package.starts_with("com.android.vending"))
+        .filter(|package| {
+            package.starts_with("com.google.") || package.starts_with("com.android.vending")
+        })
         .collect()
 }
 
@@ -291,12 +292,22 @@ pub fn set_scoop(text: &str, packages: &[String]) -> Result<String> {
         let line = text[..open].rsplit('\n').next().unwrap_or("");
         let indent = line.len() - line.trim_start().len();
         let pad = " ".repeat(indent + 2);
-        format!("\n{}{}\n{}", pad, quoted.join(&format!(",\n{pad}")), " ".repeat(indent))
+        format!(
+            "\n{}{}\n{}",
+            pad,
+            quoted.join(&format!(",\n{pad}")),
+            " ".repeat(indent)
+        )
     } else {
         quoted.join(", ")
     };
 
-    Ok(format!("{}[{}]{}", &text[..open], inner, &text[close + 1..]))
+    Ok(format!(
+        "{}[{}]{}",
+        &text[..open],
+        inner,
+        &text[close + 1..]
+    ))
 }
 
 fn find_scoop_array(text: &str) -> Option<(usize, usize)> {
@@ -373,7 +384,10 @@ fn matching_bracket(text: &str, open: usize) -> Option<usize> {
 
 pub fn config_summary(text: &str) -> Result<(i64, String)> {
     let value: toml::Value = toml::from_str(text).context("config.toml 不是合法的 TOML")?;
-    let version = value.get("version").and_then(toml::Value::as_integer).unwrap_or(0);
+    let version = value
+        .get("version")
+        .and_then(toml::Value::as_integer)
+        .unwrap_or(0);
     let log_level = value
         .get("main")
         .and_then(|main| main.get("log_level"))
@@ -485,7 +499,10 @@ pub fn status() -> Result<KeymintStatus> {
         injector_log_level,
         fix_props: fix_props_enabled(),
         log_levels: LOG_LEVELS.iter().map(|l| (*l).to_string()).collect(),
-        injector_log_levels: INJECTOR_LOG_LEVELS.iter().map(|l| (*l).to_string()).collect(),
+        injector_log_levels: INJECTOR_LOG_LEVELS
+            .iter()
+            .map(|l| (*l).to_string())
+            .collect(),
         default_google_scoop: default_google_scoop(),
     })
 }
@@ -510,7 +527,11 @@ pub fn save_log_level(which: Which, level: &str) -> Result<()> {
     let mut replaced = false;
     for line in text.split_inclusive('\n') {
         let trimmed = line.trim_start();
-        if !replaced && !trimmed.starts_with('#') && trimmed.starts_with("log_level") && trimmed.contains('=') {
+        if !replaced
+            && !trimmed.starts_with('#')
+            && trimmed.starts_with("log_level")
+            && trimmed.contains('=')
+        {
             let indent: String = line.chars().take_while(|c| c.is_whitespace()).collect();
             let newline = if line.ends_with('\n') { "\n" } else { "" };
             out.push_str(&format!("{indent}log_level = \"{level}\"{newline}"));
@@ -550,8 +571,7 @@ pub fn apply_keybox(source: &str) -> Result<()> {
     if !from.is_file() {
         anyhow::bail!("不是文件：{source}");
     }
-    let content =
-        fs::read_to_string(from).with_context(|| format!("读取 {source} 失败"))?;
+    let content = fs::read_to_string(from).with_context(|| format!("读取 {source} 失败"))?;
     if !looks_like_keybox(&content) {
         anyhow::bail!("这个文件不是有效的 keybox.xml：缺少 <AndroidAttestation> 或 <PrivateKey>");
     }
@@ -605,7 +625,10 @@ attestation = true
 
     fn assert_keys(json: &serde_json::Value, keys: &[&str]) {
         for key in keys {
-            assert!(json.get(key).is_some(), "the panel reads `{key}`, which is missing");
+            assert!(
+                json.get(key).is_some(),
+                "the panel reads `{key}`, which is missing"
+            );
         }
     }
 
@@ -630,17 +653,36 @@ attestation = true
             fix_props: false,
             injector_log_level: String::new(),
             log_levels: LOG_LEVELS.iter().map(|l| (*l).to_string()).collect(),
-            injector_log_levels: INJECTOR_LOG_LEVELS.iter().map(|l| (*l).to_string()).collect(),
+            injector_log_levels: INJECTOR_LOG_LEVELS
+                .iter()
+                .map(|l| (*l).to_string())
+                .collect(),
             default_google_scoop: Vec::new(),
         })
         .expect("serialize");
         assert_keys(
             &json,
             &[
-                "installed", "version", "enabled", "configDir", "stateDir", "configFile",
-                "injectorFile", "keyboxFile", "keyboxSize", "keymintRunning", "injectorRunning",
-                "scoopCount", "scoop", "logLevel", "configVersion", "logLevels",
-                "defaultGoogleScoop", "fixProps", "injectorLogLevel", "injectorLogLevels",
+                "installed",
+                "version",
+                "enabled",
+                "configDir",
+                "stateDir",
+                "configFile",
+                "injectorFile",
+                "keyboxFile",
+                "keyboxSize",
+                "keymintRunning",
+                "injectorRunning",
+                "scoopCount",
+                "scoop",
+                "logLevel",
+                "configVersion",
+                "logLevels",
+                "defaultGoogleScoop",
+                "fixProps",
+                "injectorLogLevel",
+                "injectorLogLevels",
             ],
         );
         assert_keys(&json["configFile"], &["exists", "size", "error"]);
@@ -654,8 +696,12 @@ attestation = true
         let dir = std::env::temp_dir().join(format!("ksu-keymint-fs-{}", std::process::id()));
         let _ = fs::create_dir_all(&dir);
         let file = dir.join("config.toml");
-        fs::write(&file, b"version = 2
-").expect("write");
+        fs::write(
+            &file,
+            b"version = 2
+",
+        )
+        .expect("write");
         let present = FileState::of(&file);
         assert!(present.exists && present.error.is_empty() && present.size > 0);
         let _ = fs::remove_file(&file);
@@ -668,7 +714,11 @@ attestation = true
         let mut replaced = false;
         for line in text.split_inclusive('\n') {
             let trimmed = line.trim_start();
-            if !replaced && !trimmed.starts_with('#') && trimmed.starts_with("log_level") && trimmed.contains('=') {
+            if !replaced
+                && !trimmed.starts_with('#')
+                && trimmed.starts_with("log_level")
+                && trimmed.contains('=')
+            {
                 out.push_str("log_level = \"trace\"\n");
                 replaced = true;
             } else {
@@ -684,7 +734,10 @@ attestation = true
 
     #[test]
     fn the_fix_props_script_is_installable() {
-        assert!(FIX_PROPS_SCRIPT.starts_with("#!/system/bin/sh"), "service.d needs a shebang");
+        assert!(
+            FIX_PROPS_SCRIPT.starts_with("#!/system/bin/sh"),
+            "service.d needs a shebang"
+        );
         for line in [
             "wait_for_boot",
             "resetprop -n",
@@ -695,12 +748,18 @@ attestation = true
         ] {
             assert!(FIX_PROPS_SCRIPT.contains(line), "the script lost `{line}`");
         }
-        assert!(FIX_PROPS_PATH.starts_with("/data/adb/service.d/"), "service.d is the boot hook");
+        assert!(
+            FIX_PROPS_PATH.starts_with("/data/adb/service.d/"),
+            "service.d is the boot hook"
+        );
     }
 
     #[test]
     fn the_level_set_is_the_one_the_module_documents() {
-        assert_eq!(LOG_LEVELS, ["off", "error", "warn", "info", "debug", "trace"]);
+        assert_eq!(
+            LOG_LEVELS,
+            ["off", "error", "warn", "info", "debug", "trace"]
+        );
         assert_eq!(
             INJECTOR_LOG_LEVELS,
             ["off", "error", "warn", "warning", "info", "debug", "trace"]
@@ -718,8 +777,14 @@ attestation = true
 
     #[test]
     fn replaces_only_the_scoop_array() {
-        let updated = set_scoop(INJECTOR, &["com.example.three".to_string(), "com.example.four".to_string()])
-            .expect("set");
+        let updated = set_scoop(
+            INJECTOR,
+            &[
+                "com.example.three".to_string(),
+                "com.example.four".to_string(),
+            ],
+        )
+        .expect("set");
 
         assert_eq!(
             parse_scoop(&updated).expect("reparse"),
@@ -729,7 +794,17 @@ attestation = true
         assert!(updated.contains("[intercept]\nattestation = true"));
         assert!(!updated.contains("com.example.one"));
 
-        assert_eq!(set_scoop(&updated, &["com.example.three".to_string(), "com.example.four".to_string()]).expect("again"), updated);
+        assert_eq!(
+            set_scoop(
+                &updated,
+                &[
+                    "com.example.three".to_string(),
+                    "com.example.four".to_string()
+                ]
+            )
+            .expect("again"),
+            updated
+        );
     }
 
     #[test]
@@ -742,7 +817,10 @@ attestation = true
     #[test]
     fn adds_a_scoop_array_when_there_is_none() {
         let updated = set_scoop("version = 2\n", &["com.example.one".to_string()]).expect("set");
-        assert_eq!(parse_scoop(&updated).expect("parse"), vec!["com.example.one"]);
+        assert_eq!(
+            parse_scoop(&updated).expect("parse"),
+            vec!["com.example.one"]
+        );
         assert!(updated.contains("version = 2"));
     }
 
@@ -751,11 +829,7 @@ attestation = true
         assert!(validate(Which::Config, "version = 2\n[main\n").is_err());
         assert!(validate(Which::Config, "version = 2\nlog_level = \"info\"\n").is_ok());
         assert!(validate(Which::Injector, "scoop = [\"unterminated]\n").is_err());
-        assert!(validate(
-            Which::Injector,
-            "scoop = [\"com.example.one\"]\n"
-        )
-        .is_ok());
+        assert!(validate(Which::Injector, "scoop = [\"com.example.one\"]\n").is_ok());
     }
 
     #[test]
@@ -771,15 +845,23 @@ attestation = true
         let real = "<AndroidAttestation><Keybox><Key algorithm=\"ecdsa\">\
                     <PrivateKey format=\"pem\">x</PrivateKey></Key></Keybox></AndroidAttestation>";
         assert!(looks_like_keybox(real));
-        assert!(looks_like_keybox("<?xml version=\"1.0\"?><AndroidAttestation>\n<PrivateKey>"));
+        assert!(looks_like_keybox(
+            "<?xml version=\"1.0\"?><AndroidAttestation>\n<PrivateKey>"
+        ));
         assert!(!looks_like_keybox("6666"));
         assert!(!looks_like_keybox("<html><body>rate limited</body></html>"));
-        assert!(!looks_like_keybox("<AndroidAttestation><NumberOfKeyboxes>1</NumberOfKeyboxes>"));
+        assert!(!looks_like_keybox(
+            "<AndroidAttestation><NumberOfKeyboxes>1</NumberOfKeyboxes>"
+        ));
     }
 
     #[test]
     fn remote_keybox_content_is_refused_before_anything_is_written() {
-        for junk in ["6666", "<html><body>503 Service Unavailable</body></html>", ""] {
+        for junk in [
+            "6666",
+            "<html><body>503 Service Unavailable</body></html>",
+            "",
+        ] {
             assert!(apply_keybox_content(junk).is_err(), "accepted `{junk}`");
         }
     }

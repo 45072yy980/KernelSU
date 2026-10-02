@@ -1,4 +1,3 @@
-
 #![allow(clippy::all, clippy::pedantic, clippy::nursery)]
 
 use std::fs;
@@ -268,8 +267,8 @@ pub fn extraction_targets(
 fn write_apks(to: &Path, parts: &[PathBuf]) -> Result<()> {
     let file = fs::File::create(to).with_context(|| format!("创建 {} 失败", to.display()))?;
     let mut zip = zip::ZipWriter::new(file);
-    let options = zip::write::SimpleFileOptions::default()
-        .compression_method(zip::CompressionMethod::Stored);
+    let options =
+        zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
     for part in parts {
         let name = part
             .file_name()
@@ -281,7 +280,8 @@ fn write_apks(to: &Path, parts: &[PathBuf]) -> Result<()> {
         std::io::copy(&mut source, &mut zip)
             .with_context(|| format!("打包 {} 失败", part.display()))?;
     }
-    zip.finish().with_context(|| format!("收尾 {} 失败", to.display()))?;
+    zip.finish()
+        .with_context(|| format!("收尾 {} 失败", to.display()))?;
     Ok(())
 }
 
@@ -481,11 +481,26 @@ Packages:
         .expect("serialize");
 
         for key in [
-            "package", "versionName", "versionCode", "targetSdk", "minSdk", "uid",
-            "dataDir", "codePath", "firstInstall", "lastUpdate", "signatures",
-            "apkFiles", "totalSize", "dataDir1", "dataDir2",
+            "package",
+            "versionName",
+            "versionCode",
+            "targetSdk",
+            "minSdk",
+            "uid",
+            "dataDir",
+            "codePath",
+            "firstInstall",
+            "lastUpdate",
+            "signatures",
+            "apkFiles",
+            "totalSize",
+            "dataDir1",
+            "dataDir2",
         ] {
-            assert!(json.get(key).is_some(), "the panel reads `{key}`, which is missing");
+            assert!(
+                json.get(key).is_some(),
+                "the panel reads `{key}`, which is missing"
+            );
         }
         assert!(
             json["apkFiles"][0].get("isBase").is_some(),
@@ -553,16 +568,11 @@ Packages:
             size: 1,
             is_base: true,
         }];
-        let target =
-            extraction_targets(dest, "com.x", "../../etc/passwd", 0, &evil).expect("evil");
+        let target = extraction_targets(dest, "com.x", "../../etc/passwd", 0, &evil).expect("evil");
         let to = match target {
             ExtractionTarget::Apk { to, .. } | ExtractionTarget::Apks { to, .. } => to,
         };
-        assert!(
-            to.starts_with(dest),
-            "escaped: {:?}",
-            to
-        );
+        assert!(to.starts_with(dest), "escaped: {:?}", to);
     }
 
     #[test]

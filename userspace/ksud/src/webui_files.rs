@@ -1,4 +1,3 @@
-
 #![allow(clippy::all, clippy::pedantic, clippy::nursery)]
 
 use std::fs;
@@ -248,7 +247,12 @@ pub fn search(root: &str, query: &str, max_depth: usize, max_results: usize) -> 
         };
         for item in read.flatten() {
             let path = item.path();
-            if item.file_name().to_string_lossy().to_lowercase().contains(&needle) {
+            if item
+                .file_name()
+                .to_string_lossy()
+                .to_lowercase()
+                .contains(&needle)
+            {
                 match entry_for(&path) {
                     Ok(entry) => found.push(entry),
                     Err(e) => log::warn!("search: skipping {}: {e}", path.display()),
@@ -576,7 +580,6 @@ pub fn write_bytes(path: &str, data: &[u8]) -> Result<()> {
     let p = Path::new(path);
     fs::write(p, data).with_context(|| io_context("写入", p))
 }
-
 
 #[derive(Serialize)]
 pub struct ArchiveEntry {
@@ -1002,7 +1005,6 @@ fn collect_tree(dir: &Path, prefix: &str, out: &mut Vec<(String, Content)>) -> R
     Ok(())
 }
 
-
 #[cfg(target_os = "android")]
 const APK_STAGING: &str = "/data/local/tmp/ksu-install.apk";
 
@@ -1084,9 +1086,9 @@ pub fn install_apks(path: &str) -> Result<String> {
             .unwrap_or_else(|| "split.apk".to_string());
         let target = dir.join(&file_name);
         let mut member = zip.by_index(*index)?;
-        let mut out = fs::File::create(&target).with_context(|| io_context("解出安装包", &target))?;
-        std::io::copy(&mut member, &mut out)
-            .with_context(|| io_context("解出安装包", &target))?;
+        let mut out =
+            fs::File::create(&target).with_context(|| io_context("解出安装包", &target))?;
+        std::io::copy(&mut member, &mut out).with_context(|| io_context("解出安装包", &target))?;
         drop(out);
         {
             use std::os::unix::fs::PermissionsExt;
@@ -1120,7 +1122,10 @@ fn install_split_set(pieces: &[PathBuf]) -> Result<String> {
         || created_text.contains("Unknown command")
     {
         return install_multiple(pieces).map_err(|e| {
-            anyhow::anyhow!("pm 既不支持 install-create（{}），也不支持 install-multiple（{e:#}）", created_text.trim())
+            anyhow::anyhow!(
+                "pm 既不支持 install-create（{}），也不支持 install-multiple（{e:#}）",
+                created_text.trim()
+            )
         });
     }
 
@@ -1172,8 +1177,7 @@ fn parse_install_session(text: &str) -> Option<String> {
     let rest = &text[start..];
     let end = rest.find(']')?;
     let digits = &rest[..end];
-    (!digits.is_empty() && digits.chars().all(|c| c.is_ascii_digit()))
-        .then(|| digits.to_string())
+    (!digits.is_empty() && digits.chars().all(|c| c.is_ascii_digit())).then(|| digits.to_string())
 }
 
 #[cfg(target_os = "android")]
@@ -1252,7 +1256,6 @@ pub fn install_apk_from_archive(_archive: &str, _entry: &str) -> Result<String> 
     bail!("当前平台不支持安装 APK")
 }
 
-
 #[cfg(target_os = "android")]
 fn load_json<T: serde::de::DeserializeOwned + Default>(path: &str) -> T {
     fs::read_to_string(path)
@@ -1288,7 +1291,6 @@ fn save_json<T: ?Sized>(_path: &str, _value: &T) -> Result<()> {
     bail!("当前平台不支持写入网页端数据")
 }
 
-
 #[derive(Serialize, serde::Deserialize, Clone)]
 pub struct Jump {
     pub name: String,
@@ -1303,7 +1305,6 @@ pub fn save_jumps(jumps: &[Jump]) -> Result<()> {
     save_json(crate::defs::WEBUI_JUMPS_PATH, jumps)
 }
 
-
 #[derive(Serialize, serde::Deserialize, Clone)]
 pub struct QuickRun {
     pub name: String,
@@ -1317,7 +1318,6 @@ pub fn load_quick_run() -> Vec<QuickRun> {
 pub fn save_quick_run(items: &[QuickRun]) -> Result<()> {
     save_json(crate::defs::WEBUI_QUICK_RUN_PATH, items)
 }
-
 
 fn on() -> bool {
     true
@@ -1968,8 +1968,14 @@ mod tests {
             parse_install_session("avc: denied\nSuccess: created install session [42]"),
             Some("42".to_string())
         );
-        assert_eq!(parse_install_session("Failure [INSTALL_FAILED_INVALID_APK]"), None);
-        assert_eq!(parse_install_session("Success: created install session [abc]"), None);
+        assert_eq!(
+            parse_install_session("Failure [INSTALL_FAILED_INVALID_APK]"),
+            None
+        );
+        assert_eq!(
+            parse_install_session("Success: created install session [abc]"),
+            None
+        );
         assert_eq!(parse_install_session(""), None);
     }
 

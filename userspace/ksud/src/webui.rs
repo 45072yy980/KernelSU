@@ -1,4 +1,3 @@
-
 #![allow(clippy::all, clippy::pedantic, clippy::nursery)]
 
 use std::collections::HashMap;
@@ -1499,9 +1498,7 @@ fn collect_apps() -> Vec<AppRow> {
 }
 
 #[cfg(target_os = "android")]
-fn app_labels(
-    listed: &[(String, String, i32, i64)],
-) -> std::collections::HashMap<String, String> {
+fn app_labels(listed: &[(String, String, i32, i64)]) -> std::collections::HashMap<String, String> {
     use std::hash::{Hash, Hasher};
 
     let cache_path = format!("{}/app_labels.cache", crate::defs::WORKING_DIR);

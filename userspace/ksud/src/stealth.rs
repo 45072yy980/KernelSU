@@ -13,8 +13,8 @@
 //! On a kernel that predates the call, every subcommand fails rather than
 //! pretending the switch exists and is off.
 
-use anyhow::{Result, bail};
 use crate::ksucalls;
+use anyhow::{Result, bail};
 
 /// Fail early on a kernel that does not know the call.
 ///
