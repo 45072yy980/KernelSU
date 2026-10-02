@@ -53,6 +53,16 @@ object Natives {
     val isManager: Boolean
         external get
 
+    /**
+     * Kernel stealth mode, straight from the kernel rather than through `ksud stealth get`.
+     *
+     * Read on every recomposition by the screens that decide whether to show themselves, so it
+     * must not fork a shell. False on a kernel that predates the command, which is also what
+     * "switched off" reads as.
+     */
+    val isStealthEnabled: Boolean
+        external get
+
     val isPrBuild: Boolean
         external get
 

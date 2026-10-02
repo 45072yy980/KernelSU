@@ -64,6 +64,7 @@ import androidx.compose.ui.unit.dp
 import me.weishu.kernelsu.KernelVersion
 import me.weishu.kernelsu.Natives
 import me.weishu.kernelsu.R
+import me.weishu.kernelsu.ui.component.ManagerHiddenRecovery
 import me.weishu.kernelsu.ui.component.WarningLevel
 import me.weishu.kernelsu.ui.component.dialog.rememberConfirmDialog
 import me.weishu.kernelsu.ui.component.material.ExpressiveScaffold
@@ -440,11 +441,15 @@ private fun InfoCard(
     ) {
         SegmentedColumn(modifier = Modifier.fillMaxWidth()) {
             item {
-                InfoCardItem(
-                    icon = Icons.Filled.Tag,
-                    label = stringResource(R.string.home_manager_version),
-                    content = systemInfo.managerVersion,
-                )
+                // Five taps on the manager-version row is the way back out of the disguise.
+                // See ManagerHiddenRecovery for what it does and why the code comes first.
+                ManagerHiddenRecovery {
+                    InfoCardItem(
+                        icon = Icons.Filled.Tag,
+                        label = stringResource(R.string.home_manager_version),
+                        content = systemInfo.managerVersion,
+                    )
+                }
             }
             item {
                 InfoCardItem(

@@ -240,3 +240,14 @@ bool is_selinux_hide_enabled() {
     }
     return value != 0;
 }
+
+bool is_stealth_enabled() {
+    // Asks the kernel directly rather than going through ksud, which would fork a shell on every
+    // recomposition. A kernel that predates the command fails the ioctl and reads as "off", which
+    // is the right answer for it.
+    struct ksu_get_stealth_cmd cmd = {};
+    if (ksuctl(KSU_IOCTL_GET_STEALTH, &cmd) != 0) {
+        return false;
+    }
+    return cmd.enabled != 0;
+}

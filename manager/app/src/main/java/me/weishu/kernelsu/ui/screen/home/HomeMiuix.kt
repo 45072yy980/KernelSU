@@ -88,6 +88,7 @@ import me.weishu.kernelsu.ui.theme.LocalHomeCardBlur
 import me.weishu.kernelsu.ui.theme.LocalGlassNotice
 import me.weishu.kernelsu.ui.theme.LocalGlassWallpaper
 import me.weishu.kernelsu.ui.PanelMetrics
+import me.weishu.kernelsu.ui.component.ManagerHiddenRecovery
 import me.weishu.kernelsu.ui.component.WarningLevel
 import me.weishu.kernelsu.ui.component.dialog.rememberConfirmDialog
 import me.weishu.kernelsu.ui.component.miuix.WarningCard
@@ -697,11 +698,15 @@ private fun InfoCard(
             ),
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
-                InfoText(
-                    icon = Icons.Filled.Tag,
-                    title = stringResource(R.string.home_manager_version),
-                    content = systemInfo.managerVersion,
-                )
+                // Five taps on the manager-version row is the way back out of the disguise.
+                // See ManagerHiddenRecovery for what it does and why the code comes first.
+                ManagerHiddenRecovery {
+                    InfoText(
+                        icon = Icons.Filled.Tag,
+                        title = stringResource(R.string.home_manager_version),
+                        content = systemInfo.managerVersion,
+                    )
+                }
                 InfoText(
                     icon = Icons.Filled.DeveloperBoard,
                     title = stringResource(R.string.home_kernel),

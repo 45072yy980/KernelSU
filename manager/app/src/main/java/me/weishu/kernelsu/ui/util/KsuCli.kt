@@ -682,14 +682,19 @@ fun isStealthSupported(): Boolean = runCatching {
 }.getOrDefault(false)
 
 /**
- * Drops the disguise switch, whatever state the app is in.
+ * Drops the disguise, whatever state the app is in.
  *
  * The home screen's not-installed card calls this after five taps in a row: with the disguise on
  * there is no settings page to switch it off from, and the calculator that opens the web UI may
  * already be uninstalled — this is the way back that does not depend on either.
+ *
+ * There are two disguises and either one alone hides the app, so both are cleared. This used to
+ * only delete /data/adb/ksu/hide_manager, which left the kernel switch on: GET_INFO kept hiding
+ * the manager and the app stayed disguised however many times the card was tapped.
  */
 fun clearManagerHidden() {
     runCatching { ShellUtils.fastCmd(getRootShell(), "rm -f /data/adb/ksu/hide_manager") }
+    runCatching { setStealthEnabled(false) }
 }
 
 /**

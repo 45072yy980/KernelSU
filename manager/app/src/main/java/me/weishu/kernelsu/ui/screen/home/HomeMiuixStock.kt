@@ -6,7 +6,6 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
@@ -58,6 +57,7 @@ import androidx.compose.ui.unit.sp
 import me.weishu.kernelsu.KernelVersion
 import me.weishu.kernelsu.Natives
 import me.weishu.kernelsu.R
+import me.weishu.kernelsu.ui.component.ManagerHiddenRecovery
 import me.weishu.kernelsu.ui.component.WarningLevel
 import me.weishu.kernelsu.ui.component.dialog.rememberConfirmDialog
 import me.weishu.kernelsu.ui.component.miuix.WarningCard
@@ -534,84 +534,13 @@ private fun InfoCard(
     ) {
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(16.dp)) {
-                // Five taps in a row on the manager-version row is the way back out of the disguise
-                // the web UI can switch on: with it on there is no settings page to switch it off
-                // from, and the calculator that opens the web UI may be uninstalled as well. This
-                // row has no tap behaviour of its own, so a counter here fights with nothing.
-                val context = androidx.compose.ui.platform.LocalContext.current
-                val recoveryTaps = androidx.compose.runtime.remember {
-                    androidx.compose.runtime.mutableStateOf(0)
-                }
-                val askPassword = androidx.compose.runtime.remember {
-                    androidx.compose.runtime.mutableStateOf(false)
-                }
-                val typedCode = androidx.compose.runtime.remember {
-                    androidx.compose.runtime.mutableStateOf("")
-                }
-                Box(
-                    modifier = Modifier.clickable {
-                        recoveryTaps.value++
-                        if (recoveryTaps.value >= 5) {
-                            recoveryTaps.value = 0
-                            // The way out asks for the code first: five taps is a gesture anyone
-                            // holding the phone could make, the code is not.
-                            typedCode.value = ""
-                            askPassword.value = true
-                        }
-                    },
-                ) {
-                InfoText(
-                    icon = Icons.Filled.Tag,
-                    title = stringResource(R.string.home_manager_version),
-                    content = systemInfo.managerVersion,
-                )
-                }
-                if (askPassword.value) {
-                    androidx.compose.material3.AlertDialog(
-                        onDismissRequest = { askPassword.value = false },
-                        title = { androidx.compose.material3.Text("密码") },
-                        text = {
-                            androidx.compose.material3.OutlinedTextField(
-                                value = typedCode.value,
-                                onValueChange = { entry ->
-                                    typedCode.value = entry.filter { it.isDigit() }
-                                },
-                                singleLine = true,
-                                visualTransformation =
-                                    androidx.compose.ui.text.input.PasswordVisualTransformation(),
-                                modifier = Modifier.fillMaxWidth(),
-                            )
-                        },
-                        confirmButton = {
-                            androidx.compose.material3.TextButton(onClick = {
-                                askPassword.value = false
-                                val entry = typedCode.value
-                                // A wrong code does nothing and says nothing: there is nothing to
-                                // learn from it, and whoever typed it should not learn anything
-                                // either.
-                                Thread {
-                                    if (me.weishu.kernelsu.ui.util.matchesTriggerCode(entry)) {
-                                        me.weishu.kernelsu.ui.util.clearManagerHidden()
-                                        android.os.Handler(android.os.Looper.getMainLooper()).post {
-                                            android.widget.Toast.makeText(
-                                                context,
-                                                "已解除",
-                                                android.widget.Toast.LENGTH_SHORT,
-                                            ).show()
-                                        }
-                                    }
-                                }.start()
-                            }) {
-                                androidx.compose.material3.Text("确定")
-                            }
-                        },
-                        dismissButton = {
-                            androidx.compose.material3.TextButton(onClick = {
-                                askPassword.value = false
-                            }) {
-                                androidx.compose.material3.Text("取消")
-                            }
-                        },
+                // Five taps on the manager-version row is the way back out of the disguise.
+                // See ManagerHiddenRecovery for what it does and why the code comes first.
+                ManagerHiddenRecovery {
+                    InfoText(
+                        icon = Icons.Filled.Tag,
+                        title = stringResource(R.string.home_manager_version),
+                        content = systemInfo.managerVersion,
                     )
                 }
                 InfoText(

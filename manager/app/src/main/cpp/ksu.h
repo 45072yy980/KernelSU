@@ -30,6 +30,9 @@ bool is_late_load_mode();
 
 bool is_manager();
 
+/** Whether kernel stealth mode is on. Reads the kernel directly, not through ksud. */
+bool is_stealth_enabled();
+
 bool is_pr_build();
 
 using p_key_t = char[KSU_MAX_PACKAGE_NAME];
