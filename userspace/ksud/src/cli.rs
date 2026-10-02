@@ -113,6 +113,17 @@ enum Commands {
         command: Feature,
     },
 
+    /// Stealth mode: hide the manager from GET_INFO
+    ///
+    /// With it on, the kernel stops reporting KSU_GET_INFO_FLAG_MANAGER and
+    /// KSU_GET_INFO_FLAG_LATE_LOAD, so a caller cannot tell that a manager is
+    /// installed or that the module was loaded after boot. The manager keeps
+    /// its privileges throughout; only what the kernel admits to changes.
+    Stealth {
+        #[command(subcommand)]
+        command: Stealth,
+    },
+
     /// Patch boot or init_boot images to apply KernelSU
     BootPatch(BootPatchArgs),
 
@@ -493,6 +504,28 @@ enum Feature {
 }
 
 #[derive(clap::Subcommand, Debug)]
+enum Stealth {
+    /// Report whether stealth mode is on
+    ///
+    /// Prints `1` when on and `0` when off, and exits non-zero if the running
+    /// kernel does not support the command at all.
+    Get,
+
+    /// Turn stealth mode on or off
+    ///
+    /// The value is written to /data/adb/ksu/stealth and applied to the kernel
+    /// immediately, so it survives a reboot without needing the file to be
+    /// re-read from user space.
+    Set {
+        /// 1 to hide the manager, 0 to show it again
+        value: u64,
+    },
+
+    /// Toggle stealth mode
+    Toggle,
+}
+
+#[derive(clap::Subcommand, Debug)]
 enum Kernel {
     /// Nuke ext4 sysfs
     NukeExt4Sysfs {
@@ -739,6 +772,12 @@ pub fn run() -> Result<()> {
             Feature::Check { id } => crate::feature::check_feature(&id),
             Feature::Load => crate::feature::load_config_and_apply(),
             Feature::Save => crate::feature::save_config(),
+        },
+
+        Commands::Stealth { command } => match command {
+            Stealth::Get => crate::stealth::get(),
+            Stealth::Set { value } => crate::stealth::set(value != 0),
+            Stealth::Toggle => crate::stealth::toggle(),
         },
 
         Commands::Debug { command } => match command {

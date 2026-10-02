@@ -147,6 +147,27 @@ struct ksu_get_sulog_fd_cmd {
     __u32 flags; /* Input: reserved for future use, must be 0 */
 };
 
+/*
+ * Stealth mode. `enabled` is 1 when on, 0 when off; GET reports the current
+ * value, SET stores it to /data/adb/ksu/stealth so it survives a reboot.
+ */
+struct ksu_get_stealth_cmd {
+    __u32 enabled; /* Output: 1 if stealth mode is on */
+};
+
+struct ksu_set_stealth_cmd {
+    __u32 enabled; /* Input: 1 to turn stealth mode on, 0 to turn it off */
+};
+
+/*
+ * The flags GET_INFO would report if stealth mode were off. Asking for these
+ * reveals nothing a root caller does not already know, and ksud needs them:
+ * whether the module was late-loaded decides which path module mounting takes.
+ */
+struct ksu_get_internal_flags_cmd {
+    __u32 flags; /* Output: KSU_GET_INFO_FLAG_* bits, stealth not applied */
+};
+
 static const __u8 KSU_UMOUNT_WIPE = 0; /* ignore everything and wipe list */
 static const __u8 KSU_UMOUNT_ADD = 1; /* add entry (path + flags) */
 static const __u8 KSU_UMOUNT_DEL = 2; /* delete entry, strcmp */
@@ -179,5 +200,8 @@ static const __u32 KSU_IOCTL_ADD_TRY_UMOUNT = _IOC(_IOC_WRITE, 'K', 18, 0);
 static const __u32 KSU_IOCTL_SET_INIT_PGRP = _IO('K', 19);
 static const __u32 KSU_IOCTL_GET_SULOG_FD = _IOW('K', 20, struct ksu_get_sulog_fd_cmd);
 static const __u32 KSU_IOCTL_DISABLE_ESCAPE_TO_ROOT = _IO('K', 21);
+static const __u32 KSU_IOCTL_GET_STEALTH = _IOR('K', 22, struct ksu_get_stealth_cmd);
+static const __u32 KSU_IOCTL_SET_STEALTH = _IOW('K', 23, struct ksu_set_stealth_cmd);
+static const __u32 KSU_IOCTL_GET_INTERNAL_FLAGS = _IOR('K', 24, struct ksu_get_internal_flags_cmd);
 
 #endif

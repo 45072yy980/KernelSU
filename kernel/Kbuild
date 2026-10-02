@@ -29,6 +29,7 @@ kernelsu-objs += infra/symbol_resolver.o
 ifneq ($(CONFIG_KSU_DISABLE_MANAGER),y)
 kernelsu-objs += manager/apk_sign.o
 kernelsu-objs += manager/pkg_observer.o
+kernelsu-objs += manager/stealth.o
 kernelsu-objs += manager/throne_tracker.o
 endif
 

@@ -9,18 +9,63 @@ const BOOTSTRAP_SOURCE: &str = "src/lkm_image_bootstrap.S";
 const BOOTSTRAP_OBJECT: &str = "lkm_image_bootstrap.o";
 const PREPARED_BOOTSTRAP_OBJECT: &str = ".lkm_image_bootstrap.o";
 
-fn get_git_version() -> Result<(u32, String), std::io::Error> {
-    let output = Command::new("git")
-        .args(["rev-list", "--count", "HEAD"])
-        .output()?;
+/// Run a git command and return its trimmed stdout.
+fn git(args: &[&str]) -> Result<String, io::Error> {
+    let out = Command::new("git").args(args).output()?;
+    Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
+}
 
-    let output = output.stdout;
-    let version_code = String::from_utf8(output).expect("Failed to read git count stdout");
-    let version_code: u32 = version_code
-        .trim()
-        .parse()
-        .map_err(|_| std::io::Error::other("Failed to parse git count"))?;
-    let version_code = 30000 + version_code;
+/// Pull the three numbers out of a tag like `v3.5.0-diksu`.
+///
+/// Written by hand because build scripts should not drag in a regex crate for
+/// something this small. Returns None when the tag does not start with
+/// `v<digits>.<digits>.<digits>`.
+fn parse_tag(tag: &str) -> Option<(u32, u32, u32)> {
+    let rest = tag.strip_prefix('v')?;
+    let mut parts = rest.split('.');
+    let major = parts.next()?.parse::<u32>().ok()?;
+    let minor = parts.next()?.parse::<u32>().ok()?;
+    // the patch segment may carry a suffix, e.g. `0-diksu`
+    let patch_raw = parts.next()?;
+    let digits: String = patch_raw.chars().take_while(|c| c.is_ascii_digit()).collect();
+    let patch = digits.parse::<u32>().ok()?;
+    Some((major, minor, patch))
+}
+
+/// Derive the version the same way `kernel/Kbuild` and
+/// `manager/build.gradle.kts` do.
+///
+/// The release tag is the anchor, and the code is
+///
+///     major * 10000 + minor * 1000 + patch * 100 + commits since that tag
+///
+/// so `v3.5.0-diksu` with three commits on top is `35003`. Counting commits
+/// alone (the old scheme) drifts away from what the kernel and the manager
+/// report, which is what this function used to do.
+///
+/// Falls back to `30000 + commits` when the repository has no matching tag --
+/// same fallback as the kernel, so a shallow clone still produces a sane
+/// number instead of a wild one.
+fn get_git_version() -> Result<(u32, String), std::io::Error> {
+    let tag = git(&["describe", "--tags", "--abbrev=0", "--match", "v[0-9]*"])
+        .unwrap_or_default();
+
+    let code = match parse_tag(&tag) {
+        Some((major, minor, patch)) => {
+            let after = git(&["rev-list", "--count", &format!("{tag}..HEAD")])
+                .ok()
+                .and_then(|s| s.parse::<u32>().ok())
+                .unwrap_or(0);
+            major * 10000 + minor * 1000 + patch * 100 + after
+        }
+        None => {
+            // no usable tag: keep the historical behaviour
+            let count = git(&["rev-list", "--count", "HEAD"])?
+                .parse::<u32>()
+                .map_err(|_| std::io::Error::other("Failed to parse git count"))?;
+            30000 + count
+        }
+    };
 
     let version_name = String::from_utf8(
         Command::new("git")
@@ -30,7 +75,7 @@ fn get_git_version() -> Result<(u32, String), std::io::Error> {
     )
     .map_err(|_| std::io::Error::other("Failed to read git describe stdout"))?;
     let version_name = version_name.trim_start_matches('v').to_string();
-    Ok((version_code, version_name))
+    Ok((code, version_name))
 }
 
 fn configure_bindgen() {

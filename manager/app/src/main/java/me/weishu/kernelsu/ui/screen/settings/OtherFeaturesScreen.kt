@@ -42,6 +42,9 @@ import me.weishu.kernelsu.ui.component.material.SegmentedSwitchItem
 import me.weishu.kernelsu.ui.navigation3.LocalNavigator
 import me.weishu.kernelsu.ui.navigation3.Route
 import me.weishu.kernelsu.ui.util.HideAppList
+import me.weishu.kernelsu.ui.util.isStealthEnabled
+import me.weishu.kernelsu.ui.util.isStealthSupported
+import me.weishu.kernelsu.ui.util.setStealthEnabled
 import me.weishu.kernelsu.data.repository.isPartitionGuardEnabled
 import me.weishu.kernelsu.data.repository.isRuntimeGuardEnabled
 import me.weishu.kernelsu.data.repository.setPartitionGuardEnabled
@@ -104,6 +107,31 @@ fun OtherFeaturesScreen() {
             runCatching { syncRuntimeGuardToKernel(runtimeGuardEnabled) }
         }
     }
+
+    // Kernel stealth mode: with it on, GET_INFO stops reporting the manager and
+    // late-load flags, so nothing outside can tell this device is rooted. The
+    // switch is only offered when the running kernel knows the command.
+    var stealthSupported by remember { mutableStateOf(false) }
+    var stealthEnabled by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        withContext(Dispatchers.IO) {
+            stealthSupported = isStealthSupported()
+            if (stealthSupported) {
+                stealthEnabled = isStealthEnabled()
+            }
+        }
+    }
+    val onStealthChange: (Boolean) -> Unit = { value ->
+        scope.launch {
+            val ok = withContext(Dispatchers.IO) { setStealthEnabled(value) }
+            // Re-read rather than trusting the request, so the switch never
+            // shows a state the kernel did not accept.
+            stealthEnabled = withContext(Dispatchers.IO) { isStealthEnabled() }
+            if (!ok) {
+                stealthEnabled = false
+            }
+        }
+    }
     var phase by remember { mutableStateOf<HideAppListPhase?>(null) }
 
     val onHideAppList = { phase = HideAppListPhase.Pick }
@@ -134,6 +162,9 @@ fun OtherFeaturesScreen() {
             onGuardChange = onGuardChange,
             runtimeGuardEnabled = runtimeGuardEnabled,
             onRuntimeGuardChange = onRuntimeGuardChange,
+            stealthSupported = stealthSupported,
+            stealthEnabled = stealthEnabled,
+            onStealthChange = onStealthChange,
         )
         UiMode.Miuix, UiMode.MiuixStock -> OtherFeaturesMiuix(
             onBack = onBack,
@@ -144,6 +175,9 @@ fun OtherFeaturesScreen() {
             onGuardChange = onGuardChange,
             runtimeGuardEnabled = runtimeGuardEnabled,
             onRuntimeGuardChange = onRuntimeGuardChange,
+            stealthSupported = stealthSupported,
+            stealthEnabled = stealthEnabled,
+            onStealthChange = onStealthChange,
         )
     }
 
@@ -168,6 +202,9 @@ private fun OtherFeaturesMaterial(
     onGuardChange: (Boolean) -> Unit,
     runtimeGuardEnabled: Boolean,
     onRuntimeGuardChange: (Boolean) -> Unit,
+    stealthSupported: Boolean,
+    stealthEnabled: Boolean,
+    onStealthChange: (Boolean) -> Unit,
 ) {
     Scaffold(
         topBar = {
@@ -249,6 +286,17 @@ private fun OtherFeaturesMaterial(
                             onCheckedChange = onRuntimeGuardChange,
                         )
                     }
+                    // Only offered when the kernel knows the command; an older
+                    // kernel would take the switch and do nothing with it.
+                    if (stealthSupported) add {
+                        SegmentedSwitchItem(
+                            icon = Icons.Filled.VisibilityOff,
+                            title = stringResource(R.string.settings_stealth),
+                            summary = stringResource(R.string.settings_stealth_summary),
+                            checked = stealthEnabled,
+                            onCheckedChange = onStealthChange,
+                        )
+                    }
                 },
             )
         }
@@ -265,6 +313,9 @@ private fun OtherFeaturesMiuix(
     onGuardChange: (Boolean) -> Unit,
     runtimeGuardEnabled: Boolean,
     onRuntimeGuardChange: (Boolean) -> Unit,
+    stealthSupported: Boolean,
+    stealthEnabled: Boolean,
+    onStealthChange: (Boolean) -> Unit,
 ) {
     MiuixScaffold(
         topBar = {
@@ -348,6 +399,24 @@ private fun OtherFeaturesMiuix(
                             },
                             checked = runtimeGuardEnabled,
                             onCheckedChange = onRuntimeGuardChange,
+                        )
+                    }
+                    // Only offered when the kernel knows the command; an older
+                    // kernel would take the switch and do nothing with it.
+                    if (stealthSupported) {
+                        SwitchPreference(
+                            title = stringResource(R.string.settings_stealth),
+                            summary = stringResource(R.string.settings_stealth_summary),
+                            startAction = {
+                                MiuixIcon(
+                                    imageVector = Icons.Filled.VisibilityOff,
+                                    contentDescription = null,
+                                    tint = colorScheme.onBackground,
+                                    modifier = Modifier.padding(end = 6.dp),
+                                )
+                            },
+                            checked = stealthEnabled,
+                            onCheckedChange = onStealthChange,
                         )
                     }
                 }

@@ -630,16 +630,55 @@ fun restartApp(packageName: String, userId: Int? = null) {
 }
 
 /**
- * The disguise switch the web UI owns: `/data/adb/ksu/hide_manager`.
+ * Whether this app should pretend it is not the manager.
  *
- * Read through su because /data/adb is root-only. Every screen that asks whether this app is the
- * manager has to consult it, or the disguise only covers part of the app.
+ * Two switches answer this, and either one is enough:
+ *
+ *   - the kernel's stealth mode (`ksud stealth get`), which is the thorough one: it stops
+ *     GET_INFO from reporting the manager and late-load flags, so nothing outside can tell
+ *     this device is rooted;
+ *   - the file `/data/adb/ksu/hide_manager` owned by the web UI, which only fools this app —
+ *     it hides the screens but leaves every other process able to detect KernelSU.
+ *
+ * Read through su because /data/adb is root-only. Every screen that asks whether this app is
+ * the manager has to consult this, or the disguise only covers part of the app.
  */
-fun isManagerHidden(): Boolean = runCatching {
+fun isManagerHidden(): Boolean = isStealthEnabled() || runCatching {
     com.topjohnwu.superuser.ShellUtils.fastCmd(
         getRootShell(),
         "test -f /data/adb/ksu/hide_manager && echo 1",
     ).contains("1")
+}.getOrDefault(false)
+
+/**
+ * Kernel stealth mode, read through ksud.
+ *
+ * Returns false when the kernel predates the command as well as when the switch is off —
+ * `ksud stealth get` exits non-zero in the first case and prints nothing usable, which reads
+ * the same as "not hidden". That is the safe direction: an old kernel simply has no disguise.
+ */
+fun isStealthEnabled(): Boolean = runCatching {
+    ShellUtils.fastCmd(getRootShell(), "${getKsuDaemonPath()} stealth get").trim() == "1"
+}.getOrDefault(false)
+
+/**
+ * Turn kernel stealth mode on or off.
+ *
+ * Returns whether the kernel reports the state the caller asked for, so a failure on an old
+ * kernel is visible rather than silent.
+ */
+fun setStealthEnabled(enabled: Boolean): Boolean = runCatching {
+    val want = if (enabled) "1" else "0"
+    ShellUtils.fastCmd(getRootShell(), "${getKsuDaemonPath()} stealth set $want").trim() == want
+}.getOrDefault(false)
+
+/**
+ * Whether the running kernel understands the stealth command at all.
+ *
+ * Used to hide the switch in settings rather than offer one that does nothing.
+ */
+fun isStealthSupported(): Boolean = runCatching {
+    ShellUtils.fastCmd(getRootShell(), "${getKsuDaemonPath()} stealth get").trim() in setOf("0", "1")
 }.getOrDefault(false)
 
 /**

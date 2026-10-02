@@ -14,6 +14,7 @@
 #include "runtime/ksud_boot.h"
 #include "feature/kernel_umount.h"
 #include "manager/manager_identity.h"
+#include "manager/stealth.h"
 #include "selinux/selinux.h"
 #include "infra/file_wrapper.h"
 #include "hook/tp_marker.h"
@@ -41,17 +42,25 @@ static int do_get_info(void __user *arg)
 {
     struct ksu_get_info_cmd cmd = { .version = KERNEL_SU_VERSION, .flags = 0 };
 
+    /*
+     * Stealth mode hides the two flags that describe the manager itself.
+     * is_manager() is still true -- the manager keeps its privileges and can
+     * turn this back off -- we simply stop admitting it here. LATE_LOAD goes
+     * with it because this fork's jailbreak mode is exactly what that bit
+     * advertises, and leaving it set would defeat the point.
+     */
+    bool stealth = ksu_stealth_is_enabled();
+
 #ifdef MODULE
     cmd.flags |= KSU_GET_INFO_FLAG_LKM;
     if (ksu_bundled) {
         cmd.flags |= KSU_GET_INFO_FLAG_BUNDLED;
     }
 #endif
-
-    if (is_manager()) {
+    if (is_manager() && !stealth) {
         cmd.flags |= KSU_GET_INFO_FLAG_MANAGER;
     }
-    if (ksu_late_loaded) {
+    if (ksu_late_loaded && !stealth) {
         cmd.flags |= KSU_GET_INFO_FLAG_LATE_LOAD;
     }
     // KSU_GET_INFO_FLAG_PR_BUILD is deliberately never set here. Upstream raises it
@@ -74,6 +83,7 @@ static int do_get_info(void __user *arg)
 static int do_get_info_legacy(void __user *arg)
 {
     struct ksu_get_info_legacy_cmd cmd = { .version = KERNEL_SU_VERSION, .flags = 0 };
+    bool stealth = ksu_stealth_is_enabled();
 
 #ifdef MODULE
     cmd.flags |= KSU_GET_INFO_FLAG_LKM;
@@ -82,10 +92,10 @@ static int do_get_info_legacy(void __user *arg)
     }
 #endif
 
-    if (is_manager()) {
+    if (is_manager() && !stealth) {
         cmd.flags |= KSU_GET_INFO_FLAG_MANAGER;
     }
-    if (ksu_late_loaded) {
+    if (ksu_late_loaded && !stealth) {
         cmd.flags |= KSU_GET_INFO_FLAG_LATE_LOAD;
     }
     cmd.features = KSU_FEATURE_MAX;
@@ -117,6 +127,10 @@ static int do_report_event(void __user *arg)
                 pr_info("post-fs-data triggered\n");
                 on_post_fs_data();
             }
+            // /data is mounted by now, so the stealth state can be read.
+            // A jailbreak (late) load reaches this point long after init and
+            // must read it too -- the disguise has to survive a reload.
+            ksu_stealth_load();
         }
         break;
     }
@@ -694,6 +708,71 @@ static int do_disable_escape_to_root(void __user *arg)
     return 0;
 }
 
+static int do_get_stealth(void __user *arg)
+{
+    struct ksu_get_stealth_cmd cmd;
+
+    memset(&cmd, 0, sizeof(cmd));
+    cmd.enabled = ksu_stealth_is_enabled() ? 1 : 0;
+
+    if (copy_to_user(arg, &cmd, sizeof(cmd))) {
+        pr_err("get_stealth: copy_to_user failed\n");
+        return -EFAULT;
+    }
+
+    return 0;
+}
+
+static int do_set_stealth(void __user *arg)
+{
+    struct ksu_set_stealth_cmd cmd;
+    int ret;
+
+    if (copy_from_user(&cmd, arg, sizeof(cmd))) {
+        return -EFAULT;
+    }
+
+    ret = ksu_stealth_set(cmd.enabled != 0);
+    if (ret) {
+        pr_err("set_stealth: failed to persist, %d\n", ret);
+    }
+
+    return ret;
+}
+
+/*
+ * The flags GET_INFO would report if stealth were off.
+ *
+ * ksud needs the real LATE_LOAD bit: module mounting takes a different path
+ * for a late load, and stealth mode hides that bit from GET_INFO on purpose.
+ * Reaching this call requires root, which already means being able to read
+ * /data/adb/ksu/stealth, so nothing new is disclosed.
+ */
+static int do_get_internal_flags(void __user *arg)
+{
+    struct ksu_get_internal_flags_cmd cmd = { .flags = 0 };
+
+#ifdef MODULE
+    cmd.flags |= KSU_GET_INFO_FLAG_LKM;
+    if (ksu_bundled) {
+        cmd.flags |= KSU_GET_INFO_FLAG_BUNDLED;
+    }
+#endif
+    if (is_manager()) {
+        cmd.flags |= KSU_GET_INFO_FLAG_MANAGER;
+    }
+    if (ksu_late_loaded) {
+        cmd.flags |= KSU_GET_INFO_FLAG_LATE_LOAD;
+    }
+
+    if (copy_to_user(arg, &cmd, sizeof(cmd))) {
+        pr_err("get_internal_flags: copy_to_user failed\n");
+        return -EFAULT;
+    }
+
+    return 0;
+}
+
 // IOCTL handlers mapping table
 // clang-format off
 static const struct ksu_ioctl_cmd_map ksu_ioctl_handlers[] = {
@@ -842,6 +921,24 @@ static const struct ksu_ioctl_cmd_map ksu_ioctl_handlers[] = {
         .handler = do_disable_escape_to_root, 
         .perm_check = only_root,
         .allow_su_session = true
+    },
+    {
+        .cmd = KSU_IOCTL_GET_STEALTH,
+        .name = "GET_STEALTH",
+        .handler = do_get_stealth,
+        .perm_check = only_root
+    },
+    {
+        .cmd = KSU_IOCTL_SET_STEALTH,
+        .name = "SET_STEALTH",
+        .handler = do_set_stealth,
+        .perm_check = only_root
+    },
+    {
+        .cmd = KSU_IOCTL_GET_INTERNAL_FLAGS,
+        .name = "GET_INTERNAL_FLAGS",
+        .handler = do_get_internal_flags,
+        .perm_check = only_root
     },
     {
         .cmd = 0,

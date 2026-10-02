@@ -185,16 +185,58 @@ pub fn get_info() -> ksu_uapi::ksu_get_info_cmd {
     })
 }
 
+/// The flags GET_INFO would report if stealth mode were off.
+///
+/// `get_info()` is the public answer and stealth mode edits it, hiding
+/// LATE_LOAD among others. Anything in ksud that has to *act* on how the
+/// module was loaded must read this instead, or a jailbreak session would be
+/// mistaken for an ordinary boot whenever the disguise is on.
+///
+/// Falls back to the public flags when the kernel is too old to know the call,
+/// which is the best that can be done and is correct for every build that
+/// predates stealth mode.
+pub fn get_internal_flags() -> u32 {
+    let mut cmd = ksu_uapi::ksu_get_internal_flags_cmd { flags: 0 };
+    if ksuctl(ksu_uapi::KSU_IOCTL_GET_INTERNAL_FLAGS, &raw mut cmd).is_err() {
+        return get_info().flags;
+    }
+    cmd.flags
+}
+
 pub fn get_version() -> i32 {
     get_info().version as i32
 }
 
 pub fn is_late_load() -> bool {
-    get_info().flags & ksu_uapi::KSU_GET_INFO_FLAG_LATE_LOAD != 0
+    get_internal_flags() & ksu_uapi::KSU_GET_INFO_FLAG_LATE_LOAD != 0
 }
 
 pub fn is_lkm() -> bool {
     get_info().flags & ksu_uapi::KSU_GET_INFO_FLAG_LKM != 0
+}
+
+/// Whether stealth mode is on.
+pub fn is_stealth_enabled() -> bool {
+    let mut cmd = ksu_uapi::ksu_get_stealth_cmd { enabled: 0 };
+    ksuctl(ksu_uapi::KSU_IOCTL_GET_STEALTH, &raw mut cmd).is_ok() && cmd.enabled != 0
+}
+
+/// Whether the running kernel knows the stealth call at all.
+///
+/// `is_stealth_enabled()` cannot tell "off" from "not implemented" -- both
+/// come back false -- and the CLI needs to tell them apart so it does not
+/// claim success on a kernel that ignored the request.
+pub fn is_stealth_supported() -> bool {
+    let mut cmd = ksu_uapi::ksu_get_stealth_cmd { enabled: 0 };
+    ksuctl(ksu_uapi::KSU_IOCTL_GET_STEALTH, &raw mut cmd).is_ok()
+}
+
+/// Turn stealth mode on or off. Returns an error if the kernel refuses.
+pub fn set_stealth(enabled: bool) -> Result<()> {
+    let mut cmd = ksu_uapi::ksu_set_stealth_cmd {
+        enabled: u32::from(enabled),
+    };
+    ksuctl(ksu_uapi::KSU_IOCTL_SET_STEALTH, &raw mut cmd)
 }
 
 pub const fn uapi_version() -> u32 {

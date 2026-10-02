@@ -401,6 +401,8 @@
     <string name="settings_partition_guard_summary_jailbreak">Always on in jailbreak mode and cannot be turned off here - a late-loaded session cannot undo a real partition write.</string>
     <string name="settings_runtime_guard">Runtime guard (kernel interception)</string>
     <string name="settings_runtime_guard_summary">Extra layer on top of the install-time scan: hooks openat/openat2/mount/write to block a rooted process from writing a system partition live. Off by default; it hooks very hot syscalls, so only turn it on if you understand the risk.</string>
+    <string name="settings_stealth">Stealth mode (hide the manager)</string>
+    <string name="settings_stealth_summary">Stop reporting that a manager is installed and that the module arrived after boot. Every other process — including the ones that look for root — is told a plain device. The app keeps its root rights, so this switch stays reachable; turn it off here, or run `ksud stealth set 0` from a shell.</string>
     <string name="settings_home_card_blur">Blurred background for the status card</string>
     <string name="settings_home_card_blur_summary">Draw the home page status card with a frosted (blurred) background instead of a solid colour. Ignored when the device cannot render a blur or the card has a custom picture.</string>
     <string name="settings_disable_pager_swipe">Disable left/right swipe between pages</string>
