@@ -134,6 +134,9 @@ partition_guard: blocked remount rw of /system (src /dev/block/sda1)
 
 写入方拿到的是 `-EACCES`。**重启之后，一切回到分区原本的样子。**
 
+> 更细的设计说明（开关语义、已知边界、feature id、逐条测试方法）见
+> [`docs/partition-guard.md`](docs/partition-guard.md)。
+
 ---
 
 ## 3. 版本号与发布
