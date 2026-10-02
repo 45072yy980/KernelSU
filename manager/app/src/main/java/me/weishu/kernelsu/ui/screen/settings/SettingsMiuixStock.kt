@@ -213,17 +213,36 @@ fun SettingPagerMiuixStock(
                             )
                         }
 
-                        // The experimental switches (hide-app-list, Keymint, and
-                        // the partition and stealth guards) live on one screen
-                        // of their own. They used to be reachable only from the
-                        // beautified miuix skin, which meant the stealth switch
-                        // could be turned on and then become unreachable by
-                        // switching skins.
+                        // The two secondary screens, in one card as the beautified
+                        // skin has them. Basic settings holds the per-feature
+                        // switches (umount, SELinux hide, ADB root, web
+                        // debugging, soft reboot, the home-card blur); other
+                        // features holds hide-app-list, Keymint and the
+                        // partition and stealth guards.
+                        //
+                        // Both used to be reachable only from the beautified
+                        // skin. That left a switch that can be turned on from
+                        // one of them -- stealth, or the partition guard --
+                        // with no way back off after changing skins.
                         Card(
                             modifier = Modifier
                                 .padding(top = 12.dp)
                                 .fillMaxWidth(),
                         ) {
+                            val basic = stringResource(id = R.string.settings_basic)
+                            ArrowPreference(
+                                title = basic,
+                                summary = stringResource(id = R.string.settings_basic_summary),
+                                startAction = {
+                                    Icon(
+                                        Icons.Rounded.AdminPanelSettings,
+                                        modifier = Modifier.padding(end = 6.dp),
+                                        contentDescription = basic,
+                                        tint = colorScheme.onBackground
+                                    )
+                                },
+                                onClick = actions.onOpenBasicSettings,
+                            )
                             val other = stringResource(id = R.string.settings_other)
                             ArrowPreference(
                                 title = other,

@@ -171,29 +171,51 @@ fun SettingPagerMaterial(
                 )
             }
 
-            // The experimental switches (hide-app-list, Keymint, and the
-            // partition and stealth guards) live on one screen of their own.
-            // They used to be reachable only from the beautified miuix skin,
-            // which meant the stealth switch could be turned on and then
-            // become unreachable by switching skins.
+            // The two secondary screens, in one column as the beautified
+            // skin has them. Basic settings holds the per-feature switches
+            // (umount, SELinux hide, ADB root, web debugging, soft reboot,
+            // the home-card blur); other features holds hide-app-list,
+            // Keymint and the partition and stealth guards.
+            //
+            // Both used to be reachable only from the beautified skin. That
+            // left a switch that can be turned on from one of them --
+            // stealth, or the partition guard -- with no way back off after
+            // changing skins.
             KsuIsValid {
+                val basic = stringResource(id = R.string.settings_basic)
                 val other = stringResource(id = R.string.settings_other)
                 SegmentedColumn(
                     modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 13.dp),
-                    content = listOf {
-                        SegmentedListItem(
-                            onClick = actions.onOpenOtherFeatures,
-                            headlineContent = { Text(other) },
-                            supportingContent = { Text(stringResource(id = R.string.settings_other_summary)) },
-                            leadingContent = { Icon(Icons.Filled.Build, other) },
-                            trailingContent = {
-                                Icon(
-                                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                    null
-                                )
-                            }
-                        )
-                    }
+                    content = listOf(
+                        {
+                            SegmentedListItem(
+                                onClick = actions.onOpenBasicSettings,
+                                headlineContent = { Text(basic) },
+                                supportingContent = { Text(stringResource(id = R.string.settings_basic_summary)) },
+                                leadingContent = { Icon(Icons.Filled.AdminPanelSettings, basic) },
+                                trailingContent = {
+                                    Icon(
+                                        Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                        null
+                                    )
+                                }
+                            )
+                        },
+                        {
+                            SegmentedListItem(
+                                onClick = actions.onOpenOtherFeatures,
+                                headlineContent = { Text(other) },
+                                supportingContent = { Text(stringResource(id = R.string.settings_other_summary)) },
+                                leadingContent = { Icon(Icons.Filled.Build, other) },
+                                trailingContent = {
+                                    Icon(
+                                        Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                        null
+                                    )
+                                }
+                            )
+                        },
+                    )
                 )
             }
 
