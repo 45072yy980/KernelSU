@@ -725,3 +725,48 @@ fun triggerCode(): String {
     }.getOrDefault("").filter { it.isDigit() }
     return stored.ifEmpty { "1234" }
 }
+
+/**
+ * The name of the module providing Zygisk, or null when nothing is providing it.
+ *
+ * There is no Zygisk in this project: the hooks live in a module, and which module that is
+ * varies. Two are known by id, the same two every KernelSU fork looks for.
+ *
+ * A module that is disabled or queued for removal is skipped rather than reported — it is not
+ * providing anything — and the prop is read for its human name, so the row shows what the module
+ * calls itself instead of an id.
+ */
+fun zygiskImplementation(): String? {
+    val ids = listOf("zygisksu", "rezygisk")
+    val shell = getRootShell()
+    for (id in ids) {
+        val dir = "/data/adb/modules/$id"
+        if (ShellUtils.fastCmd(shell, "test -f $dir/disable -o -f $dir/remove && echo y").trim() == "y") {
+            continue
+        }
+        val name = ShellUtils.fastCmd(
+            shell,
+            "sed -n 's/^name=//p' $dir/module.prop 2>/dev/null | head -n 1",
+        ).trim()
+        if (name.isNotEmpty()) {
+            return name
+        }
+    }
+    return null
+}
+
+/**
+ * The name of the installed metamodule, or null when there is none.
+ *
+ * The metamodule is reachable through its own symlink, which is what ksud maintains; reading the
+ * link's target rather than scanning every module keeps this to one command.
+ */
+fun metaModuleImplementation(): String? {
+    val name = runCatching {
+        ShellUtils.fastCmd(
+            getRootShell(),
+            "sed -n 's/^name=//p' /data/adb/metamodule/module.prop 2>/dev/null | head -n 1",
+        ).trim()
+    }.getOrDefault("")
+    return name.ifEmpty { null }
+}

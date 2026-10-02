@@ -86,6 +86,18 @@ class HomeViewModel(
                     Os.prctl(21 /* PR_GET_SECCOMP */, 0, 0, 0, 0)
                 }.getOrDefault(-1),
             ),
+            // Both read module.prop files under /data/adb, so they only mean anything once the
+            // manager can see them; on a device without root there is nothing to report anyway.
+            zygiskImplementation = if (isRootAvailable) {
+                me.weishu.kernelsu.ui.util.zygiskImplementation()
+            } else {
+                null
+            },
+            metaModuleImplementation = if (isRootAvailable) {
+                me.weishu.kernelsu.ui.util.metaModuleImplementation()
+            } else {
+                null
+            },
         )
     }
 }

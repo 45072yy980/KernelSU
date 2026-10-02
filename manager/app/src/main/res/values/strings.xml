@@ -84,6 +84,9 @@
     <string name="home_support_title">Support Us</string>
     <string name="home_support_content">KernelSU is, and always will be, free, and open source. However, you can show us that you care by making a donation.</string>
     <string name="home_gki_warning">Starting from v3.0.0, the GKI work mode will be used only in testing environments. We do not recommend it for daily use, and image files will no longer be provided.</string>
+    <string name="about_this_repo">This repository: 45072yy980/KernelSU</string>
+    <string name="about_upstream_repo">Baseline (upstream): wuhudiao/DikSU</string>
+    <string name="about_original_author">Original author: wuhudiao</string>
     <string name="about_source_code"><![CDATA[View source code at %1$s<br/>Join our %2$s channel]]></string>
     <string name="profile" translatable="false">App Profile</string>
     <string name="profile_default">Default</string>
@@ -403,6 +406,8 @@
     <string name="settings_runtime_guard_summary">Extra layer on top of the install-time scan: hooks openat/openat2/mount/write to block a rooted process from writing a system partition live. Off by default; it hooks very hot syscalls, so only turn it on if you understand the risk.</string>
     <string name="settings_stealth">Stealth mode (hide the manager)</string>
     <string name="settings_stealth_summary">Stop reporting that a manager is installed and that the module arrived after boot. Every other process — including the ones that look for root — is told a plain device. The app keeps its root rights, so this switch stays reachable; turn it off here, or run `ksud stealth set 0` from a shell.</string>
+    <string name="home_zygisk_implement">Zygisk implementation</string>
+    <string name="home_meta_module_implement">Metamodule implementation</string>
     <string name="calculator_code_title">Calculator trigger code</string>
     <string name="calculator_code_summary">Type these digits in the calculator and press = to open the web manager. Digits only; leave it empty to use the built-in default.</string>
     <string name="calculator_code_label">Code</string>

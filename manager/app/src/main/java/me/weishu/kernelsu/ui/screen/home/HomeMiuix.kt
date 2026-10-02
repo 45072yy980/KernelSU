@@ -37,8 +37,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.DeveloperBoard
+import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Fingerprint
+import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material.icons.filled.Tag
@@ -225,6 +227,8 @@ fun HomePagerMiuix(
                         )
                         InfoCard(
                             systemInfo = state.systemInfo,
+                            zygiskImplementation = state.zygiskImplementation,
+                            metaModuleImplementation = state.metaModuleImplementation,
                             modifier = Modifier.fillMaxWidth(),
                         )
                         SupportLinks(
@@ -378,6 +382,54 @@ private fun StatusCard(
                                 shape = cardShape,
                             )
                     ) {
+                        // The frosted face sits *outside* the Card on purpose. A Card with
+                        // Tilt feedback transforms its own content while it is pressed, which
+                        // would slide this wallpaper crop relative to the card outline and
+                        // briefly show the raw page colour at the edges. Painting it first, as
+                        // a sibling of the Card rather than a child, keeps it still; the guard
+                        // banner below has always done it this way.
+                        if (glassBackdrop) {
+                            val panelSize = PanelMetrics.size.value
+                            val nudgeX = GlassNudge.x.floatValue
+                            val nudgeY = GlassNudge.y.floatValue
+                            val panelPos = PanelMetrics.pos.value
+                            // Read in composition so scrolling retriggers layout.
+                            val cardPos = cardWindowPos
+                            if (panelSize != IntSize.Zero) {
+                                val paneDensity = LocalDensity.current
+                                Box(
+                                    modifier = Modifier
+                                        .matchParentSize()
+                                        .clip(cardShape)
+                                ) {
+                                    Image(
+                                        bitmap = homeWallpaper,
+                                        contentDescription = null,
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier
+                                            .requiredSize(
+                                                with(paneDensity) { (panelSize.width + 96).toDp() },
+                                                with(paneDensity) { panelSize.height.toDp() },
+                                            )
+                                            .blur(16.dp)
+                                            .offset {
+                                                IntOffset(
+                                                    panelPos.x.roundToInt() - cardPos.x.roundToInt()
+                                                        - 48
+                                                        + with(paneDensity) { nudgeX.dp.toPx() }.roundToInt(),
+                                                    panelPos.y.roundToInt() - cardPos.y.roundToInt()
+                                                        + with(paneDensity) { nudgeY.dp.toPx() }.roundToInt(),
+                                                )
+                                            },
+                                    )
+                                    Box(
+                                        modifier = Modifier
+                                            .matchParentSize()
+                                            .background(Color.Black.copy(alpha = 0.28f)),
+                                    )
+                                }
+                            }
+                        }
                         Card(
                             modifier = Modifier.fillMaxWidth(),
                             colors = CardDefaults.defaultColors(
@@ -392,48 +444,6 @@ private fun StatusCard(
                             pressFeedbackType = PressFeedbackType.Tilt
                         ) {
                         Box {
-                            if (glassBackdrop) {
-                                val panelSize = PanelMetrics.size.value
-                                val nudgeX = GlassNudge.x.floatValue
-                                val nudgeY = GlassNudge.y.floatValue
-                                val panelPos = PanelMetrics.pos.value
-                                // Read in composition so scrolling retriggers layout.
-                                val cardPos = cardWindowPos
-                                if (panelSize != IntSize.Zero) {
-                                    val paneDensity = LocalDensity.current
-                                    Box(
-                                        modifier = Modifier
-                                            .matchParentSize()
-                                            .clip(cardShape)
-                                    ) {
-                                        Image(
-                                            bitmap = homeWallpaper,
-                                            contentDescription = null,
-                                            contentScale = ContentScale.Crop,
-                                            modifier = Modifier
-                                                .requiredSize(
-                                                    with(paneDensity) { (panelSize.width + 96).toDp() },
-                                                    with(paneDensity) { panelSize.height.toDp() },
-                                                )
-                                                .blur(16.dp)
-                                                .offset {
-                                                    IntOffset(
-                                                        panelPos.x.roundToInt() - cardPos.x.roundToInt()
-                                                            - 48
-                                                            + with(paneDensity) { nudgeX.dp.toPx() }.roundToInt(),
-                                                        panelPos.y.roundToInt() - cardPos.y.roundToInt()
-                                                            + with(paneDensity) { nudgeY.dp.toPx() }.roundToInt(),
-                                                    )
-                                                },
-                                        )
-                                        Box(
-                                            modifier = Modifier
-                                                .matchParentSize()
-                                                .background(Color.Black.copy(alpha = 0.28f)),
-                                        )
-                                    }
-                                }
-                            }
                             if (statusImage != null) {
                                 Image(
                                     bitmap = statusImage,
@@ -625,6 +635,8 @@ private fun SupportLinks(
 @Composable
 private fun InfoCard(
     systemInfo: SystemInfo,
+    zygiskImplementation: String? = null,
+    metaModuleImplementation: String? = null,
     modifier: Modifier = Modifier,
 ) {
     val wallpaperSet = rememberWallpaperSet()
@@ -717,6 +729,23 @@ private fun InfoCard(
                     title = stringResource(R.string.home_device_model),
                     content = systemInfo.deviceModel,
                 )
+                // Zygisk and the metamodule live in modules, not in the kernel, so they are only
+                // worth a row when a module is actually providing them. Both are null otherwise,
+                // which is also the normal state on a device that uses neither.
+                zygiskImplementation?.let {
+                    InfoText(
+                        icon = Icons.Filled.Extension,
+                        title = stringResource(R.string.home_zygisk_implement),
+                        content = it,
+                    )
+                }
+                metaModuleImplementation?.let {
+                    InfoText(
+                        icon = Icons.Filled.Inventory2,
+                        title = stringResource(R.string.home_meta_module_implement),
+                        content = it,
+                    )
+                }
                 InfoText(
                     icon = Icons.Filled.Fingerprint,
                     title = stringResource(R.string.home_fingerprint),

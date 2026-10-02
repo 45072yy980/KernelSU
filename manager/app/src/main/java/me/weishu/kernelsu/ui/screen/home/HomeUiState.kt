@@ -24,6 +24,10 @@ data class HomeUiState(
     val latestVersionInfo: LatestVersionInfo,
     val currentManagerVersionCode: Long,
     val systemInfo: SystemInfo,
+    /** The module providing Zygisk, when one is installed and enabled. Null hides the row. */
+    val zygiskImplementation: String? = null,
+    /** The installed metamodule, when there is one. Null hides the row. */
+    val metaModuleImplementation: String? = null,
 ) {
     val isSELinuxPermissive: Boolean
         get() = systemInfo.selinuxStatus == "Permissive"

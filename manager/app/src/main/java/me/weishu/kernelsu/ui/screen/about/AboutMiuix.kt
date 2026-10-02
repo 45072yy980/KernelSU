@@ -436,6 +436,39 @@ private fun AboutContent(
                             )
                         }
                     }
+                    // Where the code comes from. Kept in its own card so it reads as a citation
+                    // rather than as another support link.
+                    if (state.provenance.isNotEmpty()) {
+                        Card(
+                            modifier = Modifier
+                                .padding(horizontal = 12.dp)
+                                .padding(top = 12.dp)
+                                .then(
+                                    if (enableBlur) {
+                                        Modifier.textureBlur(
+                                            backdrop = backdrop,
+                                            shape = RoundedCornerShape(16.dp),
+                                            blurRadius = 60f,
+                                            colors = BlurColors(blendColors = blendColors),
+                                            enabled = true,
+                                        )
+                                    } else Modifier
+                                ),
+                            colors = CardDefaults.defaultColors(
+                                if (enableBlur) Color.Transparent else colorScheme.surfaceContainer,
+                                Color.Transparent,
+                            ),
+                        ) {
+                            state.provenance.forEach {
+                                ArrowPreference(
+                                    title = it.fullText,
+                                    onClick = {
+                                        actions.onOpenLink(it.url)
+                                    }
+                                )
+                            }
+                        }
+                    }
                     Spacer(
                         Modifier.height(
                             WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() +

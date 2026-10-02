@@ -26,8 +26,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.DeveloperBoard
+import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Fingerprint
+import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material.icons.filled.Tag
@@ -135,7 +137,11 @@ fun HomePagerMaterial(
                 state = state,
                 actions = actions,
             )
-            InfoCard(systemInfo = state.systemInfo)
+            InfoCard(
+                systemInfo = state.systemInfo,
+                zygiskImplementation = state.zygiskImplementation,
+                metaModuleImplementation = state.metaModuleImplementation,
+            )
             SupportLinks(onOpenUrl = actions.onOpenUrl)
             Spacer(
                 Modifier.height(
@@ -398,6 +404,8 @@ private fun SupportLinks(
 @Composable
 private fun InfoCard(
     systemInfo: SystemInfo,
+    zygiskImplementation: String? = null,
+    metaModuleImplementation: String? = null,
     modifier: Modifier = Modifier,
 ) {
     @Composable
@@ -464,6 +472,27 @@ private fun InfoCard(
                     label = stringResource(R.string.home_device_model),
                     content = systemInfo.deviceModel,
                 )
+            }
+            // Zygisk and the metamodule live in modules, not in the kernel, so they are only
+            // worth a row when a module is actually providing them. Both are null otherwise,
+            // which is also the normal state on a device that uses neither.
+            zygiskImplementation?.let {
+                item {
+                    InfoCardItem(
+                        icon = Icons.Filled.Extension,
+                        label = stringResource(R.string.home_zygisk_implement),
+                        content = it,
+                    )
+                }
+            }
+            metaModuleImplementation?.let {
+                item {
+                    InfoCardItem(
+                        icon = Icons.Filled.Inventory2,
+                        label = stringResource(R.string.home_meta_module_implement),
+                        content = it,
+                    )
+                }
             }
             item {
                 InfoCardItem(

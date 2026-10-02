@@ -108,6 +108,21 @@ fun AboutScreenMaterial(
                         }
                     }
                 )
+                // Where the code comes from, in its own column so it reads as a citation rather
+                // than as another support link.
+                if (state.provenance.isNotEmpty()) {
+                    SegmentedColumn(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        content = state.provenance.map { linkInfo ->
+                            {
+                                SegmentedListItem(
+                                    onClick = { actions.onOpenLink(linkInfo.url) },
+                                    headlineContent = { Text(linkInfo.fullText) }
+                                )
+                            }
+                        }
+                    )
+                }
                 Spacer(
                     Modifier.height(
                         WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() +
