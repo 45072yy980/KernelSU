@@ -204,7 +204,6 @@ enum Commands {
         #[arg(long, value_name = "TOKEN")]
         set_token: Option<String>,
     },
-
 }
 
 #[derive(clap::Subcommand, Debug)]

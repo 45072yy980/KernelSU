@@ -236,7 +236,7 @@ pub fn set_stealth(enabled: bool) -> Result<()> {
     let mut cmd = ksu_uapi::ksu_set_stealth_cmd {
         enabled: u32::from(enabled),
     };
-    ksuctl(ksu_uapi::KSU_IOCTL_SET_STEALTH, &raw mut cmd)
+    ksuctl(ksu_uapi::KSU_IOCTL_SET_STEALTH, &raw mut cmd).map(|_| ())
 }
 
 pub const fn uapi_version() -> u32 {

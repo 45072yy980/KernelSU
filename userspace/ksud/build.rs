@@ -27,7 +27,10 @@ fn parse_tag(tag: &str) -> Option<(u32, u32, u32)> {
     let minor = parts.next()?.parse::<u32>().ok()?;
     // the patch segment may carry a suffix, e.g. `0-diksu`
     let patch_raw = parts.next()?;
-    let digits: String = patch_raw.chars().take_while(|c| c.is_ascii_digit()).collect();
+    let digits: String = patch_raw
+        .chars()
+        .take_while(|c| c.is_ascii_digit())
+        .collect();
     let patch = digits.parse::<u32>().ok()?;
     Some((major, minor, patch))
 }
@@ -47,8 +50,7 @@ fn parse_tag(tag: &str) -> Option<(u32, u32, u32)> {
 /// same fallback as the kernel, so a shallow clone still produces a sane
 /// number instead of a wild one.
 fn get_git_version() -> Result<(u32, String), std::io::Error> {
-    let tag = git(&["describe", "--tags", "--abbrev=0", "--match", "v[0-9]*"])
-        .unwrap_or_default();
+    let tag = git(&["describe", "--tags", "--abbrev=0", "--match", "v[0-9]*"]).unwrap_or_default();
 
     let code = match parse_tag(&tag) {
         Some((major, minor, patch)) => {

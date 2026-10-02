@@ -11,6 +11,7 @@
 )]
 
 mod apk_sign;
+mod apkparser;
 mod assets;
 mod boot_patch;
 #[cfg(target_os = "android")]
@@ -57,7 +58,6 @@ mod sulog;
 mod unload;
 #[cfg(target_os = "android")]
 mod utils;
-mod apkparser;
 mod webui;
 mod webui_apps;
 mod webui_files;
