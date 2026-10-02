@@ -17,6 +17,7 @@ import androidx.compose.material.icons.automirrored.filled.Rule
 import androidx.compose.material.icons.filled.Adb
 import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.BugReport
+import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.DeveloperMode
@@ -159,6 +160,32 @@ fun SettingPagerMaterial(
                             headlineContent = { Text(profileTemplate) },
                             supportingContent = { Text(stringResource(id = R.string.settings_profile_template_summary)) },
                             leadingContent = { Icon(Icons.Filled.Description, profileTemplate) },
+                            trailingContent = {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                    null
+                                )
+                            }
+                        )
+                    }
+                )
+            }
+
+            // The experimental switches (hide-app-list, Keymint, and the
+            // partition and stealth guards) live on one screen of their own.
+            // They used to be reachable only from the beautified miuix skin,
+            // which meant the stealth switch could be turned on and then
+            // become unreachable by switching skins.
+            KsuIsValid {
+                val other = stringResource(id = R.string.settings_other)
+                SegmentedColumn(
+                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 13.dp),
+                    content = listOf {
+                        SegmentedListItem(
+                            onClick = actions.onOpenOtherFeatures,
+                            headlineContent = { Text(other) },
+                            supportingContent = { Text(stringResource(id = R.string.settings_other_summary)) },
+                            leadingContent = { Icon(Icons.Filled.Build, other) },
                             trailingContent = {
                                 Icon(
                                     Icons.AutoMirrored.Filled.KeyboardArrowRight,

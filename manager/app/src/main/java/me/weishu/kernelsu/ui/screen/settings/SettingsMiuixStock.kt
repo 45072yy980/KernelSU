@@ -19,6 +19,7 @@ import androidx.compose.material.icons.automirrored.rounded.Rule
 import androidx.compose.material.icons.rounded.Adb
 import androidx.compose.material.icons.rounded.AdminPanelSettings
 import androidx.compose.material.icons.rounded.BugReport
+import androidx.compose.material.icons.rounded.Build
 import androidx.compose.material.icons.rounded.Calculate
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Description
@@ -209,6 +210,33 @@ fun SettingPagerMiuixStock(
                                     )
                                 },
                                 onClick = actions.onOpenProfileTemplate
+                            )
+                        }
+
+                        // The experimental switches (hide-app-list, Keymint, and
+                        // the partition and stealth guards) live on one screen
+                        // of their own. They used to be reachable only from the
+                        // beautified miuix skin, which meant the stealth switch
+                        // could be turned on and then become unreachable by
+                        // switching skins.
+                        Card(
+                            modifier = Modifier
+                                .padding(top = 12.dp)
+                                .fillMaxWidth(),
+                        ) {
+                            val other = stringResource(id = R.string.settings_other)
+                            ArrowPreference(
+                                title = other,
+                                summary = stringResource(id = R.string.settings_other_summary),
+                                startAction = {
+                                    Icon(
+                                        Icons.Rounded.Build,
+                                        modifier = Modifier.padding(end = 6.dp),
+                                        contentDescription = other,
+                                        tint = colorScheme.onBackground
+                                    )
+                                },
+                                onClick = actions.onOpenOtherFeatures,
                             )
                         }
                     }
