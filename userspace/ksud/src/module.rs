@@ -619,9 +619,7 @@ fn guard_jailbreak_partition(updated_dir: &Path, force: bool) -> Result<()> {
     // the user may opt in per install by setting KSU_PARTITION_GUARD=1 (the
     // Manager's "System partition protection" switch).
     let late_load = ksucalls::is_late_load();
-    let env_guard = std::env::var("KSU_PARTITION_GUARD")
-        .map(|v| v == "1")
-        .unwrap_or(false);
+    let env_guard = std::env::var("KSU_PARTITION_GUARD").is_ok_and(|v| v == "1");
     if !late_load && !env_guard {
         return Ok(());
     }

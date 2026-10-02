@@ -1,3 +1,10 @@
+// `#[derive(new)]` on the structs below expands to `Self { field: field, .. }`,
+// which clippy's redundant_field_names points at. There is nothing to write
+// differently in this file: the code it complains about is generated, not
+// typed here, and derive-new 0.7.0 (the newest release) has no option for it.
+// Everything else in this module is still checked.
+#![allow(clippy::redundant_field_names)]
+
 use anyhow::{Context, Result, bail};
 use derive_new::new;
 use nom::{
