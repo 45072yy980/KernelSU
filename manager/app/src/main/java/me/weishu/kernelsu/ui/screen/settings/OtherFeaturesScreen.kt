@@ -158,6 +158,7 @@ fun OtherFeaturesScreen() {
     // the asset may be missing from the build), so the message says which.
     var calcInstalled by remember { mutableStateOf(false) }
     var codeDialogShown by remember { mutableStateOf(false) }
+    var glassTuningShown by remember { mutableStateOf(false) }
     var codeText by remember { mutableStateOf("") }
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
@@ -243,6 +244,7 @@ fun OtherFeaturesScreen() {
             onStealthChange = onStealthChange,
             calculatorInstalled = calcInstalled,
             onCalculatorChange = onCalculatorChange,
+            onGlassTuning = { glassTuningShown = true },
         )
         UiMode.Miuix, UiMode.MiuixStock -> OtherFeaturesMiuix(
             onBack = onBack,
@@ -258,6 +260,7 @@ fun OtherFeaturesScreen() {
             onStealthChange = onStealthChange,
             calculatorInstalled = calcInstalled,
             onCalculatorChange = onCalculatorChange,
+            onGlassTuning = { glassTuningShown = true },
         )
     }
 
@@ -300,6 +303,10 @@ fun OtherFeaturesScreen() {
             },
         )
     }
+
+    if (glassTuningShown) {
+        GlassTuningDialog(onDismiss = { glassTuningShown = false })
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -318,6 +325,7 @@ private fun OtherFeaturesMaterial(
     onStealthChange: (Boolean) -> Unit,
     calculatorInstalled: Boolean,
     onCalculatorChange: (Boolean) -> Unit,
+    onGlassTuning: () -> Unit = {},
 ) {
     Scaffold(
         topBar = {
@@ -422,6 +430,17 @@ private fun OtherFeaturesMaterial(
                             onCheckedChange = onCalculatorChange,
                         )
                     }
+                    add {
+                        val glass = stringResource(R.string.settings_glass_tuning)
+                        SegmentedListItem(
+                            onClick = onGlassTuning,
+                            headlineContent = { Text(glass) },
+                            supportingContent = {
+                                Text(stringResource(R.string.settings_glass_tuning_summary))
+                            },
+                            leadingContent = { Icon(Icons.Filled.Build, null) },
+                        )
+                    }
                 },
             )
         }
@@ -443,6 +462,7 @@ private fun OtherFeaturesMiuix(
     onStealthChange: (Boolean) -> Unit,
     calculatorInstalled: Boolean,
     onCalculatorChange: (Boolean) -> Unit,
+    onGlassTuning: () -> Unit = {},
 ) {
     MiuixScaffold(
         topBar = {
@@ -562,6 +582,19 @@ private fun OtherFeaturesMiuix(
                         },
                         checked = calculatorInstalled,
                         onCheckedChange = onCalculatorChange,
+                    )
+                    ArrowPreference(
+                        title = stringResource(R.string.settings_glass_tuning),
+                        summary = stringResource(R.string.settings_glass_tuning_summary),
+                        startAction = {
+                            MiuixIcon(
+                                imageVector = Icons.Filled.Build,
+                                contentDescription = null,
+                                tint = colorScheme.onBackground,
+                                modifier = Modifier.padding(end = 6.dp),
+                            )
+                        },
+                        onClick = onGlassTuning,
                     )
                 }
             }

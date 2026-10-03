@@ -2,5 +2,7 @@
 <resources>
     <color name="ic_launcher_background">#FFFFFFFF</color>
     <color name="ic_launcher_foreground">#FF1E110D</color>
-    <color name="ic_splash_background">#FFF5F5F5</color>
+    <!-- Match @android:color/background_light so the circle the system draws behind the
+         splash icon is invisible against the splash background. -->
+    <color name="ic_splash_background">#FFFFFFFF</color>
 </resources>

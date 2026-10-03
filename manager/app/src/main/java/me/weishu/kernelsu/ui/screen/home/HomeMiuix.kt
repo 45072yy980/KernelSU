@@ -128,12 +128,31 @@ object GlassNudge {
     val x = mutableFloatStateOf(15f)
     val y = mutableFloatStateOf(375f)
 
+    /** What the values fall back to when nothing has been saved yet. */
+    const val DEFAULT_X = 15f
+    const val DEFAULT_Y = 375f
+
     fun load(context: Context) {
         val sp = context.getSharedPreferences(PREF, Context.MODE_PRIVATE)
-        x.floatValue = sp.getFloat("x", 15f)
-        y.floatValue = sp.getFloat("y", 375f)
+        x.floatValue = sp.getFloat("x", DEFAULT_X)
+        y.floatValue = sp.getFloat("y", DEFAULT_Y)
     }
 
+    /** Persist the current nudge, so the pane stays where the slider left it. */
+    fun save(context: Context) {
+        context.getSharedPreferences(PREF, Context.MODE_PRIVATE)
+            .edit()
+            .putFloat("x", x.floatValue)
+            .putFloat("y", y.floatValue)
+            .apply()
+    }
+
+    /** Put both nudges back to the shipped values and forget the saved ones. */
+    fun reset(context: Context) {
+        x.floatValue = DEFAULT_X
+        y.floatValue = DEFAULT_Y
+        save(context)
+    }
 }
 
 @Composable

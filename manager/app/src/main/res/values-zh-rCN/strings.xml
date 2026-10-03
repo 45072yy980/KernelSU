@@ -446,4 +446,14 @@
     <string name="maintenance_log_hidden_on">隐身模式已开启。</string>
     <string name="maintenance_log_hidden_fail">内核未接受隐身模式。</string>
     <string name="maintenance_log_hidden_unsupported">当前内核不支持隐身模式。</string>
+    <string name="glass_tuning_title">玻璃对齐</string>
+    <string name="glass_tuning_summary">拖动滑块，让磨砂面板与卡片对齐。拖动时对话框后面的卡片会随之移动。</string>
+    <string name="glass_tuning_x">水平</string>
+    <string name="glass_tuning_y">垂直</string>
+    <string name="glass_tuning_current">当前：x %1$d，y %2$d</string>
+    <string name="glass_tuning_save">保存</string>
+    <string name="glass_tuning_reset">重置</string>
+    <string name="glass_tuning_cancel">取消</string>
+    <string name="settings_glass_tuning">玻璃对齐</string>
+    <string name="settings_glass_tuning_summary">微调磨砂状态卡片采样壁纸的位置</string>
 </resources>

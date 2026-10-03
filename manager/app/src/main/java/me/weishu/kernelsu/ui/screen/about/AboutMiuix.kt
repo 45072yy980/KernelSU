@@ -296,7 +296,11 @@ private fun AboutContent(
             ) {
                 Image(
                     modifier = Modifier
-                        .requiredSize(245.dp)
+                        // The frame above clips to 100dp, so the artwork has to fit inside it or
+                        // its sides are cut off. The bitmap is 512px wide with the character
+                        // spanning 330px of it (64.5%), so 150dp puts the character at roughly
+                        // 97dp -- inside the frame, with a little room to spare.
+                        .requiredSize(150.dp)
                         .then(
                             if (enableBlur) {
                                 Modifier.textureBlur(

@@ -452,4 +452,14 @@
     <string name="maintenance_log_hidden_on">Stealth mode is on.</string>
     <string name="maintenance_log_hidden_fail">The kernel did not accept stealth mode.</string>
     <string name="maintenance_log_hidden_unsupported">This kernel does not support stealth mode.</string>
+    <string name="glass_tuning_title">Glass alignment</string>
+    <string name="glass_tuning_summary">Move the frosted pane until it lines up with the card. The card behind this dialog moves as you drag.</string>
+    <string name="glass_tuning_x">Horizontal</string>
+    <string name="glass_tuning_y">Vertical</string>
+    <string name="glass_tuning_current">Current: x %1$d, y %2$d</string>
+    <string name="glass_tuning_save">Save</string>
+    <string name="glass_tuning_reset">Reset</string>
+    <string name="glass_tuning_cancel">Cancel</string>
+    <string name="settings_glass_tuning">Glass alignment</string>
+    <string name="settings_glass_tuning_summary">Fine-tune where the frosted status card samples the wallpaper</string>
 </resources>
