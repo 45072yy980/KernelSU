@@ -125,12 +125,12 @@ import top.yukonga.miuix.kmp.utils.scrollEndHaptic
  */
 object GlassNudge {
     private const val PREF = "glass_nudge"
-    val x = mutableFloatStateOf(15f)
-    val y = mutableFloatStateOf(375f)
+    val x = mutableFloatStateOf(30f)
+    val y = mutableFloatStateOf(441f)
 
     /** What the values fall back to when nothing has been saved yet. */
-    const val DEFAULT_X = 15f
-    const val DEFAULT_Y = 375f
+    const val DEFAULT_X = 30f
+    const val DEFAULT_Y = 441f
 
     fun load(context: Context) {
         val sp = context.getSharedPreferences(PREF, Context.MODE_PRIVATE)
