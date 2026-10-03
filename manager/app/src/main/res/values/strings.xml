@@ -422,7 +422,7 @@
     <string name="settings_simple_mode">Simplicity mode</string>
     <string name="settings_simple_mode_summary">Hide the update prompt, the notices and the guard banner, leaving only the status card on the home screen.</string>
     <string name="settings_show_more_module_info">Show more module info</string>
-    <string name="settings_show_more_module_info_summary">Also list each module's id, author, update URL and size.</string>
+    <string name="settings_show_more_module_info_summary">Also list the id, author, update URL and size of every module.</string>
     <string name="settings_home_card_blur">Blurred background for the status card</string>
     <string name="settings_home_card_blur_summary">Draw the home page status card with a frosted (blurred) background instead of a solid colour. Ignored when the device cannot render a blur or the card has a custom picture.</string>
     <string name="settings_disable_pager_swipe">Disable left/right swipe between pages</string>
