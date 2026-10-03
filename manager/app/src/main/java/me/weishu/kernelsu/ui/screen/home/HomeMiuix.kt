@@ -116,6 +116,7 @@ import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme
 import top.yukonga.miuix.kmp.utils.PressFeedbackType
+import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 
 /**
@@ -168,16 +169,11 @@ fun HomePagerMiuix(
         contentWindowInsets = WindowInsets.systemBars.add(WindowInsets.displayCutout).only(WindowInsetsSides.Horizontal)
     ) { innerPadding ->
         Box(modifier = if (backdrop != null) Modifier.layerBackdrop(backdrop) else Modifier) {
-            // "overScrollVertical" is deliberately absent. Its node caches the scroll range
-            // and only refreshes it from a placement pass, so a list that is remeasured without
-            // one (a config change, a fast first frame) keeps a stale range and stops accepting
-            // drags until something else forces a relayout. That is the "sometimes cannot
-            // scroll" report. The bounce it drew is the only thing lost. Keep "scrollEndHaptic"
-            // -- it is a plain NestedScrollConnection and has no such cache.
             LazyColumn(
                 modifier = Modifier
                     .fillMaxHeight()
                     .scrollEndHaptic()
+                    .overScrollVertical()
                     .nestedScroll(scrollBehavior.nestedScrollConnection)
                     .padding(horizontal = 12.dp),
                 contentPadding = innerPadding,
