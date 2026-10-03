@@ -47,7 +47,7 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme
 @Composable
 fun OpenSourceLicenseScreen() {
     val context = LocalContext.current
-    val libraries by produceState(initialValue = emptyList<Library>(), context) {
+    val libraries by produceState<List<Library>>(initialValue = emptyList(), context) {
         value = withContext(Dispatchers.IO) {
             runCatching {
                 Libs.Builder().withJson(context, R.raw.aboutlibraries).build().libraries
