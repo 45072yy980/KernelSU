@@ -13,6 +13,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -438,7 +439,7 @@ private fun OtherFeaturesMaterial(
                             supportingContent = {
                                 Text(stringResource(R.string.settings_glass_tuning_summary))
                             },
-                            leadingContent = { Icon(Icons.Filled.Build, null) },
+                            leadingContent = { Icon(Icons.Filled.Tune, null) },
                         )
                     }
                 },
@@ -588,7 +589,7 @@ private fun OtherFeaturesMiuix(
                         summary = stringResource(R.string.settings_glass_tuning_summary),
                         startAction = {
                             MiuixIcon(
-                                imageVector = Icons.Filled.Build,
+                                imageVector = Icons.Filled.Tune,
                                 contentDescription = null,
                                 tint = colorScheme.onBackground,
                                 modifier = Modifier.padding(end = 6.dp),
