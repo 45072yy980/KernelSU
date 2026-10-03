@@ -73,6 +73,7 @@ import me.weishu.kernelsu.ui.navigation3.Navigator
 import me.weishu.kernelsu.ui.navigation3.Route
 import me.weishu.kernelsu.ui.navigation3.rememberNavigator
 import me.weishu.kernelsu.ui.screen.about.AboutScreen
+import me.weishu.kernelsu.ui.screen.about.OpenSourceLicenseScreen
 import me.weishu.kernelsu.ui.screen.appprofile.AppProfileScreen
 import me.weishu.kernelsu.ui.screen.colorpalette.ColorPaletteScreen
 import me.weishu.kernelsu.ui.screen.executemoduleaction.ExecuteModuleActionScreen
@@ -91,6 +92,8 @@ import me.weishu.kernelsu.ui.screen.superuser.SuperUserPager
 import me.weishu.kernelsu.ui.screen.template.AppProfileTemplateScreen
 import me.weishu.kernelsu.ui.screen.templateeditor.TemplateEditorScreen
 import me.weishu.kernelsu.ui.theme.LocalHomeCardBlur
+import me.weishu.kernelsu.ui.theme.LocalSimpleMode
+import me.weishu.kernelsu.ui.theme.LocalShowMoreModuleInfo
 import me.weishu.kernelsu.ui.theme.LocalDisablePagerSwipe
 import me.weishu.kernelsu.ui.theme.KernelSUTheme
 import me.weishu.kernelsu.ui.theme.LocalColorMode
@@ -251,6 +254,8 @@ open class MainActivity : ComponentActivity() {
                 LocalModuleDescriptionMaxLines provides uiState.moduleDescriptionMaxLines,
                 LocalDisablePagerSwipe provides uiState.disablePagerSwipe,
                 LocalHomeCardBlur provides uiState.homeCardBlur,
+                LocalSimpleMode provides uiState.simpleMode,
+                LocalShowMoreModuleInfo provides uiState.showMoreModuleInfo,
                 LocalUiMode provides uiMode,
             ) {
                 KernelSUTheme(appSettings = themeSettings, uiMode = uiMode) {
@@ -291,6 +296,9 @@ open class MainActivity : ComponentActivity() {
                             }) {
                             entry<Route.Main>(swipeDismiss = swipeDismiss) { mainScreenEntry() }
                             entry<Route.About>(swipeDismiss = swipeDismiss) { AboutScreen() }
+                            entry<Route.OpenSourceLicense>(swipeDismiss = swipeDismiss) {
+                                OpenSourceLicenseScreen()
+                            }
                             entry<Route.Sulog>(swipeDismiss = swipeDismiss) { SulogScreen() }
                             entry<Route.ColorPalette>(swipeDismiss = swipeDismiss) { ColorPaletteScreen() }
                             entry<Route.AppProfileTemplate>(swipeDismiss = swipeDismiss) { AppProfileTemplateScreen() }

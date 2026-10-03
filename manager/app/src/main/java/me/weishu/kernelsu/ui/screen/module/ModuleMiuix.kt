@@ -114,6 +114,9 @@ import me.weishu.kernelsu.ui.component.miuix.SearchBox
 import me.weishu.kernelsu.ui.component.miuix.SearchPager
 import me.weishu.kernelsu.ui.theme.LocalEnableBlur
 import me.weishu.kernelsu.ui.theme.LocalModuleDescriptionMaxLines
+import me.weishu.kernelsu.ui.theme.LocalShowMoreModuleInfo
+import me.weishu.kernelsu.ui.util.formatByteSize
+import me.weishu.kernelsu.ui.util.moduleDirectorySize
 import me.weishu.kernelsu.ui.util.BlurredBar
 import me.weishu.kernelsu.ui.util.getFileName
 import me.weishu.kernelsu.ui.util.reboot
@@ -868,6 +871,40 @@ fun ModuleItem(
                     color = colorScheme.onSurfaceVariantSummary,
                     textDecoration = textDecoration
                 )
+                // Extra rows, off by default: the id, the update manifest the module
+                // fetches and the folder's size on disk. The size is walked lazily
+                // because a module tree can be large and most rows are never inspected.
+                if (LocalShowMoreModuleInfo.current) {
+                    val moreTint = colorScheme.onSurfaceVariantSummary.copy(alpha = 0.75f)
+                    Text(
+                        text = "ID: ${module.id}",
+                        fontSize = 11.sp,
+                        modifier = Modifier.padding(top = 2.dp),
+                        color = moreTint,
+                        textDecoration = textDecoration
+                    )
+                    if (module.updateJson.isNotBlank()) {
+                        Text(
+                            text = "Update: ${module.updateJson}",
+                            fontSize = 11.sp,
+                            modifier = Modifier.padding(top = 1.dp),
+                            color = moreTint,
+                            textDecoration = textDecoration
+                        )
+                    }
+                    val moduleSize = remember(module.id) {
+                        moduleDirectorySize("/data/adb/modules/${module.id}")
+                    }
+                    if (moduleSize != null) {
+                        Text(
+                            text = "Size: ${formatByteSize(moduleSize)}",
+                            fontSize = 11.sp,
+                            modifier = Modifier.padding(top = 1.dp),
+                            color = moreTint,
+                            textDecoration = textDecoration
+                        )
+                    }
+                }
             }
             Switch(
                 enabled = !module.update,

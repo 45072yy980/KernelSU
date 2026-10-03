@@ -31,6 +31,8 @@ interface SettingsRepository {
     var useSoftReboot: Boolean
     var homeCardBlur: Boolean
     var disablePagerSwipe: Boolean
+    var simpleMode: Boolean
+    var showMoreModuleInfo: Boolean
     val intentToken: String
 
     suspend fun getSuCompatStatus(): String

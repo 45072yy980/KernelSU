@@ -73,6 +73,7 @@ import me.weishu.kernelsu.ui.component.material.ExpressiveScaffold
 import me.weishu.kernelsu.ui.component.material.SegmentedColumn
 import me.weishu.kernelsu.ui.component.material.SegmentedListItem
 import me.weishu.kernelsu.ui.component.material.TonalCard
+import me.weishu.kernelsu.ui.theme.LocalSimpleMode
 import me.weishu.kernelsu.ui.component.material.expressiveTopAppBarColors
 import me.weishu.kernelsu.ui.component.rebootlistpopup.RebootListPopup
 import me.weishu.kernelsu.ui.component.statustag.StatusTag
@@ -97,6 +98,10 @@ fun HomePagerMaterial(
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(13.dp)
         ) {
+            // Simplicity mode keeps only the status card: no update prompt, no notices.
+            // The checks still run, so turning the switch back off reveals whatever is
+            // relevant at that moment.
+            if (!LocalSimpleMode.current) {
             if (state.checkUpdateEnabled) {
                 UpdateCard(state = state, actions = actions)
             }
@@ -132,6 +137,7 @@ fun HomePagerMaterial(
             }
             if (state.showRootWarning) {
                 WarningCard(stringResource(id = R.string.grant_root_failed))
+            }
             }
             StatusCard(
                 state = state,

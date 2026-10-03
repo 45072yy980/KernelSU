@@ -9,6 +9,7 @@ import me.weishu.kernelsu.R
 import me.weishu.kernelsu.ui.LocalUiMode
 import me.weishu.kernelsu.ui.UiMode
 import me.weishu.kernelsu.ui.navigation3.LocalNavigator
+import me.weishu.kernelsu.ui.navigation3.Route
 
 @Composable
 fun AboutScreen() {
@@ -46,6 +47,7 @@ fun AboutScreen() {
     val actions = AboutScreenActions(
         onBack = dropUnlessResumed { navigator.pop() },
         onOpenLink = uriHandler::openUri,
+        onOpenLicences = dropUnlessResumed { navigator.push(Route.OpenSourceLicense) },
     )
 
     when (LocalUiMode.current) {

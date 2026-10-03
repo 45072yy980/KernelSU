@@ -45,6 +45,11 @@ sealed interface Route : NavKey, Parcelable {
     @Serializable
     data object About : Route
 
+    /** The third-party library list the AboutLibraries plugin generates at build time. */
+    @Parcelize
+    @Serializable
+    data object OpenSourceLicense : Route
+
     @Parcelize
     @Serializable
     data object Sulog : Route

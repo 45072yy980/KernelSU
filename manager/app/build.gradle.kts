@@ -9,6 +9,7 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.lsplugin.apksign)
     alias(libs.plugins.protobuf)
+    alias(libs.plugins.aboutlibraries)
     id("kotlin-parcelize")
 }
 
@@ -271,6 +272,17 @@ dependencies {
     // package name instead of the one baked in at build time.
     implementation(libs.apksig)
     implementation(libs.apkzlib)
+    // Generates the licence manifest the open-source screen reads, and the screen itself.
+    implementation(libs.aboutlibraries.core)
+    implementation(libs.aboutlibraries.compose.m3)
+}
+
+aboutLibraries {
+    library {
+        // One entry per library even when several modules of it are pulled in.
+        duplicationMode = com.mikepenz.aboutlibraries.plugin.DuplicateMode.MERGE
+        duplicationRule = com.mikepenz.aboutlibraries.plugin.DuplicateRule.SIMPLE
+    }
 }
 
 kotlin {

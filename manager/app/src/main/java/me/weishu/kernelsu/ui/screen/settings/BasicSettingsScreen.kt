@@ -14,8 +14,10 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.Rule
 import androidx.compose.material.icons.filled.Adb
 import androidx.compose.material.icons.filled.AdminPanelSettings
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.DeveloperMode
 import androidx.compose.material.icons.filled.FlashOn
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LayersClear
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Security
@@ -179,6 +181,22 @@ private fun basicRows(uiState: SettingsUiState, viewModel: SettingsViewModel): L
         enabled = true,
         checked = uiState.disablePagerSwipe,
         onCheckedChange = viewModel::setDisablePagerSwipe,
+    ),
+    BasicRow(
+        icon = Icons.Filled.AutoAwesome,
+        title = R.string.settings_simple_mode,
+        summary = stringResource(R.string.settings_simple_mode_summary),
+        enabled = true,
+        checked = uiState.simpleMode,
+        onCheckedChange = viewModel::setSimpleMode,
+    ),
+    BasicRow(
+        icon = Icons.Filled.Info,
+        title = R.string.settings_show_more_module_info,
+        summary = stringResource(R.string.settings_show_more_module_info_summary),
+        enabled = true,
+        checked = uiState.showMoreModuleInfo,
+        onCheckedChange = viewModel::setShowMoreModuleInfo,
     ),
 )
 

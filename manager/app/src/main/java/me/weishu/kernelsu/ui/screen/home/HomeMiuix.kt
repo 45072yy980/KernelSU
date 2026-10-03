@@ -87,6 +87,7 @@ import me.weishu.kernelsu.KernelVersion
 import me.weishu.kernelsu.Natives
 import me.weishu.kernelsu.R
 import me.weishu.kernelsu.ui.theme.LocalHomeCardBlur
+import me.weishu.kernelsu.ui.theme.LocalSimpleMode
 import me.weishu.kernelsu.ui.theme.LocalGlassNotice
 import me.weishu.kernelsu.ui.theme.LocalGlassWallpaper
 import me.weishu.kernelsu.ui.PanelMetrics
@@ -181,6 +182,11 @@ fun HomePagerMiuix(
                             LocalGlassNotice provides noticeGlassed,
                             LocalGlassWallpaper provides if (noticeGlassed) noticeWallpaper else null,
                         ) {
+                        // Simplicity mode keeps only the status card: no update prompt, no
+                        // notices, no guard banner. The checks still run, so turning the
+                        // switch back off reveals whatever is relevant at that moment.
+                        val simpleMode = LocalSimpleMode.current
+                        if (!simpleMode) {
                         if (state.checkUpdateEnabled) {
                             UpdateCard(state = state, actions = actions)
                         }
@@ -219,6 +225,7 @@ fun HomePagerMiuix(
                         }
                         if (state.isLateLoadMode) {
                             JailbreakGuardCard(modifier = Modifier.fillMaxWidth())
+                        }
                         }
                         }
                         StatusCard(

@@ -16,4 +16,6 @@ data class AboutUiState(
 data class AboutScreenActions(
     val onBack: () -> Unit,
     val onOpenLink: (String) -> Unit,
+    /** Opens the generated list of third-party libraries and their licences. */
+    val onOpenLicences: () -> Unit = {},
 )

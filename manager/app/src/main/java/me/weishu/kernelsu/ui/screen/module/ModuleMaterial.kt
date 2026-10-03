@@ -141,6 +141,9 @@ import me.weishu.kernelsu.ui.component.material.SnackBarHost
 import me.weishu.kernelsu.ui.component.material.TonalCard
 import me.weishu.kernelsu.ui.component.statustag.StatusTag
 import me.weishu.kernelsu.ui.theme.LocalModuleDescriptionMaxLines
+import me.weishu.kernelsu.ui.theme.LocalShowMoreModuleInfo
+import me.weishu.kernelsu.ui.util.formatByteSize
+import me.weishu.kernelsu.ui.util.moduleDirectorySize
 import me.weishu.kernelsu.ui.util.reboot
 
 @SuppressLint("StringFormatInvalid")
@@ -758,6 +761,37 @@ private fun ModuleItem(
                         style = MaterialTheme.typography.bodySmall,
                         textDecoration = textDecoration
                     )
+                    // Extra rows, off by default: the id, the update manifest and the
+                    // folder's size on disk, walked lazily for the same reason as on
+                    // the Miuix skin.
+                    if (LocalShowMoreModuleInfo.current) {
+                        val moreTint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
+                        Text(
+                            text = "ID: ${module.id}",
+                            color = moreTint,
+                            style = MaterialTheme.typography.labelSmall,
+                            textDecoration = textDecoration
+                        )
+                        if (module.updateJson.isNotBlank()) {
+                            Text(
+                                text = "Update: ${module.updateJson}",
+                                color = moreTint,
+                                style = MaterialTheme.typography.labelSmall,
+                                textDecoration = textDecoration
+                            )
+                        }
+                        val moduleSize = remember(module.id) {
+                            moduleDirectorySize("/data/adb/modules/${module.id}")
+                        }
+                        if (moduleSize != null) {
+                            Text(
+                                text = "Size: ${formatByteSize(moduleSize)}",
+                                color = moreTint,
+                                style = MaterialTheme.typography.labelSmall,
+                                textDecoration = textDecoration
+                            )
+                        }
+                    }
                 }
 
                 Spacer(modifier = Modifier.weight(1f))

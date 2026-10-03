@@ -162,11 +162,26 @@ val LocalEnableNavigationBadge = staticCompositionLocalOf { true }
 
 val LocalModuleDescriptionMaxLines = staticCompositionLocalOf { 4 }
 
+/**
+ * When true each module row also lists the module's id, update URL and on-disk
+ * size. Off by default: the extra lines make the list noticeably taller, and
+ * most readers never look at them.
+ */
+val LocalShowMoreModuleInfo = staticCompositionLocalOf { false }
+
 /** When true the home pager ignores left/right swipes; the bottom bar still navigates. */
 val LocalDisablePagerSwipe = staticCompositionLocalOf { false }
 
 /** When true the home "working" card draws its background with a blur (frosted) effect. */
 val LocalHomeCardBlur = staticCompositionLocalOf { false }
+
+/**
+ * When true the home screen hides everything except the status card: the update
+ * card, the warning notices and the guard banner all go away. Intended for
+ * readers who just want to see whether root is up.
+ */
+val LocalSimpleMode = staticCompositionLocalOf { false }
+
 /**
  * When true a card is sitting inside the home notice glass pane: it must not
  * paint its own container, or it would cover the frosted background behind it.

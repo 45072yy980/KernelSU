@@ -17,5 +17,7 @@ data class MainActivityUiState(
     val moduleDescriptionMaxLines: Int = 4,
     val disablePagerSwipe: Boolean = false,
     val homeCardBlur: Boolean = false,
+    val simpleMode: Boolean = false,
+    val showMoreModuleInfo: Boolean = false,
     val uiMode: UiMode,
 )

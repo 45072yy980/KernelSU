@@ -24,6 +24,8 @@ private const val KEY_PARTITION_GUARD = "partition_guard"
 private const val KEY_RUNTIME_GUARD = "runtime_partition_guard"
 private const val KEY_HOME_CARD_BLUR = "home_card_blur"
 private const val KEY_DISABLE_PAGER_SWIPE = "disable_pager_swipe"
+private const val KEY_SIMPLE_MODE = "simple_mode"
+private const val KEY_SHOW_MORE_MODULE_INFO = "show_more_module_info"
 
 private fun settingsPrefs() =
     ksuApp.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
@@ -269,6 +271,12 @@ class SettingsRepositoryImpl : SettingsRepository {
     override var disablePagerSwipe: Boolean
         get() = prefs.getBoolean(KEY_DISABLE_PAGER_SWIPE, false)
         set(value) = prefs.edit { putBoolean(KEY_DISABLE_PAGER_SWIPE, value) }
+    override var simpleMode: Boolean
+        get() = prefs.getBoolean(modeKey(KEY_SIMPLE_MODE), false)
+        set(value) = prefs.edit { putBoolean(modeKey(KEY_SIMPLE_MODE), value) }
+    override var showMoreModuleInfo: Boolean
+        get() = prefs.getBoolean(KEY_SHOW_MORE_MODULE_INFO, false)
+        set(value) = prefs.edit { putBoolean(KEY_SHOW_MORE_MODULE_INFO, value) }
 
     override val intentToken: String
         get() {

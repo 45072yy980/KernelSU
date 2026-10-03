@@ -56,6 +56,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.flow.onEach
+import androidx.compose.ui.res.stringResource
 import me.weishu.kernelsu.R
 import me.weishu.kernelsu.ui.component.miuix.effect.BgEffectBackground
 import me.weishu.kernelsu.ui.component.miuix.effect.ColorBlendToken
@@ -468,6 +469,33 @@ private fun AboutContent(
                                 )
                             }
                         }
+                    }
+                    // The generated licence list. Its own card for the same reason as the
+                    // provenance above: it is not a place to go, it is a thing to read.
+                    Card(
+                        modifier = Modifier
+                            .padding(horizontal = 12.dp)
+                            .padding(top = 12.dp)
+                            .then(
+                                if (enableBlur) {
+                                    Modifier.textureBlur(
+                                        backdrop = backdrop,
+                                        shape = RoundedCornerShape(16.dp),
+                                        blurRadius = 60f,
+                                        colors = BlurColors(blendColors = blendColors),
+                                        enabled = true,
+                                    )
+                                } else Modifier
+                            ),
+                        colors = CardDefaults.defaultColors(
+                            if (enableBlur) Color.Transparent else colorScheme.surfaceContainer,
+                            Color.Transparent,
+                        ),
+                    ) {
+                        ArrowPreference(
+                            title = stringResource(id = R.string.about_open_source_license),
+                            onClick = actions.onOpenLicences,
+                        )
                     }
                     Spacer(
                         Modifier.height(

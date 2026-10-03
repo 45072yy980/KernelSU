@@ -16,6 +16,7 @@ ndk = "29.0.14206865"
 libsu = "6.0.0"
 apksign = "1.4"
 miuix = "0.9.4"
+aboutlibraries = "15.2.0"
 okhttp = "5.5.0"
 hiddenapibypass = "6.1"
 appiconloader = "1.5.0"
@@ -31,6 +32,7 @@ compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 
 lsplugin-apksign = { id = "org.lsposed.lsplugin.apksign", version.ref = "apksign" }
+aboutlibraries = { id = "com.mikepenz.aboutlibraries.plugin", version.ref = "aboutlibraries" }
 protobuf = { id = "com.google.protobuf", version = "0.10.0" }
 
 [libraries]
@@ -93,3 +95,5 @@ xz = { module = "org.tukaani:xz", version.ref = "xz" }
 # zip rewriter (apkzlib). Both ship with the Android Gradle plugin, so they follow its version.
 apksig = { group = "com.android.tools.build", name = "apksig", version.ref = "agp" }
 apkzlib = { group = "com.android.tools.build", name = "apkzlib", version.ref = "agp" }
+aboutlibraries-core = { module = "com.mikepenz:aboutlibraries-core", version.ref = "aboutlibraries" }
+aboutlibraries-compose-m3 = { module = "com.mikepenz:aboutlibraries-compose-m3", version.ref = "aboutlibraries" }

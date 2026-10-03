@@ -55,6 +55,8 @@ class MainActivityViewModel(
             moduleDescriptionMaxLines = settingRepo.moduleDescriptionMaxLines,
             disablePagerSwipe = settingRepo.disablePagerSwipe,
             homeCardBlur = settingRepo.homeCardBlur,
+            simpleMode = settingRepo.simpleMode,
+            showMoreModuleInfo = settingRepo.showMoreModuleInfo,
             uiMode = UiMode.fromValue(settingRepo.uiMode),
         )
     }
@@ -76,6 +78,8 @@ class MainActivityViewModel(
             "ui_mode",
             "disable_pager_swipe",
             "home_card_blur",
+            "simple_mode",
+            "show_more_module_info",
         )
     }
 }

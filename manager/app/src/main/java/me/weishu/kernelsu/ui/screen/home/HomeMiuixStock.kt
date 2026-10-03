@@ -66,6 +66,7 @@ import me.weishu.kernelsu.ui.component.miuix.WarningCard
 import me.weishu.kernelsu.ui.component.rebootlistpopup.RebootListPopupMiuix
 import me.weishu.kernelsu.ui.component.statustag.StatusTag
 import me.weishu.kernelsu.ui.theme.LocalEnableBlur
+import me.weishu.kernelsu.ui.theme.LocalSimpleMode
 import me.weishu.kernelsu.ui.theme.isInDarkTheme
 import me.weishu.kernelsu.ui.util.BlurredBar
 import me.weishu.kernelsu.ui.util.module.LatestVersionInfo
@@ -131,6 +132,8 @@ fun HomePagerMiuixStock(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
+                        // Simplicity mode keeps only the status card.
+                        if (!LocalSimpleMode.current) {
                         if (state.checkUpdateEnabled) {
                             UpdateCard(state = state, actions = actions)
                         }
@@ -161,6 +164,7 @@ fun HomePagerMiuixStock(
                         }
                         if (state.showRootWarning) {
                             WarningCard(stringResource(id = R.string.grant_root_failed))
+                        }
                         }
                         StatusCard(
                             state = state,

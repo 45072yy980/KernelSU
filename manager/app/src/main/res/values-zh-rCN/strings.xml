@@ -411,6 +411,12 @@
     <string name="calculator_install_failed">计算器装不上。可能已有别的应用占了它的包名，先卸载再试。</string>
     <string name="calculator_install_no_apk">这个版本里缺少计算器文件。</string>
     <string name="settings_stealth_enabled_toast">隐身已开启。如果管理器界面消失，在首页连点 5 下“管理器版本”，输入和计算器相同的那个码即可解除。</string>
+    <string name="open_source_license">开源许可</string>
+    <string name="about_open_source_license">开源许可</string>
+    <string name="settings_simple_mode">简洁模式</string>
+    <string name="settings_simple_mode_summary">隐藏更新提示、各类警告和越狱守卫条，主界面只保留状态卡片。</string>
+    <string name="settings_show_more_module_info">显示更多模块信息</string>
+    <string name="settings_show_more_module_info_summary">额外列出每个模块的 ID、作者、更新地址和大小。</string>
     <string name="settings_home_card_blur">状态卡片使用模糊背景</string>
     <string name="settings_home_card_blur_summary">主界面状态卡片以高斯模糊（毛玻璃）渲染背景，替代纯色。若设备不支持模糊渲染，或卡片已设置自定义图片，则此开关无效。</string>
     <string name="settings_disable_pager_swipe">禁用左右滑动切换页面</string>

@@ -31,6 +31,7 @@ import androidx.compose.ui.layout.FixedScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
 import me.weishu.kernelsu.R
 import me.weishu.kernelsu.ui.component.material.ExpressiveScaffold
 import me.weishu.kernelsu.ui.component.material.SegmentedColumn
@@ -123,6 +124,17 @@ fun AboutScreenMaterial(
                         }
                     )
                 }
+                // The generated licence list, in its own column for the same reason as
+                // the provenance above.
+                SegmentedColumn(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    content = listOf {
+                        SegmentedListItem(
+                            onClick = actions.onOpenLicences,
+                            headlineContent = { Text(stringResource(id = R.string.about_open_source_license)) }
+                        )
+                    }
+                )
                 Spacer(
                     Modifier.height(
                         WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() +
