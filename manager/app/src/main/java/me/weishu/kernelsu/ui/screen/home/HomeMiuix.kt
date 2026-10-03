@@ -236,6 +236,7 @@ fun HomePagerMiuix(
                             systemInfo = state.systemInfo,
                             zygiskImplementation = state.zygiskImplementation,
                             metaModuleImplementation = state.metaModuleImplementation,
+                            xposedImplementation = state.xposedImplementation,
                             modifier = Modifier.fillMaxWidth(),
                         )
                         SupportLinks(
@@ -244,8 +245,14 @@ fun HomePagerMiuix(
                         )
                         Spacer(
                             Modifier.height(
-                                bottomInnerPadding + if (!Natives.isFullFeatured())
-                                    WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() else 0.dp
+                                bottomInnerPadding +
+                                    // A little more than the bars themselves, so the last card
+                                    // does not come to rest against the navigation bar when the
+                                    // list is scrolled all the way down.
+                                    24.dp +
+                                    if (!Natives.isFullFeatured())
+                                        WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+                                    else 0.dp
                             )
                         )
                     }
@@ -654,6 +661,7 @@ private fun InfoCard(
     systemInfo: SystemInfo,
     zygiskImplementation: String? = null,
     metaModuleImplementation: String? = null,
+    xposedImplementation: String? = null,
     modifier: Modifier = Modifier,
 ) {
     val wallpaperSet = rememberWallpaperSet()
@@ -760,6 +768,13 @@ private fun InfoCard(
                     InfoText(
                         icon = Icons.Filled.Inventory2,
                         title = stringResource(R.string.home_meta_module_implement),
+                        content = it,
+                    )
+                }
+                xposedImplementation?.let {
+                    InfoText(
+                        icon = Icons.Filled.Extension,
+                        title = stringResource(R.string.home_xposed_implement),
                         content = it,
                     )
                 }

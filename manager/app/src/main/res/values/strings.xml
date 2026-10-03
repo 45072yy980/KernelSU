@@ -408,6 +408,7 @@
     <string name="settings_stealth_summary">Stop reporting that a manager is installed and that the module arrived after boot. Every other process — including the ones that look for root — is told a plain device. The app keeps its root rights, so this switch stays reachable; turn it off here, or run `ksud stealth set 0` from a shell.</string>
     <string name="home_zygisk_implement">Zygisk implementation</string>
     <string name="home_meta_module_implement">Metamodule implementation</string>
+    <string name="home_xposed_implement">Xposed implementation</string>
     <string name="calculator_code_title">Calculator trigger code</string>
     <string name="calculator_code_summary">Type these digits in the calculator and press = to open the web manager. Digits only; leave it empty to use the built-in default.</string>
     <string name="calculator_code_label">Code</string>
@@ -427,4 +428,28 @@
     <string name="settings_home_card_blur_summary">Draw the home page status card with a frosted (blurred) background instead of a solid colour. Ignored when the device cannot render a blur or the card has a custom picture.</string>
     <string name="settings_disable_pager_swipe">Disable left/right swipe between pages</string>
     <string name="settings_disable_pager_swipe_summary">Stop the home pager from following a left/right swipe. Switching pages still works through the bottom bar or navigation rail.</string>
+
+    <string name="settings_maintenance">Maintenance</string>
+    <string name="settings_maintenance_summary">Reload module scripts and emulate a restart</string>
+    <string name="maintenance_reload_modules">Reload modules</string>
+    <string name="maintenance_reload_modules_summary">Run post-fs-data, services and boot-completed again, without restarting</string>
+    <string name="maintenance_soft_reboot">Soft reboot</string>
+    <string name="maintenance_soft_reboot_summary">Emulate a restart so a module installed since boot is picked up</string>
+    <string name="maintenance_soft_reboot_hidden">Soft reboot with hiding</string>
+    <string name="maintenance_soft_reboot_hidden_summary">Turn stealth on, then emulate a restart</string>
+    <string name="maintenance_soft_reboot_hidden_summary_unsupported">This kernel does not support stealth mode; the restart runs without it</string>
+    <string name="maintenance_confirm_title">Confirm</string>
+    <string name="maintenance_confirm_message">The screen will go dark while the device restarts. Continue?</string>
+    <string name="maintenance_confirm_ok">Continue</string>
+    <string name="maintenance_confirm_cancel">Cancel</string>
+    <string name="maintenance_log_idle">Pick an action above.</string>
+    <string name="maintenance_log_reload_start">Reloading module scripts…</string>
+    <string name="maintenance_log_reload_ok">All three stages completed.</string>
+    <string name="maintenance_log_reload_partial">%1$d of 3 stages completed.</string>
+    <string name="maintenance_log_soft_start">Starting a soft reboot…</string>
+    <string name="maintenance_log_soft_note">This may take a moment.</string>
+    <string name="maintenance_log_hidden_start">Starting a soft reboot with hiding…</string>
+    <string name="maintenance_log_hidden_on">Stealth mode is on.</string>
+    <string name="maintenance_log_hidden_fail">The kernel did not accept stealth mode.</string>
+    <string name="maintenance_log_hidden_unsupported">This kernel does not support stealth mode.</string>
 </resources>

@@ -28,6 +28,8 @@ data class HomeUiState(
     val zygiskImplementation: String? = null,
     /** The installed metamodule, when there is one. Null hides the row. */
     val metaModuleImplementation: String? = null,
+    /** The module providing an Xposed framework, when one is installed and enabled. */
+    val xposedImplementation: String? = null,
 ) {
     val isSELinuxPermissive: Boolean
         get() = systemInfo.selinuxStatus == "Permissive"

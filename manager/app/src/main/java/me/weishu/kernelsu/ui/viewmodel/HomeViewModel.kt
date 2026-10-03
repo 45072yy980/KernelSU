@@ -98,6 +98,11 @@ class HomeViewModel(
             } else {
                 null
             },
+            xposedImplementation = if (isRootAvailable) {
+                me.weishu.kernelsu.ui.util.xposedImplementation()
+            } else {
+                null
+            },
         )
     }
 }

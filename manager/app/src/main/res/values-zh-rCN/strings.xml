@@ -402,6 +402,7 @@
     <string name="settings_stealth_summary">不再上报“装了管理器”和“开机后才加载”。其它进程（包括查 root 的）只会看到一台普通设备。管理器仍保有 root 权限，所以这个开关仍然能关掉；也可以在终端执行 ksud stealth set 0。</string>
     <string name="home_zygisk_implement">Zygisk 实现</string>
     <string name="home_meta_module_implement">元模块实现</string>
+    <string name="home_xposed_implement">Xposed 框架</string>
     <string name="calculator_code_title">计算器触发码</string>
     <string name="calculator_code_summary">在计算器里输入这串数字再按 = 就会打开网页管理器。只能填数字；留空表示用内置的默认值。</string>
     <string name="calculator_code_label">密码</string>
@@ -421,4 +422,28 @@
     <string name="settings_home_card_blur_summary">主界面状态卡片以高斯模糊（毛玻璃）渲染背景，替代纯色。若设备不支持模糊渲染，或卡片已设置自定义图片，则此开关无效。</string>
     <string name="settings_disable_pager_swipe">禁用左右滑动切换页面</string>
     <string name="settings_disable_pager_swipe_summary">主界面不再跟随左右滑动切换页面；仍可通过底部栏或导航栏切换。</string>
+
+    <string name="settings_maintenance">维护工具</string>
+    <string name="settings_maintenance_summary">重载模块脚本与模拟重启</string>
+    <string name="maintenance_reload_modules">重载模块</string>
+    <string name="maintenance_reload_modules_summary">重新执行 post-fs-data、services 与 boot-completed，无需重启</string>
+    <string name="maintenance_soft_reboot">软重启</string>
+    <string name="maintenance_soft_reboot_summary">模拟一次重启，让开机后新装的模块生效</string>
+    <string name="maintenance_soft_reboot_hidden">带隐藏的软重启</string>
+    <string name="maintenance_soft_reboot_hidden_summary">先开启隐身模式，再模拟重启</string>
+    <string name="maintenance_soft_reboot_hidden_summary_unsupported">当前内核不支持隐身模式，将直接重启</string>
+    <string name="maintenance_confirm_title">确认</string>
+    <string name="maintenance_confirm_message">重启期间屏幕会短暂变黑，是否继续？</string>
+    <string name="maintenance_confirm_ok">继续</string>
+    <string name="maintenance_confirm_cancel">取消</string>
+    <string name="maintenance_log_idle">请点击上方的操作。</string>
+    <string name="maintenance_log_reload_start">正在重载模块脚本…</string>
+    <string name="maintenance_log_reload_ok">三个阶段全部完成。</string>
+    <string name="maintenance_log_reload_partial">三个阶段中完成了 %1$d 个。</string>
+    <string name="maintenance_log_soft_start">正在软重启…</string>
+    <string name="maintenance_log_soft_note">可能需要一点时间。</string>
+    <string name="maintenance_log_hidden_start">正在执行带隐藏的软重启…</string>
+    <string name="maintenance_log_hidden_on">隐身模式已开启。</string>
+    <string name="maintenance_log_hidden_fail">内核未接受隐身模式。</string>
+    <string name="maintenance_log_hidden_unsupported">当前内核不支持隐身模式。</string>
 </resources>

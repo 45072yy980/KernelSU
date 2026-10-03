@@ -770,3 +770,88 @@ fun metaModuleImplementation(): String? {
     }.getOrDefault("")
     return name.ifEmpty { null }
 }
+
+/**
+ * Reload every module lifecycle script without rebooting.
+ *
+ * This runs the three boot stages ksud exposes to userspace, in the order the boot would:
+ * `post-fs-data`, `services`, then `boot-completed`. It is the same sequence a soft reboot
+ * performs, minus the reboot, so a module whose scripts were just edited can be picked up in
+ * place. Returns the number of stages that completed without error, so the caller can tell a
+ * clean run from a partial one.
+ */
+fun reloadModules(): Int = runCatching {
+    val ksud = getKsuDaemonPath()
+    val shell = getRootShell(globalMnt = true)
+    var ok = 0
+    for (stage in listOf("post-fs-data", "services", "boot-completed")) {
+        val result = shell.newJob().add("$ksud $stage").exec()
+        if (result.code == 0) ok++
+    }
+    ok
+}.getOrDefault(0)
+
+/**
+ * Whether the kernel knows the `soft-reboot` command.
+ *
+ * `ksud --help` lists it on every build, so the command's presence is not evidence the kernel
+ * will act on it. The manager only offers the button when the running kernel passes the uapi
+ * version check the command itself performs.
+ */
+fun isSoftRebootSupported(): Boolean = runCatching {
+    val out = ShellUtils.fastCmd(getRootShell(), "${getKsuDaemonPath()} soft-reboot --help")
+    out.isNotEmpty() && !out.contains("unrecognized", ignoreCase = true)
+}.getOrDefault(false)
+/**
+ * The name of the module providing an Xposed-compatible framework, or null when none is.
+ *
+ * As with Zygisk, the framework lives in a module rather than in the kernel, and which module that
+ * is varies by how it was installed. The ids below cover the ones seen in the wild: LSPosed under
+ * each of its packaging names, and the older Xposed installers. They are checked in order so the
+ * most common answer comes back first.
+ *
+ * The daemon directory is checked as well, because LSPosed writes `/data/adb/lspd` whatever id its
+ * module happens to use, and some builds ship under names not listed here. A disabled or
+ * queued-for-removal module is skipped rather than reported, since it is not providing anything,
+ * and the prop is read for its human name so the row shows what the module calls itself.
+ */
+fun xposedImplementation(): String? {
+    val shell = getRootShell()
+    val ids = listOf(
+        "lsposed",
+        "zygisk_lsposed",
+        "riru-lsposed",
+        "lsposed_mod",
+        "xposed",
+        "taichi",
+    )
+    for (id in ids) {
+        val dir = "/data/adb/modules/$id"
+        if (ShellUtils.fastCmd(shell, "test -f $dir/disable -o -f $dir/remove && echo y").trim() == "y") {
+            continue
+        }
+        val name = ShellUtils.fastCmd(
+            shell,
+            "sed -n 's/^name=//p' $dir/module.prop 2>/dev/null | head -n 1",
+        ).trim()
+        if (name.isNotEmpty()) {
+            return name
+        }
+    }
+    // LSPosed keeps its daemon here regardless of the module id, so a build that ships under a
+    // name not listed above is still found through it.
+    val fromDaemon = runCatching {
+        ShellUtils.fastCmd(
+            shell,
+            "sed -n 's/^name=//p' /data/adb/lspd/module.prop 2>/dev/null | head -n 1",
+        ).trim()
+    }.getOrDefault("")
+    if (fromDaemon.isNotEmpty()) {
+        return fromDaemon
+    }
+    return if (ShellUtils.fastCmd(shell, "test -d /data/adb/lspd && echo y").trim() == "y") {
+        "LSPosed"
+    } else {
+        null
+    }
+}
