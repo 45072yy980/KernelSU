@@ -1,6 +1,7 @@
 package me.weishu.kernelsu.ui.screen.susfs
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -38,6 +40,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.compose.dropUnlessResumed
@@ -49,7 +52,6 @@ import me.weishu.kernelsu.ui.LocalUiMode
 import me.weishu.kernelsu.ui.UiMode
 import me.weishu.kernelsu.ui.component.material.SegmentedColumn
 import me.weishu.kernelsu.ui.component.material.SegmentedListItem
-import me.weishu.kernelsu.ui.component.material.SegmentedSwitchItem
 import me.weishu.kernelsu.ui.navigation3.LocalNavigator
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Icon as MiuixIcon
@@ -86,9 +88,8 @@ fun SusfsScreen() {
 
     LaunchedEffect(Unit) { viewModel.refresh() }
 
-    // The one dialog shape this screen needs: collect two strings and hand
-    // them to a callback. Which fields are shown is decided by the caller.
     var pending by remember { mutableStateOf<SusfsInput?>(null) }
+    var pendingStatic by remember { mutableStateOf(false) }
 
     when (LocalUiMode.current) {
         UiMode.Miuix, UiMode.MiuixStock -> SusfsMiuix(
@@ -96,6 +97,7 @@ fun SusfsScreen() {
             onBack = onBack,
             onRefresh = viewModel::refresh,
             onInput = { pending = it },
+            onStaticKstat = { pendingStatic = true },
             viewModel = viewModel,
         )
 
@@ -107,21 +109,44 @@ fun SusfsScreen() {
         SusfsInputDialog(
             input = input,
             onDismiss = { pending = null },
-            onConfirm = { a, b ->
+            onConfirm = { a, b, uid ->
                 pending = null
-                input.onConfirm(a, b)
+                input.onConfirm(a, b, uid)
+            },
+        )
+    }
+
+    if (pendingStatic) {
+        SusfsStaticKstatDialog(
+            onDismiss = { pendingStatic = false },
+            onConfirm = { args ->
+                pendingStatic = false
+                viewModel.addSusKstatStatically(
+                    path = args.path,
+                    ino = args.ino,
+                    dev = args.dev,
+                    nlink = args.nlink,
+                    size = args.size,
+                    atimeSec = args.atimeSec,
+                    atimeNsec = args.atimeNsec,
+                    mtimeSec = args.mtimeSec,
+                    mtimeNsec = args.mtimeNsec,
+                    ctimeSec = args.ctimeSec,
+                    ctimeNsec = args.ctimeNsec,
+                    blocks = args.blocks,
+                    blksize = args.blksize,
+                )
             },
         )
     }
 }
 
 /**
- * A pending two-field prompt.
+ * A pending two-field prompt, with optional uid_scheme selector.
  *
  * [fieldA]/[fieldB] are the visible labels; the single-field prompts leave
- * [fieldB] null and the dialog hides that line. Keeping it to two strings
- * covers every command the screen runs, so there is one dialog rather than
- * six.
+ * [fieldB] null and the dialog hides that line. [showUidScheme] adds a
+ * uid_scheme picker (0 = all processes, 1 = non-root only, 2 = custom).
  */
 private data class SusfsInput(
     val title: String,
@@ -129,7 +154,25 @@ private data class SusfsInput(
     val fieldB: String? = null,
     val valueA: String = "",
     val valueB: String = "",
-    val onConfirm: (String, String) -> Unit,
+    val showUidScheme: Boolean = false,
+    val onConfirm: (String, String, Int) -> Unit,
+)
+
+/** Collected values from the static-kstat dialog. */
+private data class SusfsStaticKstatArgs(
+    val path: String,
+    val ino: Long,
+    val dev: Long,
+    val nlink: Long,
+    val size: Long,
+    val atimeSec: Long,
+    val atimeNsec: Long,
+    val mtimeSec: Long,
+    val mtimeNsec: Long,
+    val ctimeSec: Long,
+    val ctimeNsec: Long,
+    val blocks: Long,
+    val blksize: Long,
 )
 
 @Composable
@@ -138,6 +181,7 @@ private fun SusfsMiuix(
     onBack: () -> Unit,
     onRefresh: () -> Unit,
     onInput: (SusfsInput) -> Unit,
+    onStaticKstat: () -> Unit,
     viewModel: SusfsViewModel,
 ) {
     MiuixScaffold(
@@ -166,7 +210,7 @@ private fun SusfsMiuix(
                 item { SusfsFeaturesCard(state) }
                 item { SusfsSwitchCard(state, viewModel) }
                 item { SusfsPathCard(onInput, viewModel) }
-                item { SusfsKstatCard(onInput, viewModel) }
+                item { SusfsKstatCard(onInput, onStaticKstat, viewModel) }
                 item { SusfsRedirectCard(onInput, viewModel) }
                 item { SusfsUnameCard(state, onInput, viewModel) }
             }
@@ -241,8 +285,6 @@ private fun SusfsStatusCard(state: SusfsUiState, onRefresh: () -> Unit) {
  *
  * Mirrors the upstream SuSFS panel: every feature the build can have is
  * listed, and the ones the kernel did not report simply read as disabled.
- * That is more useful than hiding them, because "this build has no SUS_MOUNT"
- * is exactly the thing a reader wants to know.
  */
 @Composable
 private fun SusfsFeaturesCard(state: SusfsUiState) {
@@ -351,8 +393,6 @@ private fun SusfsSwitchCard(state: SusfsUiState, viewModel: SusfsViewModel) {
 /** Hidden-path list. */
 @Composable
 private fun SusfsPathCard(onInput: (SusfsInput) -> Unit, viewModel: SusfsViewModel) {
-    // Resolved here, in composable scope: an onClick lambda is not a @Composable
-    // context, so the strings cannot be read inside it.
     val addPath = stringResource(R.string.susfs_add_path)
     val addPathSummary = stringResource(R.string.susfs_add_path_summary)
     val addPathLoop = stringResource(R.string.susfs_add_path_loop)
@@ -374,7 +414,7 @@ private fun SusfsPathCard(onInput: (SusfsInput) -> Unit, viewModel: SusfsViewMod
             },
             onClick = {
                 onInput(
-                    SusfsInput(title = addPath, fieldA = fieldPath) { path, _ ->
+                    SusfsInput(title = addPath, fieldA = fieldPath) { path, _, _ ->
                         viewModel.addSusPath(path)
                     },
                 )
@@ -393,7 +433,7 @@ private fun SusfsPathCard(onInput: (SusfsInput) -> Unit, viewModel: SusfsViewMod
             },
             onClick = {
                 onInput(
-                    SusfsInput(title = addPathLoop, fieldA = fieldPath) { path, _ ->
+                    SusfsInput(title = addPathLoop, fieldA = fieldPath) { path, _, _ ->
                         viewModel.addSusPathLoop(path)
                     },
                 )
@@ -412,7 +452,7 @@ private fun SusfsPathCard(onInput: (SusfsInput) -> Unit, viewModel: SusfsViewMod
             },
             onClick = {
                 onInput(
-                    SusfsInput(title = addMap, fieldA = fieldPath) { path, _ ->
+                    SusfsInput(title = addMap, fieldA = fieldPath) { path, _, _ ->
                         viewModel.addSusMap(path)
                     },
                 )
@@ -421,13 +461,21 @@ private fun SusfsPathCard(onInput: (SusfsInput) -> Unit, viewModel: SusfsViewMod
     }
 }
 
-/** kstat spoofing. */
+/** kstat spoofing — auto, full-clone, and static (manual values). */
 @Composable
-private fun SusfsKstatCard(onInput: (SusfsInput) -> Unit, viewModel: SusfsViewModel) {
+private fun SusfsKstatCard(
+    onInput: (SusfsInput) -> Unit,
+    onStaticKstat: () -> Unit,
+    viewModel: SusfsViewModel,
+) {
     val addKstat = stringResource(R.string.susfs_add_kstat)
     val addKstatSummary = stringResource(R.string.susfs_add_kstat_summary)
     val updateKstat = stringResource(R.string.susfs_update_kstat)
     val updateKstatSummary = stringResource(R.string.susfs_update_kstat_summary)
+    val updateKstatFullClone = stringResource(R.string.susfs_update_kstat_full_clone)
+    val updateKstatFullCloneSummary = stringResource(R.string.susfs_update_kstat_full_clone_summary)
+    val addKstatStatic = stringResource(R.string.susfs_add_kstat_static)
+    val addKstatStaticSummary = stringResource(R.string.susfs_add_kstat_static_summary)
     val fieldPath = stringResource(R.string.susfs_field_path)
     Card(modifier = Modifier.padding(top = 12.dp)) {
         ArrowPreference(
@@ -443,7 +491,7 @@ private fun SusfsKstatCard(onInput: (SusfsInput) -> Unit, viewModel: SusfsViewMo
             },
             onClick = {
                 onInput(
-                    SusfsInput(title = addKstat, fieldA = fieldPath) { path, _ ->
+                    SusfsInput(title = addKstat, fieldA = fieldPath) { path, _, _ ->
                         viewModel.addSusKstat(path)
                     },
                 )
@@ -462,16 +510,48 @@ private fun SusfsKstatCard(onInput: (SusfsInput) -> Unit, viewModel: SusfsViewMo
             },
             onClick = {
                 onInput(
-                    SusfsInput(title = updateKstat, fieldA = fieldPath) { path, _ ->
+                    SusfsInput(title = updateKstat, fieldA = fieldPath) { path, _, _ ->
                         viewModel.updateSusKstat(path)
                     },
                 )
             },
         )
+        ArrowPreference(
+            title = updateKstatFullClone,
+            summary = updateKstatFullCloneSummary,
+            startAction = {
+                MiuixIcon(
+                    imageVector = Icons.Filled.Tune,
+                    contentDescription = null,
+                    tint = colorScheme.onBackground,
+                    modifier = Modifier.padding(end = 6.dp),
+                )
+            },
+            onClick = {
+                onInput(
+                    SusfsInput(title = updateKstatFullClone, fieldA = fieldPath) { path, _, _ ->
+                        viewModel.updateSusKstatFullClone(path)
+                    },
+                )
+            },
+        )
+        ArrowPreference(
+            title = addKstatStatic,
+            summary = addKstatStaticSummary,
+            startAction = {
+                MiuixIcon(
+                    imageVector = Icons.Filled.Tune,
+                    contentDescription = null,
+                    tint = colorScheme.onBackground,
+                    modifier = Modifier.padding(end = 6.dp),
+                )
+            },
+            onClick = onStaticKstat,
+        )
     }
 }
 
-/** open() redirection. */
+/** open() redirection, with uid_scheme selector. */
 @Composable
 private fun SusfsRedirectCard(onInput: (SusfsInput) -> Unit, viewModel: SusfsViewModel) {
     val addRedirect = stringResource(R.string.susfs_add_redirect)
@@ -496,8 +576,9 @@ private fun SusfsRedirectCard(onInput: (SusfsInput) -> Unit, viewModel: SusfsVie
                         title = addRedirect,
                         fieldA = fieldTarget,
                         fieldB = fieldRedirected,
-                    ) { target, redirected ->
-                        viewModel.addOpenRedirect(target, redirected)
+                        showUidScheme = true,
+                    ) { target, redirected, uidScheme ->
+                        viewModel.addOpenRedirect(target, redirected, uidScheme)
                     },
                 )
             },
@@ -539,7 +620,7 @@ private fun SusfsUnameCard(
                         fieldB = fieldVersion,
                         valueA = state.unameRelease,
                         valueB = state.unameVersion,
-                    ) { release, version ->
+                    ) { release, version, _ ->
                         viewModel.setUname(release, version)
                     },
                 )
@@ -558,7 +639,7 @@ private fun SusfsUnameCard(
             },
             onClick = {
                 onInput(
-                    SusfsInput(title = setCmdline, fieldA = fieldFile) { path, _ ->
+                    SusfsInput(title = setCmdline, fieldA = fieldFile) { path, _, _ ->
                         viewModel.setCmdline(path)
                     },
                 )
@@ -657,15 +738,25 @@ private fun SusfsMaterialFallback(onBack: () -> Unit) {
     }
 }
 
-/** The two-field prompt used by every action on this screen. */
+/** The two-field prompt (plus optional uid_scheme) used by every action. */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SusfsInputDialog(
     input: SusfsInput,
     onDismiss: () -> Unit,
-    onConfirm: (String, String) -> Unit,
+    onConfirm: (String, String, Int) -> Unit,
 ) {
     var valueA by remember { mutableStateOf(input.valueA) }
     var valueB by remember { mutableStateOf(input.valueB) }
+    var uidMode by remember { mutableStateOf(0) }
+    var customUid by remember { mutableStateOf("") }
+
+    val resolvedUid = when (uidMode) {
+        0 -> 0
+        1 -> 1
+        else -> customUid.toIntOrNull() ?: 0
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(input.title) },
@@ -690,11 +781,49 @@ private fun SusfsInputDialog(
                             .fillMaxWidth(),
                     )
                 }
+                if (input.showUidScheme) {
+                    Text(
+                        text = stringResource(R.string.susfs_uid_scheme_title),
+                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(top = 16.dp),
+                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        listOf(
+                            0 to stringResource(R.string.susfs_uid_all),
+                            1 to stringResource(R.string.susfs_uid_non_root),
+                            2 to stringResource(R.string.susfs_uid_custom),
+                        ).forEach { (mode, label) ->
+                            FilterChipCompat(
+                                selected = uidMode == mode,
+                                onClick = { uidMode = mode },
+                                label = label,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                    }
+                    if (uidMode == 2) {
+                        OutlinedTextField(
+                            value = customUid,
+                            onValueChange = { customUid = it },
+                            singleLine = true,
+                            label = { Text(stringResource(R.string.susfs_uid_custom_hint)) },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier
+                                .padding(top = 8.dp)
+                                .fillMaxWidth(),
+                        )
+                    }
+                }
             }
         },
         confirmButton = {
             TextButton(
-                onClick = { onConfirm(valueA, valueB) },
+                onClick = { onConfirm(valueA, valueB, resolvedUid) },
                 enabled = valueA.isNotBlank(),
             ) {
                 Text(stringResource(R.string.susfs_confirm))
@@ -705,5 +834,140 @@ private fun SusfsInputDialog(
                 Text(stringResource(R.string.susfs_cancel))
             }
         },
+    )
+}
+
+/** Minimal selectable chip built from Box + clickable. */
+@Composable
+private fun FilterChipCompat(
+    selected: Boolean,
+    onClick: () -> Unit,
+    label: String,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(
+                if (selected) colorScheme.primaryContainer
+                else colorScheme.surfaceVariant
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 8.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        MiuixText(
+            text = label,
+            style = MiuixTheme.textStyles.footnote1,
+            color = if (selected) colorScheme.onPrimaryContainer
+            else colorScheme.onSurfaceVariantSummary,
+        )
+    }
+}
+
+/**
+ * The 13-field static kstat dialog.
+ *
+ * Fields are grouped: identity (ino/dev/nlink/size), times (atime/mtime/ctime
+ * sec+nsec), and blocks. Every numeric field defaults to 0 so the user can
+ * fill only what matters; the kernel forwards zeros verbatim.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SusfsStaticKstatDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (SusfsStaticKstatArgs) -> Unit,
+) {
+    var path by remember { mutableStateOf("") }
+    var ino by remember { mutableStateOf("") }
+    var dev by remember { mutableStateOf("") }
+    var nlink by remember { mutableStateOf("") }
+    var size by remember { mutableStateOf("") }
+    var atimeSec by remember { mutableStateOf("") }
+    var atimeNsec by remember { mutableStateOf("0") }
+    var mtimeSec by remember { mutableStateOf("") }
+    var mtimeNsec by remember { mutableStateOf("0") }
+    var ctimeSec by remember { mutableStateOf("") }
+    var ctimeNsec by remember { mutableStateOf("0") }
+    var blocks by remember { mutableStateOf("0") }
+    var blksize by remember { mutableStateOf("0") }
+
+    fun toLong(s: String) = s.toLongOrNull() ?: 0L
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.susfs_add_kstat_static)) },
+        text = {
+            Column(
+                modifier = Modifier
+                    .horizontalScroll(rememberScrollState())
+                    .fillMaxWidth()
+            ) {
+                StaticField(stringResource(R.string.susfs_field_path), path, { path = it }, KeyboardType.Text)
+                StaticField(stringResource(R.string.susfs_field_ino), ino, { ino = it })
+                StaticField(stringResource(R.string.susfs_field_dev), dev, { dev = it })
+                StaticField(stringResource(R.string.susfs_field_nlink), nlink, { nlink = it })
+                StaticField(stringResource(R.string.susfs_field_size), size, { size = it })
+                StaticField(stringResource(R.string.susfs_field_atime_sec), atimeSec, { atimeSec = it })
+                StaticField(stringResource(R.string.susfs_field_atime_nsec), atimeNsec, { atimeNsec = it })
+                StaticField(stringResource(R.string.susfs_field_mtime_sec), mtimeSec, { mtimeSec = it })
+                StaticField(stringResource(R.string.susfs_field_mtime_nsec), mtimeNsec, { mtimeNsec = it })
+                StaticField(stringResource(R.string.susfs_field_ctime_sec), ctimeSec, { ctimeSec = it })
+                StaticField(stringResource(R.string.susfs_field_ctime_nsec), ctimeNsec, { ctimeNsec = it })
+                StaticField(stringResource(R.string.susfs_field_blocks), blocks, { blocks = it })
+                StaticField(stringResource(R.string.susfs_field_blksize), blksize, { blksize = it })
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    onConfirm(
+                        SusfsStaticKstatArgs(
+                            path = path,
+                            ino = toLong(ino),
+                            dev = toLong(dev),
+                            nlink = toLong(nlink),
+                            size = toLong(size),
+                            atimeSec = toLong(atimeSec),
+                            atimeNsec = toLong(atimeNsec),
+                            mtimeSec = toLong(mtimeSec),
+                            mtimeNsec = toLong(mtimeNsec),
+                            ctimeSec = toLong(ctimeSec),
+                            ctimeNsec = toLong(ctimeNsec),
+                            blocks = toLong(blocks),
+                            blksize = toLong(blksize),
+                        )
+                    )
+                },
+                enabled = path.isNotBlank() && ino.isNotBlank(),
+            ) {
+                Text(stringResource(R.string.susfs_confirm))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.susfs_cancel))
+            }
+        },
+    )
+}
+
+/** One labelled OutlinedTextField for the static-kstat form. */
+@Composable
+private fun StaticField(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    keyboardType: KeyboardType = KeyboardType.Number,
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        singleLine = true,
+        label = { Text(label) },
+        keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+        modifier = Modifier
+            .padding(top = 6.dp)
+            .fillMaxWidth(),
     )
 }

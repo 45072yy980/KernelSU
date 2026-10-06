@@ -89,6 +89,33 @@ object SusfsCommands {
     suspend fun addSusKstat(path: String) = run("add-sus-kstat '$path'")
     suspend fun updateSusKstat(path: String) = run("update-sus-kstat '$path'")
     suspend fun updateSusKstatFullClone(path: String) = run("update-sus-kstat-full-clone '$path'")
+
+    /**
+     * Spoof a path's stat with caller-supplied values instead of re-stat(2)ing.
+     *
+     * All 13 fields are forwarded verbatim to `ksud susfs add-sus-kstat-statically`;
+     * the kernel uses them as-is so this is the way to hand it a stat the file
+     * itself would never produce. `target_ino` is still resolved from the path.
+     */
+    suspend fun addSusKstatStatically(
+        path: String,
+        ino: Long,
+        dev: Long,
+        nlink: Long,
+        size: Long,
+        atimeSec: Long,
+        atimeNsec: Long = 0,
+        mtimeSec: Long,
+        mtimeNsec: Long = 0,
+        ctimeSec: Long,
+        ctimeNsec: Long = 0,
+        blocks: Long = 0,
+        blksize: Long = 0,
+    ) = run(
+        "add-sus-kstat-statically '$path' $ino $dev $nlink $size " +
+            "$atimeSec $atimeNsec $mtimeSec $mtimeNsec $ctimeSec $ctimeNsec $blocks $blksize"
+    )
+
     suspend fun addOpenRedirect(target: String, redirected: String, uidScheme: Int = 0) =
         run("add-open-redirect '$target' '$redirected' $uidScheme")
     suspend fun setUname(release: String, version: String) =

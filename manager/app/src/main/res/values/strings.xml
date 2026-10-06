@@ -526,4 +526,33 @@
     <string name="open_redirect_feature_label">Open redirect</string>
     <string name="enable_log_feature_label">Logging support</string>
     <string name="hide_symbols_feature_label">Hide KSU / SUSFS symbols</string>
+
+    <!-- SUSFS kstat full clone -->
+    <string name="susfs_update_kstat_full_clone">Update kstat (full clone)</string>
+    <string name="susfs_update_kstat_full_clone_summary">Update stat and also spoof nlink and size, making it identical to the original file</string>
+
+    <!-- SUSFS static kstat -->
+    <string name="susfs_add_kstat_static">Manual stat spoof</string>
+    <string name="susfs_add_kstat_static_summary">Spoof stat with 13 manually-specified fields, without re-stat()ing the target</string>
+
+    <!-- SUSFS uid_scheme -->
+    <string name="susfs_uid_scheme_title">Apply scope (uid_scheme)</string>
+    <string name="susfs_uid_all">All processes</string>
+    <string name="susfs_uid_non_root">Non-root only</string>
+    <string name="susfs_uid_custom">Custom UID</string>
+    <string name="susfs_uid_custom_hint">Enter target UID</string>
+
+    <!-- SUSFS static kstat field labels -->
+    <string name="susfs_field_ino">inode number</string>
+    <string name="susfs_field_dev">device number</string>
+    <string name="susfs_field_nlink">hard link count</string>
+    <string name="susfs_field_size">file size (bytes)</string>
+    <string name="susfs_field_atime_sec">atime (seconds)</string>
+    <string name="susfs_field_atime_nsec">atime (nanoseconds)</string>
+    <string name="susfs_field_mtime_sec">mtime (seconds)</string>
+    <string name="susfs_field_mtime_nsec">mtime (nanoseconds)</string>
+    <string name="susfs_field_ctime_sec">ctime (seconds)</string>
+    <string name="susfs_field_ctime_nsec">ctime (nanoseconds)</string>
+    <string name="susfs_field_blocks">block count</string>
+    <string name="susfs_field_blksize">block size</string>
 </resources>

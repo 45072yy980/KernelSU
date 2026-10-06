@@ -94,8 +94,51 @@ class SusfsViewModel : ViewModel() {
     fun updateSusKstatFullClone(path: String) =
         exec("update-sus-kstat-full-clone $path", { SusfsCommands.updateSusKstatFullClone(path) }) { refresh() }
 
-    fun addOpenRedirect(target: String, redirected: String) =
-        exec("add-open-redirect $target", { SusfsCommands.addOpenRedirect(target, redirected) }) { refresh() }
+    /**
+     * Spoof a path's stat with caller-supplied values.
+     *
+     * All fields are forwarded verbatim; see [SusfsCommands.addSusKstatStatically].
+     */
+    fun addSusKstatStatically(
+        path: String,
+        ino: Long,
+        dev: Long,
+        nlink: Long,
+        size: Long,
+        atimeSec: Long,
+        atimeNsec: Long,
+        mtimeSec: Long,
+        mtimeNsec: Long,
+        ctimeSec: Long,
+        ctimeNsec: Long,
+        blocks: Long,
+        blksize: Long,
+    ) = exec(
+        "add-sus-kstat-statically $path",
+        {
+            SusfsCommands.addSusKstatStatically(
+                path = path,
+                ino = ino,
+                dev = dev,
+                nlink = nlink,
+                size = size,
+                atimeSec = atimeSec,
+                atimeNsec = atimeNsec,
+                mtimeSec = mtimeSec,
+                mtimeNsec = mtimeNsec,
+                ctimeSec = ctimeSec,
+                ctimeNsec = ctimeNsec,
+                blocks = blocks,
+                blksize = blksize,
+            )
+        },
+    ) { refresh() }
+
+    fun addOpenRedirect(target: String, redirected: String, uidScheme: Int = 0) =
+        exec(
+            "add-open-redirect $target (uid_scheme=$uidScheme)",
+            { SusfsCommands.addOpenRedirect(target, redirected, uidScheme) },
+        ) { refresh() }
 
     fun setCmdline(path: String) =
         exec("set-cmdline $path", { SusfsCommands.setCmdline(path) }) { refresh() }
