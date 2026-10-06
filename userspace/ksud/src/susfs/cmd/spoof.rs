@@ -3,16 +3,16 @@
 //! Each function here corresponds to one SuSFS "set" command: uname
 //! spoofing, log toggles, mount-point hiding, and cmdline/bootconfig
 //! spoofing.
-use anyhow::{Context, Result};
 use crate::susfs::abi::consts::{
     CMD_SUSFS_ENABLE_AVC_LOG_SPOOFING, CMD_SUSFS_ENABLE_LOG,
     CMD_SUSFS_HIDE_SUS_MOUNTS_FOR_NON_SU_PROCS, CMD_SUSFS_SET_CMDLINE_OR_BOOTCONFIG,
     CMD_SUSFS_SET_UNAME, ERR_CMD_NOT_SUPPORTED, NEW_UTS_LEN, SUSFS_FAKE_CMDLINE_OR_BOOTCONFIG_SIZE,
 };
 use crate::susfs::abi::{
-    SusfsAvcLogSpoofing, SusfsCmdlineOrBootconfig, SusfsHideSusMnts, SusfsLog, SusfsUname, send,
+    send, SusfsAvcLogSpoofing, SusfsCmdlineOrBootconfig, SusfsHideSusMnts, SusfsLog, SusfsUname,
 };
 use crate::susfs::util::{canonicalize, read_file};
+use anyhow::{Context, Result};
 // ── uname ─────────────────────────────────────────────────────────────────────
 /// Spoof the kernel `uname(2)` release / version strings.
 pub fn set_uname(release: &str, version: &str) -> Result<()> {

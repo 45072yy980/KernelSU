@@ -2,12 +2,12 @@
 //!
 //! Helpers shared by more than one command in `cmd/`. Kept at the root of
 //! `susfs/` because they don't depend on anything command-specific.
+use crate::susfs::abi::{SusfsKstat, SUSFS_MAX_PATHNAME};
+use anyhow::{Context, Result};
 use std::fs::Metadata;
 use std::io::Read;
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
-use anyhow::{Context, Result};
-use crate::susfs::abi::{SUSFS_MAX_PATHNAME, SusfsKstat};
 
 /// Resolve `path` to an absolute, symlink-free path.
 ///

@@ -3,7 +3,7 @@ use clap::Parser;
 use std::path::PathBuf;
 
 use android_logger::Config;
-use log::{LevelFilter, error, info};
+use log::{error, info, LevelFilter};
 
 use crate::boot_patch::{BootPatchArgs, BootRestoreArgs};
 use crate::lkm_image::BootPatchV2Args;
@@ -584,6 +584,46 @@ enum Susfs {
         path: String,
     },
 
+    /// Spoof a path's stat with values supplied here instead of re-stat()ing
+    ///
+    /// The kernel copies every value verbatim, so this is the way to hand it
+    /// a stat the file itself would never produce. `target_ino` is still read
+    /// from the path so the kernel can match the entry.
+    #[allow(clippy::struct_field_names)]
+    AddSusKstatStatically {
+        /// Absolute path to spoof
+        path: String,
+        /// Fake inode number
+        ino: u64,
+        /// Fake device number
+        dev: u64,
+        /// Fake hard-link count
+        nlink: u32,
+        /// Fake file size
+        size: u64,
+        /// Fake atime, seconds since the epoch
+        atime_sec: i64,
+        /// Fake atime, nanoseconds
+        #[arg(default_value_t = 0)]
+        atime_nsec: u64,
+        /// Fake mtime, seconds since the epoch
+        mtime_sec: i64,
+        /// Fake mtime, nanoseconds
+        #[arg(default_value_t = 0)]
+        mtime_nsec: u64,
+        /// Fake ctime, seconds since the epoch
+        ctime_sec: i64,
+        /// Fake ctime, nanoseconds
+        #[arg(default_value_t = 0)]
+        ctime_nsec: u64,
+        /// Fake block count
+        #[arg(default_value_t = 0)]
+        blocks: u64,
+        /// Fake block size
+        #[arg(default_value_t = 0)]
+        blksize: i64,
+    },
+
     /// Spoof `open()` of one path so it resolves to another
     AddOpenRedirect {
         /// Path the target process asks for
@@ -884,7 +924,14 @@ pub fn run() -> Result<()> {
 
         Commands::Susfs { command } => match command {
             Susfs::Version => {
-                println!("{}", crate::susfs::get_susfs_version());
+                // Print the load state first, then the version, so a caller that
+                // only wants "is SuSFS there?" can read the first token.
+                let status = crate::susfs::get_susfs_status();
+                println!(
+                    "{}\n{}",
+                    u8::from(status),
+                    crate::susfs::get_susfs_version()
+                );
                 Ok(())
             }
             Susfs::Features => {
@@ -903,14 +950,31 @@ pub fn run() -> Result<()> {
             Susfs::UpdateSusKstatFullClone { path } => {
                 crate::susfs::update_sus_kstat_full_clone(&path)
             }
+            #[allow(clippy::too_many_arguments)]
+            Susfs::AddSusKstatStatically {
+                path,
+                ino,
+                dev,
+                nlink,
+                size,
+                atime_sec,
+                atime_nsec,
+                mtime_sec,
+                mtime_nsec,
+                ctime_sec,
+                ctime_nsec,
+                blocks,
+                blksize,
+            } => crate::susfs::add_sus_kstat_statically(
+                &path, ino, dev, nlink, size, atime_sec, atime_nsec, mtime_sec, mtime_nsec,
+                ctime_sec, ctime_nsec, blocks, blksize,
+            ),
             Susfs::AddOpenRedirect {
                 target,
                 redirected,
                 uid_scheme,
             } => crate::susfs::add_open_redirect(&target, &redirected, uid_scheme),
-            Susfs::SetUname { release, version } => {
-                crate::susfs::set_uname(&release, &version)
-            }
+            Susfs::SetUname { release, version } => crate::susfs::set_uname(&release, &version),
             Susfs::SetCmdline { path } => crate::susfs::set_cmdline_or_bootconfig(&path),
             Susfs::EnableLog { value } => crate::susfs::enable_log(value != 0),
             Susfs::EnableAvcLogSpoofing { value } => {
@@ -920,7 +984,6 @@ pub fn run() -> Result<()> {
                 crate::susfs::hide_sus_mnts_for_non_su_procs(value != 0)
             }
         },
-
 
         Commands::Debug { command } => match command {
             Debug::SetManager { apk } => debug::set_manager(&apk),

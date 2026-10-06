@@ -5,14 +5,14 @@
 //! syscall pipeline, factored into [`fill_kstat_from_path`] and
 //! [`fill_and_send_kstat`].
 
-use std::os::unix::fs::MetadataExt;
-use anyhow::{Context, Result};
 use crate::susfs::abi::consts::{
     CMD_SUSFS_ADD_SUS_KSTAT, CMD_SUSFS_ADD_SUS_KSTAT_STATICALLY, CMD_SUSFS_UPDATE_SUS_KSTAT,
     ERR_CMD_NOT_SUPPORTED, KSTAT_AUTO_SPOOF, KSTAT_AUTO_SPOOF_FULL_CLONE, SUSFS_MAX_PATHNAME,
 };
-use crate::susfs::abi::{SusfsKstat, send};
+use crate::susfs::abi::{send, SusfsKstat};
 use crate::susfs::util::{canonicalize, copy_metadata_into_kstat, copy_path_into};
+use anyhow::{Context, Result};
+use std::os::unix::fs::MetadataExt;
 /// Resolve `path`, `stat(2)` it, and fill a [`SusfsKstat`] in place.
 ///
 /// `is_statically` is left at `0` (the callers below set it to `1` for the

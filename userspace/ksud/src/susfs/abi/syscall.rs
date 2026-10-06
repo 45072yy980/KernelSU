@@ -13,12 +13,12 @@
 //! After the syscall returns, the kernel writes an `err` code into the
 //! payload struct; we surface that as an `anyhow::Error` so callers can
 //! bubble it up the stack.
-use libc::SYS_reboot;
 use super::consts::{ERR_CMD_NOT_SUPPORTED, KSU_INSTALL_MAGIC1, SUSFS_MAGIC};
 use super::types::{
     SusfsAvcLogSpoofing, SusfsCmdlineOrBootconfig, SusfsFeatures, SusfsHideSusMnts, SusfsKstat,
     SusfsLog, SusfsMap, SusfsOpenRedirect, SusfsSusPath, SusfsUname, SusfsVariant, SusfsVersion,
 };
+use libc::SYS_reboot;
 /// Dispatch a SuSFS command and return `Ok(())` when the kernel reports no
 /// error.
 ///

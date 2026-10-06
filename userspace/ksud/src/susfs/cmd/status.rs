@@ -7,7 +7,7 @@ use crate::susfs::abi::consts::{
     ERR_CMD_NOT_SUPPORTED, SUSFS_ENABLED_FEATURES_SIZE, SUSFS_MAX_VARIANT_BUFSIZE,
     SUSFS_MAX_VERSION_BUFSIZE,
 };
-use crate::susfs::abi::{SusfsFeatures, SusfsVariant, SusfsVersion, send};
+use crate::susfs::abi::{send, SusfsFeatures, SusfsVariant, SusfsVersion};
 use crate::susfs::util::cstr_buf_to_string;
 /// Return the SuSFS version reported by the kernel, or the literal string
 /// `"unsupport"` when the feature is missing or the version is malformed.

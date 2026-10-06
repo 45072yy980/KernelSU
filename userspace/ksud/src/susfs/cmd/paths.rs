@@ -4,7 +4,7 @@ use crate::susfs::abi::consts::{
     CMD_SUSFS_ADD_OPEN_REDIRECT, CMD_SUSFS_ADD_SUS_MAP, CMD_SUSFS_ADD_SUS_PATH,
     CMD_SUSFS_ADD_SUS_PATH_LOOP, ERR_CMD_NOT_SUPPORTED, SUSFS_MAX_PATHNAME,
 };
-use crate::susfs::abi::{SusfsMap, SusfsOpenRedirect, SusfsSusPath, send};
+use crate::susfs::abi::{send, SusfsMap, SusfsOpenRedirect, SusfsSusPath};
 use crate::susfs::util::copy_path_into;
 /// Mark `path` as a SuSFS hidden path.
 pub fn add_sus_path(path: &str) -> anyhow::Result<()> {
