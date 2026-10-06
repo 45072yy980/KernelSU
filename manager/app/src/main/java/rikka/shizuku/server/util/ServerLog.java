@@ -37,8 +37,8 @@ public final class ServerLog {
 
     /** Same directory as shizuku.json; writable by the server whether it runs as root or shell. */
     public static final File LOG_DIR = new File("/data/user_de/0/com.android.shell");
-    public static final File LOG_FILE = new File(LOG_DIR, "shizuku_folk.log");
-    private static final File LOG_FILE_BACKUP = new File(LOG_DIR, "shizuku_folk.log.1");
+    public static final File LOG_FILE = new File(LOG_DIR, "shizuku_ksu.log");
+    private static final File LOG_FILE_BACKUP = new File(LOG_DIR, "shizuku_ksu.log.1");
 
     /** Max size of a single file; rotated once when exceeded. With the .1 backup, disk usage stays ≤ ~1 MiB. */
     private static final long FILE_MAX_BYTES = 512 * 1024;
