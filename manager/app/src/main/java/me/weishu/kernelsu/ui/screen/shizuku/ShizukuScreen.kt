@@ -50,6 +50,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.graphics.drawable.toBitmap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -62,10 +63,11 @@ import top.yukonga.miuix.kmp.basic.Icon as MiuixIcon
 import top.yukonga.miuix.kmp.basic.IconButton as MiuixIconButton
 import top.yukonga.miuix.kmp.basic.Scaffold as MiuixScaffold
 import top.yukonga.miuix.kmp.basic.Text as MiuixText
+import top.yukonga.miuix.kmp.basic.TextButton as MiuixTextButton
 import top.yukonga.miuix.kmp.basic.TopAppBar as MiuixTopAppBar
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme
-import top.yukonga.miuix.kmp.utils.BackHandler
+import top.yukonga.miuix.kmp.utils.MiuixIcons
 
 /**
  * Shizuku 内置服务管理面板。
@@ -79,7 +81,6 @@ import top.yukonga.miuix.kmp.utils.BackHandler
 @Composable
 fun ShizukuScreen() {
     val navigator = LocalNavigator.current
-    BackHandler { navigator.pop() }
 
     val uiMode = LocalUiMode.current
     if (uiMode.isMiuixFamily) {
@@ -196,7 +197,7 @@ private fun ShizukuScreenMiuix(onBack: () -> Unit) {
                 navigationIcon = {
                     MiuixIconButton(onClick = onBack) {
                         MiuixIcon(
-                            imageVector = top.yukonga.miuix.kmp.utils.MiuixIcons.Back,
+                            imageVector = MiuixIcons.Back,
                             contentDescription = null,
                             tint = colorScheme.onSurface,
                         )
