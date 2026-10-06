@@ -203,9 +203,10 @@ private fun SusfsStatusCard(state: SusfsUiState, onRefresh: () -> Unit) {
                     modifier = Modifier.padding(top = 6.dp),
                 )
             }
-            state.error?.let {
+            val error = state.error
+            if (error != null) {
                 MiuixText(
-                    text = it,
+                    text = error,
                     style = MiuixTheme.textStyles.footnote1,
                     color = colorScheme.error,
                     modifier = Modifier.padding(top = 6.dp),
@@ -515,7 +516,7 @@ private fun SusfsProcCard(state: SusfsUiState) {
                 style = MiuixTheme.textStyles.title2,
                 color = colorScheme.onSurface,
             )
-            entries.forEach { (label, value) ->
+            for ((label, value) in entries) {
                 MiuixText(
                     text = "$label: ${value.ifEmpty { "—" }}",
                     style = MiuixTheme.textStyles.footnote1,
@@ -568,18 +569,20 @@ private fun SusfsLogCard(state: SusfsUiState) {
 @Composable
 private fun SusfsMaterialFallback(onBack: () -> Unit) {
     Column(modifier = Modifier.padding(16.dp)) {
-        SegmentedColumn {
-            listOf<@Composable () -> Unit>({
-                SegmentedListItem(
-                    onClick = onBack,
-                    headlineContent = { Text(stringResource(R.string.susfs_back)) },
-                    supportingContent = {
-                        Text(stringResource(R.string.susfs_material_note))
-                    },
-                    leadingContent = { Icon(Icons.Filled.Info, contentDescription = null) },
-                )
-            }).forEach { it() }
-        }
+        SegmentedColumn(
+            content = buildList<@Composable () -> Unit> {
+                add {
+                    SegmentedListItem(
+                        onClick = onBack,
+                        headlineContent = { Text(stringResource(R.string.susfs_back)) },
+                        supportingContent = {
+                            Text(stringResource(R.string.susfs_material_note))
+                        },
+                        leadingContent = { Icon(Icons.Filled.Info, contentDescription = null) },
+                    )
+                }
+            },
+        )
     }
 }
 
@@ -604,7 +607,8 @@ private fun SusfsInputDialog(
                     label = { Text(input.fieldA) },
                     modifier = Modifier.fillMaxWidth(),
                 )
-                input.fieldB?.let { labelB ->
+                val labelB = input.fieldB
+                if (labelB != null) {
                     OutlinedTextField(
                         value = valueB,
                         onValueChange = { valueB = it },
