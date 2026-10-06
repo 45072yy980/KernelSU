@@ -49,7 +49,7 @@ class SusfsBootReceiver : BroadcastReceiver() {
                 // settle before trying again. Early-boot ksud can be flaky.
                 val priorFailures = SusfsRepository.bootRetryCount
                 if (priorFailures > 0) {
-                    Log.w(TAG, "Prior boot replay failed ($priorFailures time(s)); waiting extra $RETRY_EXTRA_WAIT_SECONDSs")
+                    Log.w(TAG, "Prior boot replay failed ($priorFailures time(s)); waiting extra ${RETRY_EXTRA_WAIT_SECONDS}s")
                     if (priorFailures >= SusfsRepository.MAX_BOOT_RETRIES) {
                         Log.e(TAG, "Reached MAX_BOOT_RETRIES (${SusfsRepository.MAX_BOOT_RETRIES}); resetting counter and abandoning replay")
                         SusfsRepository.bootRetryCount = 0

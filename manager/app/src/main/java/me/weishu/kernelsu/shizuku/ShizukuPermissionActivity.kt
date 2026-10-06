@@ -28,21 +28,22 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material.icons.outlined.Timelapse
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
 import me.weishu.kernelsu.R
 import me.weishu.kernelsu.ui.LocalUiMode
@@ -214,13 +215,13 @@ private fun PermissionDialogMiuix(
                     Column(modifier = Modifier.weight(1f)) {
                         MiuixText(
                             text = label,
-                            fontSize = 18,
+                            fontSize = 18.sp,
                             fontWeight = FontWeight.SemiBold,
                         )
                         Spacer(Modifier.height(2.dp))
                         MiuixText(
                             text = "请求使用 Shizuku 执行操作",
-                            fontSize = 13,
+                            fontSize = 13.sp,
                             color = colorScheme.onSurfaceVariant,
                         )
                     }
@@ -240,7 +241,7 @@ private fun PermissionDialogMiuix(
                     icon = Icons.Outlined.Timelapse,
                     title = "仅一次",
                     subtitle = "本次允许，下次重新询问",
-                    container = colorScheme.surfaceContainer,
+                    container = colorScheme.surfaceVariant,
                     content = colorScheme.onSurfaceVariant,
                     onClick = onAllowOnce,
                 )
@@ -248,15 +249,20 @@ private fun PermissionDialogMiuix(
                     icon = Icons.Filled.Block,
                     title = "拒绝",
                     subtitle = "拒绝该应用使用 Shizuku",
-                    container = colorScheme.surfaceContainer,
+                    container = colorScheme.surfaceVariant,
                     content = colorScheme.onSurfaceVariant,
                     onClick = onDeny,
                 )
-            }
-        },
-        action = {
-            MiuixTextButton(onClick = onDismiss) {
-                MiuixText("取消")
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                ) {
+                    MiuixTextButton(
+                        text = "取消",
+                        onClick = onDismiss,
+                    )
+                }
             }
         },
     )
@@ -292,14 +298,14 @@ private fun PermissionOptionMiuix(
             Column {
                 MiuixText(
                     text = title,
-                    fontSize = 15,
+                    fontSize = 15.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = content,
                 )
                 Spacer(Modifier.height(2.dp))
                 MiuixText(
                     text = subtitle,
-                    fontSize = 12,
+                    fontSize = 12.sp,
                     color = content.copy(alpha = 0.8f),
                 )
             }
@@ -310,6 +316,7 @@ private fun PermissionOptionMiuix(
 // ── Material 版本 ────────────────────────────────────────────────────────────
 
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 private fun PermissionDialogMaterial(
     label: String,
     icon: Drawable?,
@@ -329,7 +336,7 @@ private fun PermissionDialogMaterial(
                         modifier = Modifier.size(48.dp),
                     )
                 } else {
-                    androidx.compose.material3.Icon(
+                    Icon(
                         imageVector = Icons.Filled.WaterDrop,
                         contentDescription = null,
                         modifier = Modifier.size(48.dp),
@@ -406,7 +413,7 @@ private fun PermissionOptionMaterial(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            androidx.compose.material3.Icon(
+            Icon(
                 imageVector = icon,
                 contentDescription = null,
                 tint = content,
