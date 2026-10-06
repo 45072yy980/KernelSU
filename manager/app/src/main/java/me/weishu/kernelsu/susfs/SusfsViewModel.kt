@@ -41,10 +41,14 @@ class SusfsViewModel : ViewModel() {
     /**
      * Run one mutating command and fold its output into the log panel.
      *
-     * [after] runs only on a clean exit, which is how the callers refresh a
-     * value that the command just changed.
+     * [block] is the command; [after] runs only on a clean exit, which is how
+     * the callers refresh a value that the command just changed.
      */
-    private fun exec(label: String, after: (suspend () -> Unit)? = null, block: suspend () -> SusfsCommands.Result) {
+    private fun exec(
+        label: String,
+        block: suspend () -> SusfsCommands.Result,
+        after: (suspend () -> Unit)? = null,
+    ) {
         viewModelScope.launch {
             val result = block()
             _uiState.update {
@@ -65,35 +69,53 @@ class SusfsViewModel : ViewModel() {
         }
     }
 
-    fun addSusPath(path: String) = exec("add-sus-path $path") { refresh() }
-    fun addSusPathLoop(path: String) = exec("add-sus-path-loop $path") { refresh() }
-    fun addSusMap(path: String) = exec("add-sus-map $path") { refresh() }
-    fun addSusKstat(path: String) = exec("add-sus-kstat $path") { refresh() }
-    fun updateSusKstat(path: String) = exec("update-sus-kstat $path") { refresh() }
-    fun updateSusKstatFullClone(path: String) = exec("update-sus-kstat-full-clone $path") { refresh() }
+    fun addSusPath(path: String) =
+        exec("add-sus-path $path", { SusfsCommands.addSusPath(path) }) { refresh() }
+
+    fun addSusPathLoop(path: String) =
+        exec("add-sus-path-loop $path", { SusfsCommands.addSusPathLoop(path) }) { refresh() }
+
+    fun addSusMap(path: String) =
+        exec("add-sus-map $path", { SusfsCommands.addSusMap(path) }) { refresh() }
+
+    fun addSusKstat(path: String) =
+        exec("add-sus-kstat $path", { SusfsCommands.addSusKstat(path) }) { refresh() }
+
+    fun updateSusKstat(path: String) =
+        exec("update-sus-kstat $path", { SusfsCommands.updateSusKstat(path) }) { refresh() }
+
+    fun updateSusKstatFullClone(path: String) =
+        exec("update-sus-kstat-full-clone $path", { SusfsCommands.updateSusKstatFullClone(path) }) { refresh() }
+
     fun addOpenRedirect(target: String, redirected: String) =
-        exec("add-open-redirect $target") { refresh() }
-    fun setCmdline(path: String) = exec("set-cmdline $path") { refresh() }
+        exec("add-open-redirect $target", { SusfsCommands.addOpenRedirect(target, redirected) }) { refresh() }
 
-    fun setUname(release: String, version: String) = exec("set-uname $release") {
-        SusfsRepository.unameRelease = release
-        SusfsRepository.unameVersion = version
-        _uiState.update { it.copy(unameRelease = release, unameVersion = version) }
-        refresh()
-    }
+    fun setCmdline(path: String) =
+        exec("set-cmdline $path", { SusfsCommands.setCmdline(path) }) { refresh() }
 
-    fun setLogEnabled(enabled: Boolean) = exec("enable-log $enabled") {
-        SusfsRepository.logEnabled = enabled
-        _uiState.update { it.copy(logEnabled = enabled) }
-    }
+    fun setUname(release: String, version: String) =
+        exec("set-uname $release", { SusfsCommands.setUname(release, version) }) {
+            SusfsRepository.unameRelease = release
+            SusfsRepository.unameVersion = version
+            _uiState.update { it.copy(unameRelease = release, unameVersion = version) }
+            refresh()
+        }
 
-    fun setAvcLogSpoofing(enabled: Boolean) = exec("enable-avc-log-spoofing $enabled") {
-        SusfsRepository.avcLogSpoofing = enabled
-        _uiState.update { it.copy(avcLogSpoofing = enabled) }
-    }
+    fun setLogEnabled(enabled: Boolean) =
+        exec("enable-log $enabled", { SusfsCommands.setLogEnabled(enabled) }) {
+            SusfsRepository.logEnabled = enabled
+            _uiState.update { it.copy(logEnabled = enabled) }
+        }
 
-    fun setHideSusMnts(enabled: Boolean) = exec("hide-sus-mnts-for-non-su-procs $enabled") {
-        SusfsRepository.hideSusMntsForNonSuProcs = enabled
-        _uiState.update { it.copy(hideSusMntsForNonSuProcs = enabled) }
-    }
+    fun setAvcLogSpoofing(enabled: Boolean) =
+        exec("enable-avc-log-spoofing $enabled", { SusfsCommands.setAvcLogSpoofing(enabled) }) {
+            SusfsRepository.avcLogSpoofing = enabled
+            _uiState.update { it.copy(avcLogSpoofing = enabled) }
+        }
+
+    fun setHideSusMnts(enabled: Boolean) =
+        exec("hide-sus-mnts-for-non-su-procs $enabled", { SusfsCommands.setHideSusMntsForNonSuProcs(enabled) }) {
+            SusfsRepository.hideSusMntsForNonSuProcs = enabled
+            _uiState.update { it.copy(hideSusMntsForNonSuProcs = enabled) }
+        }
 }

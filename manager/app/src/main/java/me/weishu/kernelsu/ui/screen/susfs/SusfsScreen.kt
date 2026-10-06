@@ -146,15 +146,6 @@ private fun SusfsMiuix(
                         )
                     }
                 },
-                actions = {
-                    MiuixIconButton(onClick = onRefresh) {
-                        MiuixIcon(
-                            imageVector = Icons.Filled.Refresh,
-                            contentDescription = stringResource(R.string.susfs_refresh),
-                            tint = colorScheme.onSurface,
-                        )
-                    }
-                },
             )
         },
     ) { innerPadding ->
@@ -162,7 +153,7 @@ private fun SusfsMiuix(
             modifier = Modifier.padding(horizontal = 12.dp),
             contentPadding = innerPadding,
         ) {
-            item { SusfsStatusCard(state) }
+            item { SusfsStatusCard(state, onRefresh) }
 
             if (state.status.loaded) {
                 item { SusfsSwitchCard(state, viewModel) }
@@ -180,7 +171,7 @@ private fun SusfsMiuix(
 
 /** Version / variant / feature list, or a note that nothing answered. */
 @Composable
-private fun SusfsStatusCard(state: SusfsUiState) {
+private fun SusfsStatusCard(state: SusfsUiState, onRefresh: () -> Unit) {
     Card(modifier = Modifier.padding(top = 12.dp)) {
         Column(modifier = Modifier.padding(16.dp)) {
             MiuixText(
@@ -221,6 +212,18 @@ private fun SusfsStatusCard(state: SusfsUiState) {
                 )
             }
         }
+        ArrowPreference(
+            title = stringResource(R.string.susfs_refresh),
+            startAction = {
+                MiuixIcon(
+                    imageVector = Icons.Filled.Refresh,
+                    contentDescription = null,
+                    tint = colorScheme.onBackground,
+                    modifier = Modifier.padding(end = 6.dp),
+                )
+            },
+            onClick = onRefresh,
+        )
     }
 }
 

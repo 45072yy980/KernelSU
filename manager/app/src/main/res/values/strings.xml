@@ -476,7 +476,7 @@
     <string name="susfs_avc">AVC log spoofing</string>
     <string name="susfs_avc_summary">Rewrite AVC denials in the log so they point elsewhere</string>
     <string name="susfs_hide_mnts">Hide SUSFS mounts</string>
-    <string name="susfs_hide_mnts_summary">Hide the module's own mount points from non-root processes</string>
+    <string name="susfs_hide_mnts_summary">Hide the module\'s own mount points from non-root processes</string>
     <string name="susfs_add_path">Hide a path</string>
     <string name="susfs_add_path_summary">Add a path to the hidden-path list</string>
     <string name="susfs_add_path_loop">Hide a path (follow mounts)</string>
@@ -492,7 +492,7 @@
     <string name="susfs_set_uname">Spoof uname</string>
     <string name="susfs_set_uname_summary">Replace the kernel release and version strings</string>
     <string name="susfs_set_cmdline">Spoof cmdline</string>
-    <string name="susfs_set_cmdline_summary">Use a file's contents as /proc/cmdline or /proc/bootconfig</string>
+    <string name="susfs_set_cmdline_summary">Use a file\'s contents as /proc/cmdline or /proc/bootconfig</string>
     <string name="susfs_proc_title">Module state (/proc)</string>
     <string name="susfs_proc_path">susfs_path</string>
     <string name="susfs_proc_hide_mounts">susfs_hide_mounts</string>
