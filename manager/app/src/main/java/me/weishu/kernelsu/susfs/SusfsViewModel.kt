@@ -77,22 +77,37 @@ class SusfsViewModel : ViewModel() {
     }
 
     fun addSusPath(path: String) =
-        exec("add-sus-path $path", { SusfsCommands.addSusPath(path) }) { refresh() }
+        exec("add-sus-path $path", { SusfsCommands.addSusPath(path) }) {
+            SusfsRepository.addSusPath(path)
+            refresh()
+        }
 
     fun addSusPathLoop(path: String) =
-        exec("add-sus-path-loop $path", { SusfsCommands.addSusPathLoop(path) }) { refresh() }
+        exec("add-sus-path-loop $path", { SusfsCommands.addSusPathLoop(path) }) {
+            SusfsRepository.addSusPathLoop(path)
+            refresh()
+        }
 
     fun addSusMap(path: String) =
-        exec("add-sus-map $path", { SusfsCommands.addSusMap(path) }) { refresh() }
+        exec("add-sus-map $path", { SusfsCommands.addSusMap(path) }) {
+            SusfsRepository.addSusMap(path)
+            refresh()
+        }
 
     fun addSusKstat(path: String) =
         exec("add-sus-kstat $path", { SusfsCommands.addSusKstat(path) }) { refresh() }
 
     fun updateSusKstat(path: String) =
-        exec("update-sus-kstat $path", { SusfsCommands.updateSusKstat(path) }) { refresh() }
+        exec("update-sus-kstat $path", { SusfsCommands.updateSusKstat(path) }) {
+            SusfsRepository.addSusKstatPath(path)
+            refresh()
+        }
 
     fun updateSusKstatFullClone(path: String) =
-        exec("update-sus-kstat-full-clone $path", { SusfsCommands.updateSusKstatFullClone(path) }) { refresh() }
+        exec("update-sus-kstat-full-clone $path", { SusfsCommands.updateSusKstatFullClone(path) }) {
+            SusfsRepository.addSusKstatPath(path)
+            refresh()
+        }
 
     /**
      * Spoof a path's stat with caller-supplied values.
@@ -138,7 +153,10 @@ class SusfsViewModel : ViewModel() {
         exec(
             "add-open-redirect $target (uid_scheme=$uidScheme)",
             { SusfsCommands.addOpenRedirect(target, redirected, uidScheme) },
-        ) { refresh() }
+        ) {
+            SusfsRepository.addSusRedirect(target, redirected, uidScheme)
+            refresh()
+        }
 
     fun setCmdline(path: String) =
         exec("set-cmdline $path", { SusfsCommands.setCmdline(path) }) { refresh() }
