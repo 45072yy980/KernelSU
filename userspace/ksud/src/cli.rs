@@ -124,6 +124,16 @@ enum Commands {
         command: Stealth,
     },
 
+    /// SuSFS userspace client
+    ///
+    /// Talks to the SuSFS kernel implementation over its `reboot(2)`
+    /// supercall. Works with both an in-kernel build and the standalone
+    /// `susfs_guard_lkm` module loaded after boot.
+    Susfs {
+        #[command(subcommand)]
+        command: Susfs,
+    },
+
     /// Patch boot or init_boot images to apply KernelSU
     BootPatch(BootPatchArgs),
 
@@ -525,6 +535,100 @@ enum Stealth {
 }
 
 #[derive(clap::Subcommand, Debug)]
+enum Susfs {
+    /// Report whether SuSFS is loaded and, if so, its version
+    ///
+    /// Prints the version string (e.g. `v2.3.0`) when the kernel answers, or
+    /// `unsupport` when nothing implements the supercall.
+    Version,
+
+    /// Print the enabled SuSFS feature list reported by the kernel
+    Features,
+
+    /// Print the SuSFS build variant reported by the kernel
+    Variant,
+
+    /// Add a path to the SuSFS hidden-path list
+    AddSusPath {
+        /// Absolute path to hide
+        path: String,
+    },
+
+    /// Like `add-sus-path` but keeps following the path across bind mounts
+    AddSusPathLoop {
+        /// Absolute path to hide
+        path: String,
+    },
+
+    /// Add a path to the SuSFS map list (used for overlay / mount isolation)
+    AddSusMap {
+        /// Absolute path to map
+        path: String,
+    },
+
+    /// Begin tracking a path so the kernel can later spoof its `stat`
+    AddSusKstat {
+        /// Absolute path to track
+        path: String,
+    },
+
+    /// Complete the spoofing started by `add-sus-kstat`
+    UpdateSusKstat {
+        /// Absolute path being tracked
+        path: String,
+    },
+
+    /// Like `update-sus-kstat` but also clones `nlink` and `size`
+    UpdateSusKstatFullClone {
+        /// Absolute path being tracked
+        path: String,
+    },
+
+    /// Spoof `open()` of one path so it resolves to another
+    AddOpenRedirect {
+        /// Path the target process asks for
+        target: String,
+        /// Path actually opened instead
+        redirected: String,
+        /// UID scheme selecting which processes get the redirect
+        #[arg(default_value_t = 0)]
+        uid_scheme: u32,
+    },
+
+    /// Spoof the kernel `uname` release / version strings
+    SetUname {
+        /// Fake release string (e.g. `5.10.115-android12-9-g00000000`)
+        release: String,
+        /// Fake version string (e.g. `#1 SMP PREEMPT ...`)
+        version: String,
+    },
+
+    /// Spoof `/proc/cmdline` (non-GKI) or `/proc/bootconfig` (GKI)
+    SetCmdline {
+        /// Path of a file whose contents become the fake cmdline/bootconfig
+        path: String,
+    },
+
+    /// Enable or disable the SuSFS kernel log
+    EnableLog {
+        /// 1 to enable, 0 to disable
+        value: u32,
+    },
+
+    /// Enable or disable SuSFS AVC-log spoofing
+    EnableAvcLogSpoofing {
+        /// 1 to enable, 0 to disable
+        value: u32,
+    },
+
+    /// Hide SuSFS mount points from non-SU processes
+    HideSusMntsForNonSuProcs {
+        /// 1 to enable, 0 to disable
+        value: u32,
+    },
+}
+
+#[derive(clap::Subcommand, Debug)]
 enum Kernel {
     /// Nuke ext4 sysfs
     NukeExt4Sysfs {
@@ -772,12 +876,51 @@ pub fn run() -> Result<()> {
             Feature::Load => crate::feature::load_config_and_apply(),
             Feature::Save => crate::feature::save_config(),
         },
-
         Commands::Stealth { command } => match command {
             Stealth::Get => crate::stealth::get(),
             Stealth::Set { value } => crate::stealth::set(value != 0),
             Stealth::Toggle => crate::stealth::toggle(),
         },
+
+        Commands::Susfs { command } => match command {
+            Susfs::Version => {
+                println!("{}", crate::susfs::get_susfs_version());
+                Ok(())
+            }
+            Susfs::Features => {
+                println!("{}", crate::susfs::get_susfs_features());
+                Ok(())
+            }
+            Susfs::Variant => {
+                println!("{}", crate::susfs::get_susfs_variant());
+                Ok(())
+            }
+            Susfs::AddSusPath { path } => crate::susfs::add_sus_path(&path),
+            Susfs::AddSusPathLoop { path } => crate::susfs::add_sus_path_loop(&path),
+            Susfs::AddSusMap { path } => crate::susfs::add_sus_map(&path),
+            Susfs::AddSusKstat { path } => crate::susfs::add_sus_kstat(&path),
+            Susfs::UpdateSusKstat { path } => crate::susfs::update_sus_kstat(&path),
+            Susfs::UpdateSusKstatFullClone { path } => {
+                crate::susfs::update_sus_kstat_full_clone(&path)
+            }
+            Susfs::AddOpenRedirect {
+                target,
+                redirected,
+                uid_scheme,
+            } => crate::susfs::add_open_redirect(&target, &redirected, uid_scheme),
+            Susfs::SetUname { release, version } => {
+                crate::susfs::set_uname(&release, &version)
+            }
+            Susfs::SetCmdline { path } => crate::susfs::set_cmdline_or_bootconfig(&path),
+            Susfs::EnableLog { value } => crate::susfs::enable_log(value != 0),
+            Susfs::EnableAvcLogSpoofing { value } => {
+                crate::susfs::enable_avc_log_spoofing(value != 0)
+            }
+            Susfs::HideSusMntsForNonSuProcs { value } => {
+                crate::susfs::hide_sus_mnts_for_non_su_procs(value != 0)
+            }
+        },
+
 
         Commands::Debug { command } => match command {
             Debug::SetManager { apk } => debug::set_manager(&apk),
