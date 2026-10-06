@@ -30,6 +30,14 @@ data class HomeUiState(
     val metaModuleImplementation: String? = null,
     /** The module providing an Xposed framework, when one is installed and enabled. */
     val xposedImplementation: String? = null,
+    /**
+     * The SuSFS version the kernel reports, when something answers the supercall.
+     *
+     * Null (or blank) hides the row. This is the only status row that is read
+     * back through `ksud` rather than from a module file, because SuSFS lives in
+     * the kernel — including when it arrived as the standalone LKM after boot.
+     */
+    val susfsVersion: String? = null,
 ) {
     val isSELinuxPermissive: Boolean
         get() = systemInfo.selinuxStatus == "Permissive"

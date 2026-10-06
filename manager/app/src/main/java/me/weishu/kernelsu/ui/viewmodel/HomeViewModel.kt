@@ -103,6 +103,14 @@ class HomeViewModel(
             } else {
                 null
             },
+            // SuSFS lives in the kernel, so this is read through ksud rather than from a
+            // module file. Null when nothing answers, which is the normal state on a device
+            // that has neither the built-in implementation nor the LKM loaded.
+            susfsVersion = if (isRootAvailable) {
+                runCatching { me.weishu.kernelsu.ui.util.susfsVersion() }.getOrNull()
+            } else {
+                null
+            },
         )
     }
 }

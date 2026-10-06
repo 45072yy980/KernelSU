@@ -512,4 +512,5 @@
     <string name="susfs_confirm">Run</string>
     <string name="susfs_cancel">Cancel</string>
     <string name="susfs_material_note">The SUSFS panel is only drawn on the miuix skins. Switch to a miuix mode in Settings to use it.</string>
+    <string name="home_susfs_version">SUSFS version</string>
 </resources>

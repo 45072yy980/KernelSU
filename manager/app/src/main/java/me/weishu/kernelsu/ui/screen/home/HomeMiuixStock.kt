@@ -175,6 +175,7 @@ fun HomePagerMiuixStock(
                             zygiskImplementation = state.zygiskImplementation,
                             metaModuleImplementation = state.metaModuleImplementation,
                             xposedImplementation = state.xposedImplementation,
+                            susfsVersion = state.susfsVersion,
                             modifier = Modifier.fillMaxWidth(),
                         )
                         SupportLinks(
@@ -486,6 +487,7 @@ private fun InfoCard(
     zygiskImplementation: String? = null,
     metaModuleImplementation: String? = null,
     xposedImplementation: String? = null,
+    susfsVersion: String? = null,
     modifier: Modifier = Modifier,
 ) {
     @Composable
@@ -586,6 +588,13 @@ private fun InfoCard(
                     InfoText(
                         icon = Icons.Filled.Extension,
                         title = stringResource(R.string.home_xposed_implement),
+                        content = it,
+                    )
+                }
+                susfsVersion?.let {
+                    InfoText(
+                        icon = Icons.Filled.Security,
+                        title = stringResource(R.string.home_susfs_version),
                         content = it,
                     )
                 }

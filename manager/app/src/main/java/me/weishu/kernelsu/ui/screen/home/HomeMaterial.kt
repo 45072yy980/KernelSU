@@ -148,6 +148,7 @@ fun HomePagerMaterial(
                 zygiskImplementation = state.zygiskImplementation,
                 metaModuleImplementation = state.metaModuleImplementation,
                 xposedImplementation = state.xposedImplementation,
+                susfsVersion = state.susfsVersion,
             )
             SupportLinks(onOpenUrl = actions.onOpenUrl)
             Spacer(
@@ -414,6 +415,7 @@ private fun InfoCard(
     zygiskImplementation: String? = null,
     metaModuleImplementation: String? = null,
     xposedImplementation: String? = null,
+    susfsVersion: String? = null,
     modifier: Modifier = Modifier,
 ) {
     @Composable
@@ -507,6 +509,15 @@ private fun InfoCard(
                     InfoCardItem(
                         icon = Icons.Filled.Extension,
                         label = stringResource(R.string.home_xposed_implement),
+                        content = it,
+                    )
+                }
+            }
+            susfsVersion?.let {
+                item {
+                    InfoCardItem(
+                        icon = Icons.Filled.Security,
+                        label = stringResource(R.string.home_susfs_version),
                         content = it,
                     )
                 }

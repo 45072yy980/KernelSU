@@ -756,6 +756,27 @@ fun zygiskImplementation(): String? {
 }
 
 /**
+ * The SuSFS version the kernel reports, or null when nothing answers.
+ *
+ * Read through `ksud susfs version`, which prints the load state on the first
+ * line and the version on the second. Unlike the module rows above, this one
+ * lives in the kernel: it is the same call whether SuSFS was built in or came
+ * in as the standalone LKM after boot (jailbreak mode included).
+ */
+fun susfsVersion(): String? {
+    val shell = getRootShell()
+    val out = shell.newJob()
+        .add("${getKsuDaemonPath()} susfs version")
+        .to(mutableListOf<String>(), null)
+        .exec().out
+    if (out.firstOrNull()?.trim() != "1") {
+        return null
+    }
+    val version = out.getOrNull(1)?.trim().orEmpty()
+    return version.ifEmpty { null }
+}
+
+/**
  * The name of the installed metamodule, or null when there is none.
  *
  * The metamodule is reachable through its own symlink, which is what ksud maintains; reading the
