@@ -74,6 +74,7 @@ data class SettingsScreenActions(
     val onOpenBasicSettings: () -> Unit,
     val onOpenOtherFeatures: () -> Unit,
     val onOpenMaintenance: () -> Unit,
+    val onOpenSusfs: () -> Unit,
     val onSetSuCompatMode: (Int) -> Unit,
     val onSetKernelUmountEnabled: (Boolean) -> Unit,
     val onSetSelinuxHideEnabled: (Boolean) -> Unit,

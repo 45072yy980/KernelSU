@@ -21,6 +21,7 @@ import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.DisplaySettings
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Palette
+import androidx.compose.material.icons.rounded.Security
 import androidx.compose.material.icons.rounded.SystemUpdate
 import androidx.compose.material.icons.rounded.SystemUpdateAlt
 import androidx.compose.material.icons.rounded.VisibilityOff
@@ -219,6 +220,20 @@ fun SettingPagerMiuix(
                                     )
                                 },
                                 onClick = actions.onOpenMaintenance,
+                            )
+                            val susfs = stringResource(id = R.string.settings_susfs)
+                            ArrowPreference(
+                                title = susfs,
+                                summary = stringResource(id = R.string.settings_susfs_summary),
+                                startAction = {
+                                    Icon(
+                                        Icons.Rounded.Security,
+                                        modifier = Modifier.padding(end = 6.dp),
+                                        contentDescription = susfs,
+                                        tint = colorScheme.onBackground
+                                    )
+                                },
+                                onClick = actions.onOpenSusfs,
                             )
                         }
 

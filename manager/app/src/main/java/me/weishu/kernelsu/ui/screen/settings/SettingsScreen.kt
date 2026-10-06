@@ -70,6 +70,7 @@ fun SettingPager(
         onOpenBasicSettings = { navigator.push(Route.BasicSettings) },
         onOpenOtherFeatures = { navigator.push(Route.OtherFeatures) },
         onOpenMaintenance = { navigator.push(Route.Maintenance) },
+        onOpenSusfs = { navigator.push(Route.Susfs) },
         onSetSuCompatMode = viewModel::setSuCompatMode,
         onSetKernelUmountEnabled = viewModel::setKernelUmountEnabled,
         onSetSelinuxHideEnabled = viewModel::setSelinuxHideEnabled,
