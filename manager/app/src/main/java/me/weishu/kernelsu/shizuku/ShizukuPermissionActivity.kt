@@ -107,7 +107,7 @@ class ShizukuPermissionActivity : ComponentActivity() {
 
         setContent {
             KernelSUTheme {
-                val uiMode by LocalUiMode.current
+                val uiMode = LocalUiMode.current
                 if (uiMode.isMiuixFamily) {
                     PermissionDialogMiuix(
                         label = label,
