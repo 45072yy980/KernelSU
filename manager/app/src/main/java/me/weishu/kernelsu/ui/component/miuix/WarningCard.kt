@@ -83,73 +83,84 @@ fun WarningCard(
                 .shadow(8.dp, cardShape, clip = true)
                 .background(color = Color.Transparent, shape = cardShape),
         ) {
-            // The frosted face: the panel's own crop of the wallpaper, blurred, so
-            // the card is a pane of the page rather than a colour sampled out of it.
-            if (glassWallpaper != null) {
-                val panelSize = PanelMetrics.size.value
-                val panelPos = PanelMetrics.pos.value
-                val cardPos = cardWindowPos
-                if (panelSize != IntSize.Zero) {
-                    val cardDensity = LocalDensity.current
-                    Box(
-                        modifier = Modifier
-                            .matchParentSize()
-                            .clip(cardShape)
-                    ) {
-                        Image(
-                            bitmap = glassWallpaper,
-                            contentDescription = null,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier
-                                .requiredSize(
-                                    with(cardDensity) { (panelSize.width + 96).toDp() },
-                                    with(cardDensity) { (panelSize.height + 96).toDp() },
-                                )
-                                .blur(16.dp)
-                                .offset {
-                                    IntOffset(
-                                        panelPos.x.roundToInt() - cardPos.x.roundToInt()
-                                            - 48
-                                            + with(cardDensity) { GlassNudge.x.floatValue.dp.toPx() }.roundToInt(),
-                                        panelPos.y.roundToInt() - cardPos.y.roundToInt()
-                                            - 48
-                                            + with(cardDensity) { GlassNudge.y.floatValue.dp.toPx() }.roundToInt(),
-                                    )
-                                },
-                        )
-                        Box(
-                            modifier = Modifier
-                                .matchParentSize()
-                                .background(Color.Black.copy(alpha = 0.28f)),
-                        )
-                    }
-                }
-            }
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.defaultColors(
                     color = Color.Transparent,
                     contentColor = textColor,
                 ),
+                onClick = { onClick?.invoke() },
                 showIndication = onClick != null,
-                pressFeedbackType = PressFeedbackType.Sink
+                // Tilt, like the status card. The frosted face lives *inside* the Card
+                // (see the Box below) so it is what the feedback transforms; as a
+                // sibling of the Card it stayed still while the card moved, and the two
+                // visibly disagreed -- which read as the card having a second layer
+                // under it. Same fix the status card already carries.
+                pressFeedbackType = PressFeedbackType.Tilt,
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = message,
-                        // The page's body size. Miuix's body2 is what every other home
-                        // card uses for running text, so this matches instead of sitting
-                        // at a one-off 14.sp that read smaller than everything around it.
-                        fontSize = MiuixTheme.textStyles.body2.fontSize,
-                        color = textColor,
-                    )
-                    action?.invoke()
+                Box {
+                    // The frosted face: the panel's own crop of the wallpaper, blurred,
+                    // so the card is a pane of the page rather than a colour sampled out
+                    // of it. Drawn from inside the Card so it rides the press feedback;
+                    // the crop is overscanned by the blur radius on each side so the
+                    // blur does not pull transparent pixels in from the edges.
+                    if (glassWallpaper != null) {
+                        val panelSize = PanelMetrics.size.value
+                        val panelPos = PanelMetrics.pos.value
+                        val cardPos = cardWindowPos
+                        if (panelSize != IntSize.Zero) {
+                            val paneDensity = LocalDensity.current
+                            Box(
+                                modifier = Modifier
+                                    .matchParentSize()
+                                    .clip(cardShape),
+                            ) {
+                                Image(
+                                    bitmap = glassWallpaper,
+                                    contentDescription = null,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier
+                                        .requiredSize(
+                                            with(paneDensity) { (panelSize.width + 96).toDp() },
+                                            with(paneDensity) { (panelSize.height + 96).toDp() },
+                                        )
+                                        .blur(16.dp)
+                                        .offset {
+                                            IntOffset(
+                                                panelPos.x.roundToInt() - cardPos.x.roundToInt()
+                                                    - 48
+                                                    + with(paneDensity) { GlassNudge.x.floatValue.dp.toPx() }.roundToInt(),
+                                                panelPos.y.roundToInt() - cardPos.y.roundToInt()
+                                                    - 48
+                                                    + with(paneDensity) { GlassNudge.y.floatValue.dp.toPx() }.roundToInt(),
+                                            )
+                                        },
+                                )
+                                Box(
+                                    modifier = Modifier
+                                        .matchParentSize()
+                                        .background(Color.Black.copy(alpha = 0.28f)),
+                                )
+                            }
+                        }
+                    }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = message,
+                            // The page's body size. Miuix's body2 is what every other home
+                            // card uses for running text, so this matches instead of sitting
+                            // at a one-off 14.sp that read smaller than everything around it.
+                            fontSize = MiuixTheme.textStyles.body2.fontSize,
+                            color = textColor,
+                        )
+                        action?.invoke()
+                    }
                 }
             }
         }
@@ -207,7 +218,10 @@ fun WarningCard(
             ),
             onClick = { onClick?.invoke() },
             showIndication = onClick != null,
-            pressFeedbackType = PressFeedbackType.Sink
+            // Tilt matches the status card and the frosted pane above; the gradient
+            // behind this Card is a sibling of it, so a Sink would shrink the Card
+            // out of its own background.
+            pressFeedbackType = PressFeedbackType.Tilt
         ) {
             Row(
                 modifier = Modifier
