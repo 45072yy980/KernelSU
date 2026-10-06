@@ -37,6 +37,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
@@ -222,7 +223,7 @@ private fun PermissionDialogMiuix(
                         MiuixText(
                             text = "请求使用 Shizuku 执行操作",
                             fontSize = 13.sp,
-                            color = colorScheme.onSurfaceVariant,
+                            color = colorScheme.onSurface,
                         )
                     }
                 }
@@ -242,7 +243,7 @@ private fun PermissionDialogMiuix(
                     title = "仅一次",
                     subtitle = "本次允许，下次重新询问",
                     container = colorScheme.surfaceVariant,
-                    content = colorScheme.onSurfaceVariant,
+                    content = colorScheme.onSurface,
                     onClick = onAllowOnce,
                 )
                 PermissionOptionMiuix(
@@ -250,7 +251,7 @@ private fun PermissionDialogMiuix(
                     title = "拒绝",
                     subtitle = "拒绝该应用使用 Shizuku",
                     container = colorScheme.surfaceVariant,
-                    content = colorScheme.onSurfaceVariant,
+                    content = colorScheme.onSurface,
                     onClick = onDeny,
                 )
 
@@ -356,7 +357,7 @@ private fun PermissionDialogMaterial(
                 Text(
                     text = "请求 Shizuku 权限",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
                 Spacer(Modifier.height(4.dp))
                 PermissionOptionMaterial(
@@ -372,7 +373,7 @@ private fun PermissionDialogMaterial(
                     title = "仅一次",
                     subtitle = "本次允许，下次重新询问",
                     container = MaterialTheme.colorScheme.surfaceContainer,
-                    content = MaterialTheme.colorScheme.onSurfaceVariant,
+                    content = MaterialTheme.colorScheme.onSurface,
                     onClick = onAllowOnce,
                 )
                 PermissionOptionMaterial(
@@ -380,7 +381,7 @@ private fun PermissionDialogMaterial(
                     title = "拒绝",
                     subtitle = "拒绝该应用使用 Shizuku",
                     container = MaterialTheme.colorScheme.surfaceContainer,
-                    content = MaterialTheme.colorScheme.onSurfaceVariant,
+                    content = MaterialTheme.colorScheme.onSurface,
                     onClick = onDeny,
                 )
             }
