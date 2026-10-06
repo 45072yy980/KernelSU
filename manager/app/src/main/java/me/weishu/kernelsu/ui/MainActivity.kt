@@ -89,6 +89,7 @@ import me.weishu.kernelsu.ui.screen.settings.KeymintScreen
 import me.weishu.kernelsu.ui.screen.settings.OtherFeaturesScreen
 import me.weishu.kernelsu.ui.screen.settings.MaintenanceScreen
 import me.weishu.kernelsu.ui.screen.susfs.SusfsScreen
+import me.weishu.kernelsu.ui.screen.shizuku.ShizukuScreen
 import me.weishu.kernelsu.ui.screen.sulog.SulogScreen
 import me.weishu.kernelsu.ui.screen.superuser.SuperUserPager
 import me.weishu.kernelsu.ui.screen.template.AppProfileTemplateScreen
@@ -325,6 +326,7 @@ open class MainActivity : ComponentActivity() {
                             entry<Route.Maintenance>(swipeDismiss = swipeDismiss) { MaintenanceScreen() }
                             entry<Route.Keymint>(swipeDismiss = swipeDismiss) { KeymintScreen() }
                             entry<Route.Susfs>(swipeDismiss = swipeDismiss) { SusfsScreen() }
+                            entry<Route.Shizuku>(swipeDismiss = swipeDismiss) { ShizukuScreen() }
                         }
                     }
 
