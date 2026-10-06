@@ -390,7 +390,7 @@ private val PANEL_CORNER = 24.dp
 @Composable
 fun MainScreen(
     initialPage: Int = 0,
-    pagerInterceptionMode: Int = PagerInterceptionMode.CrossAxisInterceptor.ordinal,
+    pagerInterceptionMode: Int = PagerInterceptionMode.Native.ordinal,
     onPageChanged: (Int) -> Unit = {},
 ) {
     val navController = LocalNavigator.current

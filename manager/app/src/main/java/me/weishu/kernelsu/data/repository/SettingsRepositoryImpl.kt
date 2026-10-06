@@ -26,6 +26,35 @@ private const val KEY_HOME_CARD_BLUR = "home_card_blur"
 private const val KEY_DISABLE_PAGER_SWIPE = "disable_pager_swipe"
 private const val KEY_SIMPLE_MODE = "simple_mode"
 private const val KEY_SHOW_MORE_MODULE_INFO = "show_more_module_info"
+private const val KEY_PAGER_MODE_MIGRATED = "pager_mode_migrated_to_native"
+
+/**
+ * One-time move off the cross-axis interceptor default.
+ *
+ * Builds before this one shipped `1` (cross-axis) as the default for
+ * `pager_interception_mode`, and the first read of the setting wrote that value
+ * into the prefs even when the user never opened the screen. Those devices are
+ * stuck on the interceptor, whose vertical-drag handling is what made the home
+ * list refuse to scroll when a drag started on a card.
+ *
+ * A stored `1` is ambiguous: it is either that old default or a deliberate
+ * choice, and there is no way to tell them apart after the fact. So the reset
+ * runs exactly once -- the first time this version reads the setting -- and
+ * only when the stored value is `1`. Anyone who had picked cross-axis on
+ * purpose can pick it again; anyone who had picked the other two is untouched.
+ */
+private fun migratePagerInterceptionMode() {
+    val prefs = settingsPrefs()
+    if (prefs.getBoolean(KEY_PAGER_MODE_MIGRATED, false)) {
+        return
+    }
+    prefs.edit {
+        if (prefs.getInt("pager_interception_mode", 0) == 1) {
+            putInt("pager_interception_mode", 0)
+        }
+        putBoolean(KEY_PAGER_MODE_MIGRATED, true)
+    }
+}
 
 private fun settingsPrefs() =
     ksuApp.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
@@ -182,7 +211,15 @@ class SettingsRepositoryImpl : SettingsRepository {
         set(value) = prefs.edit { putBoolean("enable_swipe_dismiss", value) }
 
     override var pagerInterceptionMode: Int
-        get() = prefs.getInt("pager_interception_mode", 1)
+        // Default 0 (native pager gestures). The cross-axis interceptor, which used
+        // to be the default, swallows a vertical drag that starts on a card: the
+        // home list then refuses to scroll until the finger leaves the card. It was
+        // inherited from the baseline and is a poor default; it stays available in
+        // settings for anyone who wants the anti-mis-touch behaviour.
+        get() {
+            migratePagerInterceptionMode()
+            return prefs.getInt("pager_interception_mode", 0)
+        }
         set(value) = prefs.edit { putInt("pager_interception_mode", value.coerceIn(0, 2)) }
 
     override var enableBlur: Boolean
