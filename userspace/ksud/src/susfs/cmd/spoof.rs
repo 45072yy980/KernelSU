@@ -9,7 +9,7 @@ use crate::susfs::abi::consts::{
     CMD_SUSFS_SET_UNAME, ERR_CMD_NOT_SUPPORTED, NEW_UTS_LEN, SUSFS_FAKE_CMDLINE_OR_BOOTCONFIG_SIZE,
 };
 use crate::susfs::abi::{
-    send, SusfsAvcLogSpoofing, SusfsCmdlineOrBootconfig, SusfsHideSusMnts, SusfsLog, SusfsUname,
+    SusfsAvcLogSpoofing, SusfsCmdlineOrBootconfig, SusfsHideSusMnts, SusfsLog, SusfsUname, send,
 };
 use crate::susfs::util::{canonicalize, read_file};
 use anyhow::{Context, Result};
