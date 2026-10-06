@@ -1,11 +1,16 @@
 package me.weishu.kernelsu.ui.screen.susfs
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -28,7 +33,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
@@ -156,6 +163,7 @@ private fun SusfsMiuix(
             item { SusfsStatusCard(state, onRefresh) }
 
             if (state.status.loaded) {
+                item { SusfsFeaturesCard(state) }
                 item { SusfsSwitchCard(state, viewModel) }
                 item { SusfsPathCard(onInput, viewModel) }
                 item { SusfsKstatCard(onInput, viewModel) }
@@ -225,6 +233,69 @@ private fun SusfsStatusCard(state: SusfsUiState, onRefresh: () -> Unit) {
             },
             onClick = onRefresh,
         )
+    }
+}
+
+/**
+ * The kernel's enabled-feature list, one row per known feature.
+ *
+ * Mirrors the upstream SuSFS panel: every feature the build can have is
+ * listed, and the ones the kernel did not report simply read as disabled.
+ * That is more useful than hiding them, because "this build has no SUS_MOUNT"
+ * is exactly the thing a reader wants to know.
+ */
+@Composable
+private fun SusfsFeaturesCard(state: SusfsUiState) {
+    Card(modifier = Modifier.padding(top = 12.dp)) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            MiuixText(
+                text = stringResource(R.string.susfs_features_title),
+                style = MiuixTheme.textStyles.title2,
+                color = colorScheme.onSurface,
+            )
+            MiuixText(
+                text = stringResource(R.string.susfs_features_summary),
+                style = MiuixTheme.textStyles.footnote1,
+                color = colorScheme.onSurfaceVariantSummary,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
+        for (feature in state.features) {
+            val name = stringResource(feature.nameRes)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                MiuixText(
+                    text = name,
+                    style = MiuixTheme.textStyles.body1,
+                    color = colorScheme.onSurface,
+                    modifier = Modifier.weight(1f),
+                )
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(
+                            if (feature.enabled) colorScheme.primaryContainer
+                            else colorScheme.surfaceVariant
+                        )
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                ) {
+                    MiuixText(
+                        text = stringResource(
+                            if (feature.enabled) R.string.susfs_feature_enabled
+                            else R.string.susfs_feature_disabled
+                        ),
+                        style = MiuixTheme.textStyles.footnote1,
+                        color = if (feature.enabled) colorScheme.onPrimaryContainer
+                        else colorScheme.onSurfaceVariantSummary,
+                    )
+                }
+            }
+        }
     }
 }
 

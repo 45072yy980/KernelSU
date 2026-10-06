@@ -370,4 +370,17 @@
     <string name="susfs_cancel">取消</string>
     <string name="susfs_material_note">SUSFS 面板只在 miuix 介面下繪製。請在設定裡切換到 miuix 模式後使用。</string>
     <string name="home_susfs_version">SUSFS 版本</string>
+    <string name="susfs_features_title">功能啟用狀態</string>
+    <string name="susfs_features_summary">目前 SuSFS 建置所報告的能力。核心沒有列出的功能會顯示為停用。</string>
+    <string name="susfs_feature_enabled">啟用</string>
+    <string name="susfs_feature_disabled">停用</string>
+    <string name="sus_path_feature_label">SUS path 支援</string>
+    <string name="sus_mount_feature_label">SUS mount 支援</string>
+    <string name="sus_kstat_feature_label">SUS kstat 支援</string>
+    <string name="sus_map_feature_label">SUS map 支援</string>
+    <string name="spoof_uname_feature_label">偽裝 uname</string>
+    <string name="spoof_cmdline_feature_label">偽裝 cmdline / bootconfig</string>
+    <string name="open_redirect_feature_label">open 重導</string>
+    <string name="enable_log_feature_label">日誌支援</string>
+    <string name="hide_symbols_feature_label">隱藏 KSU / SUSFS 符號</string>
 </resources>

@@ -33,7 +33,14 @@ class SusfsViewModel : ViewModel() {
             val status = SusfsCommands.loadStatus()
             val proc = if (status.loaded) SusfsCommands.readProc() else SusfsProcSnapshot()
             _uiState.update {
-                it.copy(isLoading = false, status = status, proc = proc)
+                it.copy(
+                    isLoading = false,
+                    status = status,
+                    proc = proc,
+                    // The panel lists every known feature whether or not the kernel
+                    // reported it; one that is absent simply reads as disabled.
+                    features = SusfsFeatureCatalog.resolve(status.features),
+                )
             }
         }
     }
