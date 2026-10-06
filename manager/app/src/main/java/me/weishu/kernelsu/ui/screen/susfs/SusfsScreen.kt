@@ -279,10 +279,19 @@ private fun SusfsSwitchCard(state: SusfsUiState, viewModel: SusfsViewModel) {
 /** Hidden-path list. */
 @Composable
 private fun SusfsPathCard(onInput: (SusfsInput) -> Unit, viewModel: SusfsViewModel) {
+    // Resolved here, in composable scope: an onClick lambda is not a @Composable
+    // context, so the strings cannot be read inside it.
+    val addPath = stringResource(R.string.susfs_add_path)
+    val addPathSummary = stringResource(R.string.susfs_add_path_summary)
+    val addPathLoop = stringResource(R.string.susfs_add_path_loop)
+    val addPathLoopSummary = stringResource(R.string.susfs_add_path_loop_summary)
+    val addMap = stringResource(R.string.susfs_add_map)
+    val addMapSummary = stringResource(R.string.susfs_add_map_summary)
+    val fieldPath = stringResource(R.string.susfs_field_path)
     Card(modifier = Modifier.padding(top = 12.dp)) {
         ArrowPreference(
-            title = stringResource(R.string.susfs_add_path),
-            summary = stringResource(R.string.susfs_add_path_summary),
+            title = addPath,
+            summary = addPathSummary,
             startAction = {
                 MiuixIcon(
                     imageVector = Icons.Filled.Add,
@@ -293,16 +302,15 @@ private fun SusfsPathCard(onInput: (SusfsInput) -> Unit, viewModel: SusfsViewMod
             },
             onClick = {
                 onInput(
-                    SusfsInput(
-                        title = stringResource(R.string.susfs_add_path),
-                        fieldA = stringResource(R.string.susfs_field_path),
-                    ) { path, _ -> viewModel.addSusPath(path) },
+                    SusfsInput(title = addPath, fieldA = fieldPath) { path, _ ->
+                        viewModel.addSusPath(path)
+                    },
                 )
             },
         )
         ArrowPreference(
-            title = stringResource(R.string.susfs_add_path_loop),
-            summary = stringResource(R.string.susfs_add_path_loop_summary),
+            title = addPathLoop,
+            summary = addPathLoopSummary,
             startAction = {
                 MiuixIcon(
                     imageVector = Icons.Filled.Add,
@@ -313,16 +321,15 @@ private fun SusfsPathCard(onInput: (SusfsInput) -> Unit, viewModel: SusfsViewMod
             },
             onClick = {
                 onInput(
-                    SusfsInput(
-                        title = stringResource(R.string.susfs_add_path_loop),
-                        fieldA = stringResource(R.string.susfs_field_path),
-                    ) { path, _ -> viewModel.addSusPathLoop(path) },
+                    SusfsInput(title = addPathLoop, fieldA = fieldPath) { path, _ ->
+                        viewModel.addSusPathLoop(path)
+                    },
                 )
             },
         )
         ArrowPreference(
-            title = stringResource(R.string.susfs_add_map),
-            summary = stringResource(R.string.susfs_add_map_summary),
+            title = addMap,
+            summary = addMapSummary,
             startAction = {
                 MiuixIcon(
                     imageVector = Icons.Filled.Add,
@@ -333,10 +340,9 @@ private fun SusfsPathCard(onInput: (SusfsInput) -> Unit, viewModel: SusfsViewMod
             },
             onClick = {
                 onInput(
-                    SusfsInput(
-                        title = stringResource(R.string.susfs_add_map),
-                        fieldA = stringResource(R.string.susfs_field_path),
-                    ) { path, _ -> viewModel.addSusMap(path) },
+                    SusfsInput(title = addMap, fieldA = fieldPath) { path, _ ->
+                        viewModel.addSusMap(path)
+                    },
                 )
             },
         )
@@ -346,10 +352,15 @@ private fun SusfsPathCard(onInput: (SusfsInput) -> Unit, viewModel: SusfsViewMod
 /** kstat spoofing. */
 @Composable
 private fun SusfsKstatCard(onInput: (SusfsInput) -> Unit, viewModel: SusfsViewModel) {
+    val addKstat = stringResource(R.string.susfs_add_kstat)
+    val addKstatSummary = stringResource(R.string.susfs_add_kstat_summary)
+    val updateKstat = stringResource(R.string.susfs_update_kstat)
+    val updateKstatSummary = stringResource(R.string.susfs_update_kstat_summary)
+    val fieldPath = stringResource(R.string.susfs_field_path)
     Card(modifier = Modifier.padding(top = 12.dp)) {
         ArrowPreference(
-            title = stringResource(R.string.susfs_add_kstat),
-            summary = stringResource(R.string.susfs_add_kstat_summary),
+            title = addKstat,
+            summary = addKstatSummary,
             startAction = {
                 MiuixIcon(
                     imageVector = Icons.Filled.Tune,
@@ -360,16 +371,15 @@ private fun SusfsKstatCard(onInput: (SusfsInput) -> Unit, viewModel: SusfsViewMo
             },
             onClick = {
                 onInput(
-                    SusfsInput(
-                        title = stringResource(R.string.susfs_add_kstat),
-                        fieldA = stringResource(R.string.susfs_field_path),
-                    ) { path, _ -> viewModel.addSusKstat(path) },
+                    SusfsInput(title = addKstat, fieldA = fieldPath) { path, _ ->
+                        viewModel.addSusKstat(path)
+                    },
                 )
             },
         )
         ArrowPreference(
-            title = stringResource(R.string.susfs_update_kstat),
-            summary = stringResource(R.string.susfs_update_kstat_summary),
+            title = updateKstat,
+            summary = updateKstatSummary,
             startAction = {
                 MiuixIcon(
                     imageVector = Icons.Filled.Tune,
@@ -380,10 +390,9 @@ private fun SusfsKstatCard(onInput: (SusfsInput) -> Unit, viewModel: SusfsViewMo
             },
             onClick = {
                 onInput(
-                    SusfsInput(
-                        title = stringResource(R.string.susfs_update_kstat),
-                        fieldA = stringResource(R.string.susfs_field_path),
-                    ) { path, _ -> viewModel.updateSusKstat(path) },
+                    SusfsInput(title = updateKstat, fieldA = fieldPath) { path, _ ->
+                        viewModel.updateSusKstat(path)
+                    },
                 )
             },
         )
@@ -393,10 +402,14 @@ private fun SusfsKstatCard(onInput: (SusfsInput) -> Unit, viewModel: SusfsViewMo
 /** open() redirection. */
 @Composable
 private fun SusfsRedirectCard(onInput: (SusfsInput) -> Unit, viewModel: SusfsViewModel) {
+    val addRedirect = stringResource(R.string.susfs_add_redirect)
+    val addRedirectSummary = stringResource(R.string.susfs_add_redirect_summary)
+    val fieldTarget = stringResource(R.string.susfs_field_target)
+    val fieldRedirected = stringResource(R.string.susfs_field_redirected)
     Card(modifier = Modifier.padding(top = 12.dp)) {
         ArrowPreference(
-            title = stringResource(R.string.susfs_add_redirect),
-            summary = stringResource(R.string.susfs_add_redirect_summary),
+            title = addRedirect,
+            summary = addRedirectSummary,
             startAction = {
                 MiuixIcon(
                     imageVector = Icons.Filled.SwapHoriz,
@@ -408,10 +421,12 @@ private fun SusfsRedirectCard(onInput: (SusfsInput) -> Unit, viewModel: SusfsVie
             onClick = {
                 onInput(
                     SusfsInput(
-                        title = stringResource(R.string.susfs_add_redirect),
-                        fieldA = stringResource(R.string.susfs_field_target),
-                        fieldB = stringResource(R.string.susfs_field_redirected),
-                    ) { target, redirected -> viewModel.addOpenRedirect(target, redirected) },
+                        title = addRedirect,
+                        fieldA = fieldTarget,
+                        fieldB = fieldRedirected,
+                    ) { target, redirected ->
+                        viewModel.addOpenRedirect(target, redirected)
+                    },
                 )
             },
         )
@@ -425,14 +440,17 @@ private fun SusfsUnameCard(
     onInput: (SusfsInput) -> Unit,
     viewModel: SusfsViewModel,
 ) {
+    val setUname = stringResource(R.string.susfs_set_uname)
+    val setUnameSummary = stringResource(R.string.susfs_set_uname_summary)
+    val fieldRelease = stringResource(R.string.susfs_field_release)
+    val fieldVersion = stringResource(R.string.susfs_field_version)
+    val setCmdline = stringResource(R.string.susfs_set_cmdline)
+    val setCmdlineSummary = stringResource(R.string.susfs_set_cmdline_summary)
+    val fieldFile = stringResource(R.string.susfs_field_file)
     Card(modifier = Modifier.padding(top = 12.dp)) {
         ArrowPreference(
-            title = stringResource(R.string.susfs_set_uname),
-            summary = if (state.unameRelease.isEmpty()) {
-                stringResource(R.string.susfs_set_uname_summary)
-            } else {
-                state.unameRelease
-            },
+            title = setUname,
+            summary = state.unameRelease.ifEmpty { setUnameSummary },
             startAction = {
                 MiuixIcon(
                     imageVector = Icons.Filled.Lock,
@@ -444,18 +462,20 @@ private fun SusfsUnameCard(
             onClick = {
                 onInput(
                     SusfsInput(
-                        title = stringResource(R.string.susfs_set_uname),
-                        fieldA = stringResource(R.string.susfs_field_release),
-                        fieldB = stringResource(R.string.susfs_field_version),
+                        title = setUname,
+                        fieldA = fieldRelease,
+                        fieldB = fieldVersion,
                         valueA = state.unameRelease,
                         valueB = state.unameVersion,
-                    ) { release, version -> viewModel.setUname(release, version) },
+                    ) { release, version ->
+                        viewModel.setUname(release, version)
+                    },
                 )
             },
         )
         ArrowPreference(
-            title = stringResource(R.string.susfs_set_cmdline),
-            summary = stringResource(R.string.susfs_set_cmdline_summary),
+            title = setCmdline,
+            summary = setCmdlineSummary,
             startAction = {
                 MiuixIcon(
                     imageVector = Icons.Filled.Lock,
@@ -466,10 +486,9 @@ private fun SusfsUnameCard(
             },
             onClick = {
                 onInput(
-                    SusfsInput(
-                        title = stringResource(R.string.susfs_set_cmdline),
-                        fieldA = stringResource(R.string.susfs_field_file),
-                    ) { path, _ -> viewModel.setCmdline(path) },
+                    SusfsInput(title = setCmdline, fieldA = fieldFile) { path, _ ->
+                        viewModel.setCmdline(path)
+                    },
                 )
             },
         )
