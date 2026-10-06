@@ -76,38 +76,62 @@ class SusfsViewModel : ViewModel() {
         }
     }
 
-    fun addSusPath(path: String) =
-        exec("add-sus-path $path", { SusfsCommands.addSusPath(path) }) {
-            SusfsRepository.addSusPath(path)
+    fun addSusPath(path: String) {
+        val normalized = SusfsCommands.normalizePath(path)
+        if (normalized == null) {
+            _uiState.update { it.copy(error = "路径无效：必须以 / 开头", lastOutput = "add-sus-path $path → invalid path") }
+            return
+        }
+        exec("add-sus-path $normalized", { SusfsCommands.addSusPath(normalized) }) {
+            SusfsRepository.addSusPath(normalized)
             refresh()
         }
+    }
 
-    fun addSusPathLoop(path: String) =
-        exec("add-sus-path-loop $path", { SusfsCommands.addSusPathLoop(path) }) {
-            SusfsRepository.addSusPathLoop(path)
+    fun addSusPathLoop(path: String) {
+        val normalized = SusfsCommands.normalizePath(path)
+        if (normalized == null) {
+            _uiState.update { it.copy(error = "路径无效：必须以 / 开头", lastOutput = "add-sus-path-loop $path → invalid path") }
+            return
+        }
+        exec("add-sus-path-loop $normalized", { SusfsCommands.addSusPathLoop(normalized) }) {
+            SusfsRepository.addSusPathLoop(normalized)
             refresh()
         }
+    }
 
-    fun addSusMap(path: String) =
-        exec("add-sus-map $path", { SusfsCommands.addSusMap(path) }) {
-            SusfsRepository.addSusMap(path)
+    fun addSusMap(path: String) {
+        val normalized = SusfsCommands.normalizePath(path)
+        if (normalized == null) {
+            _uiState.update { it.copy(error = "路径无效：必须以 / 开头", lastOutput = "add-sus-map $path → invalid path") }
+            return
+        }
+        exec("add-sus-map $normalized", { SusfsCommands.addSusMap(normalized) }) {
+            SusfsRepository.addSusMap(normalized)
             refresh()
         }
+    }
 
-    fun addSusKstat(path: String) =
-        exec("add-sus-kstat $path", { SusfsCommands.addSusKstat(path) }) { refresh() }
+    fun addSusKstat(path: String) {
+        val normalized = SusfsCommands.normalizePath(path) ?: path
+        exec("add-sus-kstat $normalized", { SusfsCommands.addSusKstat(normalized) }) { refresh() }
+    }
 
-    fun updateSusKstat(path: String) =
-        exec("update-sus-kstat $path", { SusfsCommands.updateSusKstat(path) }) {
-            SusfsRepository.addSusKstatPath(path)
+    fun updateSusKstat(path: String) {
+        val normalized = SusfsCommands.normalizePath(path) ?: path
+        exec("update-sus-kstat $normalized", { SusfsCommands.updateSusKstat(normalized) }) {
+            SusfsRepository.addSusKstatPath(normalized)
             refresh()
         }
+    }
 
-    fun updateSusKstatFullClone(path: String) =
-        exec("update-sus-kstat-full-clone $path", { SusfsCommands.updateSusKstatFullClone(path) }) {
-            SusfsRepository.addSusKstatPath(path)
+    fun updateSusKstatFullClone(path: String) {
+        val normalized = SusfsCommands.normalizePath(path) ?: path
+        exec("update-sus-kstat-full-clone $normalized", { SusfsCommands.updateSusKstatFullClone(normalized) }) {
+            SusfsRepository.addSusKstatPath(normalized)
             refresh()
         }
+    }
 
     /**
      * Spoof a path's stat with caller-supplied values.
@@ -128,35 +152,45 @@ class SusfsViewModel : ViewModel() {
         ctimeNsec: Long,
         blocks: Long,
         blksize: Long,
-    ) = exec(
-        "add-sus-kstat-statically $path",
-        {
-            SusfsCommands.addSusKstatStatically(
-                path = path,
-                ino = ino,
-                dev = dev,
-                nlink = nlink,
-                size = size,
-                atimeSec = atimeSec,
-                atimeNsec = atimeNsec,
-                mtimeSec = mtimeSec,
-                mtimeNsec = mtimeNsec,
-                ctimeSec = ctimeSec,
-                ctimeNsec = ctimeNsec,
-                blocks = blocks,
-                blksize = blksize,
-            )
-        },
-    ) { refresh() }
-
-    fun addOpenRedirect(target: String, redirected: String, uidScheme: Int = 0) =
+    ) {
+        val normalized = SusfsCommands.normalizePath(path) ?: path
         exec(
-            "add-open-redirect $target (uid_scheme=$uidScheme)",
-            { SusfsCommands.addOpenRedirect(target, redirected, uidScheme) },
+            "add-sus-kstat-statically $normalized",
+            {
+                SusfsCommands.addSusKstatStatically(
+                    path = normalized,
+                    ino = ino,
+                    dev = dev,
+                    nlink = nlink,
+                    size = size,
+                    atimeSec = atimeSec,
+                    atimeNsec = atimeNsec,
+                    mtimeSec = mtimeSec,
+                    mtimeNsec = mtimeNsec,
+                    ctimeSec = ctimeSec,
+                    ctimeNsec = ctimeNsec,
+                    blocks = blocks,
+                    blksize = blksize,
+                )
+            },
+        ) { refresh() }
+    }
+
+    fun addOpenRedirect(target: String, redirected: String, uidScheme: Int = 0) {
+        val normTarget = SusfsCommands.normalizePath(target)
+        val normRedirected = SusfsCommands.normalizePath(redirected)
+        if (normTarget == null || normRedirected == null) {
+            _uiState.update { it.copy(error = "路径无效：必须以 / 开头", lastOutput = "add-open-redirect → invalid path") }
+            return
+        }
+        exec(
+            "add-open-redirect $normTarget (uid_scheme=$uidScheme)",
+            { SusfsCommands.addOpenRedirect(normTarget, normRedirected, uidScheme) },
         ) {
-            SusfsRepository.addSusRedirect(target, redirected, uidScheme)
+            SusfsRepository.addSusRedirect(normTarget, normRedirected, uidScheme)
             refresh()
         }
+    }
 
     fun setCmdline(path: String) =
         exec("set-cmdline $path", { SusfsCommands.setCmdline(path) }) { refresh() }

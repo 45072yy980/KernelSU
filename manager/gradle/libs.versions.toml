@@ -10,6 +10,9 @@ navigationevent = "1.1.2"
 commonmark = "0.30.0"
 webkit = "1.17.0"
 parcelablelist = "2.0.1"
+shizuku = "13.1.5"
+hiddenApi = "4.4.0"
+refine = "4.4.0"
 material3 = "1.5.0-alpha28"
 materialKolor = "5.0.1"
 ndk = "29.0.14206865"
@@ -34,6 +37,7 @@ kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", versi
 lsplugin-apksign = { id = "org.lsposed.lsplugin.apksign", version.ref = "apksign" }
 aboutlibraries = { id = "com.mikepenz.aboutlibraries.plugin", version.ref = "aboutlibraries" }
 protobuf = { id = "com.google.protobuf", version = "0.10.0" }
+refine = { id = "dev.rikka.tools.refine", version.ref = "refine" }
 
 [libraries]
 androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activity-compose" }
@@ -58,6 +62,11 @@ com-github-topjohnwu-libsu-service = { group = "com.github.topjohnwu.libsu", nam
 com-github-topjohnwu-libsu-io = { group = "com.github.topjohnwu.libsu", name = "io", version.ref = "libsu" }
 
 dev-rikka-rikkax-parcelablelist = { module = "dev.rikka.rikkax.parcelablelist:parcelablelist", version.ref = "parcelablelist" }
+dev-rikka-shizuku-api = { group = "dev.rikka.shizuku", name = "api", version.ref = "shizuku" }
+dev-rikka-shizuku-provider = { group = "dev.rikka.shizuku", name = "provider", version.ref = "shizuku" }
+dev-rikka-hidden-compat = { group = "dev.rikka.hidden", name = "compat", version.ref = "hiddenApi" }
+dev-rikka-hidden-stub = { group = "dev.rikka.hidden", name = "stub", version.ref = "hiddenApi" }
+dev-rikka-refine-runtime = { group = "dev.rikka.tools.refine", name = "runtime", version.ref = "refine" }
 
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinx-coroutines" }
 

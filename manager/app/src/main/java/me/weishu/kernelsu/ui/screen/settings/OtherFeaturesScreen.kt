@@ -212,6 +212,34 @@ fun OtherFeaturesScreen() {
         }
     }
 
+    // Shizuku 内置服务：开关控制是否在开机时自动启动，运行时可手动启停。
+    var shizukuEnabled by remember { mutableStateOf(me.weishu.kernelsu.shizuku.ShizukuServiceManager.isEnabled()) }
+    var shizukuRunning by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        shizukuRunning = withContext(Dispatchers.IO) {
+            me.weishu.kernelsu.shizuku.ShizukuServiceManager.isServerRunning()
+        }
+    }
+    val onShizukuChange: (Boolean) -> Unit = { value ->
+        me.weishu.kernelsu.shizuku.ShizukuServiceManager.setEnabled(value)
+        shizukuEnabled = value
+        scope.launch {
+            val ok = withContext(Dispatchers.IO) {
+                if (value) {
+                    me.weishu.kernelsu.shizuku.ShizukuServiceManager.start(context)
+                } else {
+                    me.weishu.kernelsu.shizuku.ShizukuServiceManager.stop()
+                }
+            }
+            shizukuRunning = withContext(Dispatchers.IO) {
+                me.weishu.kernelsu.shizuku.ShizukuServiceManager.isServerRunning()
+            }
+            if (!ok && value) {
+                Toast.makeText(context, "Shizuku 启动失败，请查看日志", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
     val onHideAppList = { phase = HideAppListPhase.Pick }
     val onRunHideAppList: (Boolean) -> Unit = { scene ->
         phase = HideAppListPhase.Running
@@ -246,6 +274,9 @@ fun OtherFeaturesScreen() {
             calculatorInstalled = calcInstalled,
             onCalculatorChange = onCalculatorChange,
             onGlassTuning = { glassTuningShown = true },
+            shizukuEnabled = shizukuEnabled,
+            shizukuRunning = shizukuRunning,
+            onShizukuChange = onShizukuChange,
         )
         UiMode.Miuix, UiMode.MiuixStock -> OtherFeaturesMiuix(
             onBack = onBack,
@@ -262,6 +293,9 @@ fun OtherFeaturesScreen() {
             calculatorInstalled = calcInstalled,
             onCalculatorChange = onCalculatorChange,
             onGlassTuning = { glassTuningShown = true },
+            shizukuEnabled = shizukuEnabled,
+            shizukuRunning = shizukuRunning,
+            onShizukuChange = onShizukuChange,
         )
     }
 
@@ -327,6 +361,9 @@ private fun OtherFeaturesMaterial(
     calculatorInstalled: Boolean,
     onCalculatorChange: (Boolean) -> Unit,
     onGlassTuning: () -> Unit = {},
+    shizukuEnabled: Boolean = false,
+    shizukuRunning: Boolean = false,
+    onShizukuChange: (Boolean) -> Unit = {},
 ) {
     Scaffold(
         topBar = {
@@ -432,6 +469,15 @@ private fun OtherFeaturesMaterial(
                         )
                     }
                     add {
+                        SegmentedSwitchItem(
+                            icon = Icons.Filled.WaterDrop,
+                            title = "Shizuku",
+                            summary = if (shizukuRunning) "运行中" else "已停止",
+                            checked = shizukuEnabled,
+                            onCheckedChange = onShizukuChange,
+                        )
+                    }
+                    add {
                         val glass = stringResource(R.string.settings_glass_tuning)
                         SegmentedListItem(
                             onClick = onGlassTuning,
@@ -464,6 +510,9 @@ private fun OtherFeaturesMiuix(
     calculatorInstalled: Boolean,
     onCalculatorChange: (Boolean) -> Unit,
     onGlassTuning: () -> Unit = {},
+    shizukuEnabled: Boolean = false,
+    shizukuRunning: Boolean = false,
+    onShizukuChange: (Boolean) -> Unit = {},
 ) {
     MiuixScaffold(
         topBar = {
@@ -583,6 +632,20 @@ private fun OtherFeaturesMiuix(
                         },
                         checked = calculatorInstalled,
                         onCheckedChange = onCalculatorChange,
+                    )
+                    SwitchPreference(
+                        title = "Shizuku",
+                        summary = if (shizukuRunning) "运行中" else "已停止",
+                        startAction = {
+                            MiuixIcon(
+                                imageVector = Icons.Filled.WaterDrop,
+                                contentDescription = null,
+                                tint = colorScheme.onBackground,
+                                modifier = Modifier.padding(end = 6.dp),
+                            )
+                        },
+                        checked = shizukuEnabled,
+                        onCheckedChange = onShizukuChange,
                     )
                     ArrowPreference(
                         title = stringResource(R.string.settings_glass_tuning),

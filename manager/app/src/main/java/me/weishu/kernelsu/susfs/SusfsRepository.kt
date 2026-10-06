@@ -27,6 +27,7 @@ object SusfsRepository {
     private const val KEY_SUS_MAPS = "sus_maps"
     private const val KEY_SUS_KSTAT_PATHS = "sus_kstat_paths"
     private const val KEY_SUS_REDIRECTS = "sus_redirects"
+    private const val KEY_BOOT_RETRY_COUNT = "boot_retry_count"
 
     /** Separator used when packing a redirect rule into one string. */
     private const val REDIRECT_SEP = "||"
@@ -131,4 +132,20 @@ object SusfsRepository {
 
     private fun packRedirect(target: String, redirected: String, uidScheme: Int) =
         "$target$REDIRECT_SEP$redirected$REDIRECT_SEP$uidScheme"
+
+    // ── boot replay retry ─────────────────────────────────────────────────────
+    /**
+     * How many consecutive boot replays have failed.
+     *
+     * [SusfsBootReceiver] increments this when any rule fails to replay, and
+     * resets it to zero on a fully successful replay. Once it reaches
+     * [MAX_BOOT_RETRIES] the receiver gives up rather than looping forever on
+     * a configuration that cannot be applied (e.g. a path that no longer
+     * exists, or a kernel that rejected the supercall).
+     */
+    var bootRetryCount: Int
+        get() = prefs().getInt(KEY_BOOT_RETRY_COUNT, 0)
+        set(value) = prefs().edit().putInt(KEY_BOOT_RETRY_COUNT, value).apply()
+
+    const val MAX_BOOT_RETRIES = 3
 }

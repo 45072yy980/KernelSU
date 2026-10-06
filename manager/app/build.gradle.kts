@@ -10,6 +10,7 @@ plugins {
     alias(libs.plugins.lsplugin.apksign)
     alias(libs.plugins.protobuf)
     alias(libs.plugins.aboutlibraries)
+    alias(libs.plugins.refine)
     id("kotlin-parcelize")
 }
 
@@ -236,6 +237,11 @@ dependencies {
     implementation(libs.com.github.topjohnwu.libsu.io)
 
     implementation(libs.dev.rikka.rikkax.parcelablelist)
+    implementation(libs.dev.rikka.shizuku.api)
+    implementation(libs.dev.rikka.shizuku.provider)
+    implementation(libs.dev.rikka.hidden.compat)
+    compileOnly(libs.dev.rikka.hidden.stub)
+    implementation(libs.dev.rikka.refine.runtime)
 
     implementation(libs.kotlinx.coroutines.core)
 

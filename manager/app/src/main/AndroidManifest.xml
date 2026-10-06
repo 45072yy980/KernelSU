@@ -131,6 +131,31 @@
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
             </intent-filter>
         </receiver>
+
+        <!-- 内置 Shizuku：授权确认界面，由 Shizuku server 通过广播拉起 -->
+        <activity
+            android:name="me.weishu.kernelsu.shizuku.ShizukuPermissionActivity"
+            android:directBootAware="true"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL"
+            android:theme="@style/Theme.KernelSU">
+            <intent-filter>
+                <action android:name="${applicationId}.intent.action.REQUEST_PERMISSION" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <!-- 内置 Shizuku：响应旧版客户端的 Binder 请求广播 -->
+        <receiver
+            android:name="me.weishu.kernelsu.shizuku.ShizukuReceiver"
+            android:enabled="true"
+            android:exported="true"
+            android:directBootAware="true">
+            <intent-filter>
+                <action android:name="rikka.shizuku.intent.action.REQUEST_BINDER" />
+            </intent-filter>
+        </receiver>
     </application>
 
 </manifest>

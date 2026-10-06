@@ -555,4 +555,6 @@
     <string name="susfs_field_ctime_nsec">ctime（纳秒）</string>
     <string name="susfs_field_blocks">块数</string>
     <string name="susfs_field_blksize">块大小</string>
+    <!-- 内置 Shizuku -->
+    <string name="shizuku_permission_binder_timeout">Shizuku 服务未就绪，请稍后重试</string>
 </resources>

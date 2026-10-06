@@ -22,6 +22,38 @@ object SusfsCommands {
 
     private const val PROC = "/proc"
 
+    /**
+     * Normalize a filesystem path before handing it to the kernel.
+     *
+     * Rules (aligned with FolkPatch's pathhide normalizer):
+     *  - trim surrounding whitespace
+     *  - reject relative paths (must start with `/`)
+     *  - collapse consecutive slashes (`//` → `/`)
+     *  - strip trailing slashes (root `/` is kept as-is)
+     *
+     * @return the normalized path, or `null` if the input is empty or not absolute.
+     */
+    fun normalizePath(input: String): String? {
+        val trimmed = input.trim()
+        if (trimmed.isEmpty() || !trimmed.startsWith('/')) return null
+
+        val sb = StringBuilder(trimmed.length)
+        var prevSlash = false
+        for (ch in trimmed) {
+            if (ch == '/') {
+                if (!prevSlash) sb.append(ch)
+                prevSlash = true
+            } else {
+                sb.append(ch)
+                prevSlash = false
+            }
+        }
+        while (sb.length > 1 && sb.endsWith('/')) {
+            sb.setLength(sb.length - 1)
+        }
+        return if (sb.isEmpty()) null else sb.toString()
+    }
+
     private fun ksud(args: String): Result {
         val shell = getRootShell()
         val result = shell.newJob()
