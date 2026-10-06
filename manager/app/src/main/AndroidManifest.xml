@@ -8,6 +8,14 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <!-- Shizuku API: 使本应用能被 Shizuku Server 识别并推送 Binder。
+         注意：不能声明同名 <permission>——官方 Shizuku (moe.shizuku.privileged.api)
+         已声明该权限，重复声明会导致 INSTALL_FAILED_DUPLICATE_PERMISSION。
+         权限检查不依赖它：user-service 进程（shell uid）因 uid 与 server 相同而放行，
+         授权状态以 shizuku.json (ConfigManager) 为权威。 -->
+    <uses-permission
+        android:name="moe.shizuku.manager.permission.API_V23"
+        tools:ignore="ProtectedPermissions" />
 
     <uses-sdk tools:overrideLibrary="top.yukonga.miuix.kmp.blur" />
 
@@ -96,6 +104,18 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/filepaths" />
         </provider>
+
+        <!-- ShizukuProvider: 接收 Shizuku Server 推送的 Binder，用于状态检测；
+             自定义实现补充 sendUserService，UserService 进程依赖它完成初始化。
+             authority 必须是 ${applicationId}.shizuku，Server 端以此为入口投递 Binder -->
+        <provider
+            android:name="me.weishu.kernelsu.shizuku.ShizukuManagerProvider"
+            android:authorities="${applicationId}.shizuku"
+            android:multiprocess="false"
+            android:enabled="true"
+            android:exported="true"
+            android:directBootAware="true"
+            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
 
         <service
             android:name="com.mngr.app.magica.MagicaService"

@@ -35,7 +35,7 @@ object ShizukuServiceManager {
     /** server 入口类 */
     private const val SERVER_CLASS = "rikka.shizuku.server.ShizukuService"
 
-    private const val SERVER_START_LOG = "/data/local/tmp/shizuku_start.log"
+    private const val SERVER_START_LOG = "/data/local/tmp/shizuku_ksu.log"
     private const val FLAG_ALLOWED = 1 shl 1
     private const val FLAG_DENIED = 1 shl 2
     private const val MASK_PERMISSION = FLAG_ALLOWED or FLAG_DENIED
@@ -103,9 +103,10 @@ object ShizukuServiceManager {
     /**
      * 启动 Shizuku Server。
      *
-     * 以 root 身份通过 app_process 运行内置 server：
-     * - root 直接跑 app_process 会触发 ART 的 dalvik-cache chown 检查（uid 0 被当作 zygote）并 Abort；
-     * - 因此优先尝试 su 2000（shell 身份）启动，shell 持有 Shizuku 所需的 privileged 权限。
+     * 以 root 身份通过 app_process 运行内置 server（与官方 Shizuku root 模式一致）：
+     * - 首选 root (uid 0)：命令具备 root 权限，app_process 处于全局 mount namespace，
+     *   config（/data/user_de/0/com.android.shell/shizuku.json）读写正常；
+     * - 降级到 shell (uid 2000)：用 -M 进入全局 namespace 以保证 config 可写。
      *
      * @return true 表示 server 已就绪（binder 可达）
      */
@@ -137,15 +138,17 @@ object ShizukuServiceManager {
                 "/system/bin --nice-name=$SERVER_PROCESS_NAME $SERVER_CLASS " +
                 ">$SERVER_START_LOG 2>&1 </dev/null &"
 
-            // 不同 su 实现的降权语法存在差异，逐一尝试。
-            // 首选 shell (uid 2000) 启动：避免 root app_process 的 ART chown 检查。
-            // 降级到 root 启动时命令具备 root 权限。
+            // 不同 su 实现/版本的降权语法存在差异，逐一尝试。
+            // 首选以 root (uid 0) 启动 server：与官方 Shizuku root 模式一致，
+            // 使通过 Shizuku 执行的命令具备 root 权限（可读取 /data 等受保护目录）。
+            // root 启动的 app_process 直接处于全局 mount namespace，config 读写正常。
+            // 降级到 shell (uid 2000) 时用 -M 进入全局 namespace 以保证 config 可写。
             val candidates = arrayOf(
+                "/system/bin/su -c '$inner'",
                 "/system/bin/su 2000 -M -c '$inner'",
                 "/system/bin/su -M 2000 -c '$inner'",
                 "/system/bin/su 2000 -c '$inner'",
                 "/system/bin/su - 2000 -c '$inner'",
-                "/system/bin/su -c '$inner'",
             )
             for (cmd in candidates) {
                 try {
@@ -320,6 +323,7 @@ object ShizukuServiceManager {
             getRootShell().newJob()
                 .add(
                     "cat $SERVER_START_LOG 2>/dev/null; " +
+                        "cat /data/local/tmp/shizuku_start.log 2>/dev/null; " +
                         "cat $SERVER_LOG_FILE_BACKUP 2>/dev/null; " +
                         "cat $SERVER_LOG_FILE 2>/dev/null"
                 )

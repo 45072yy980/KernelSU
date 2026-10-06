@@ -99,6 +99,8 @@ private data class ShizukuState(
     val bootEnabled: Boolean = false,
     val apps: List<PackageInfo> = emptyList(),
     val log: String = "",
+    /** false = server 持久日志，true = 系统 logcat（Shizuku 相关 tag 过滤） */
+    val showLogcat: Boolean = false,
     val loading: Boolean = false,
     val starting: Boolean = false,
     val stopping: Boolean = false,
@@ -110,17 +112,23 @@ private fun rememberShizukuState(): Pair<ShizukuState, ShizukuActions> {
     var state by remember { mutableStateOf(ShizukuState()) }
     val scope = rememberCoroutineScope()
 
-    suspend fun refresh() {
+    suspend fun refresh(showLogcat: Boolean = state.showLogcat) {
         state = state.copy(loading = true)
         val running = withContext(Dispatchers.IO) { ShizukuServiceManager.isServerRunning() }
         val apps = withContext(Dispatchers.IO) { ShizukuServiceManager.getApplications() }
+        // 无条件读取日志：getServerLog 内部先走 binder，不可达时回退
+        // 直读 /data/local/tmp/shizuku_ksu.log。服务未启动或启动失败时，
+        // 残留的启动日志仍然可见，便于排查"无法启动"根因。
+        // showLogcat 时读取 logcat 作为补充来源。
         val log = withContext(Dispatchers.IO) {
-            if (running) ShizukuServiceManager.getServerLog() else ""
+            if (showLogcat) ShizukuServiceManager.getLogcat()
+            else ShizukuServiceManager.getServerLog()
         }
         state = state.copy(
             running = running,
             apps = apps ?: emptyList(),
             log = log,
+            showLogcat = showLogcat,
             loading = false,
         )
     }
@@ -159,10 +167,11 @@ private fun rememberShizukuState(): Pair<ShizukuState, ShizukuActions> {
             state = state.copy(bootEnabled = enabled)
         },
         onRefresh = { scope.launch { refresh() } },
+        onSwitchLogSource = { showLogcat -> scope.launch { refresh(showLogcat) } },
         onClearLog = {
             scope.launch {
                 withContext(Dispatchers.IO) { ShizukuServiceManager.clearServerLog() }
-                state = state.copy(log = "")
+                refresh()
             }
         },
         onRevokeApp = { uid ->
@@ -181,6 +190,7 @@ private data class ShizukuActions(
     val onStop: () -> Unit,
     val onBootChange: (Boolean) -> Unit,
     val onRefresh: () -> Unit,
+    val onSwitchLogSource: (Boolean) -> Unit,
     val onClearLog: () -> Unit,
     val onRevokeApp: (Int) -> Unit,
 )
@@ -352,11 +362,19 @@ private fun ShizukuScreenMiuix(onBack: () -> Unit) {
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             MiuixText(
-                                text = "服务日志",
+                                text = if (state.showLogcat) "系统日志 (logcat)" else "服务日志",
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Medium,
                                 color = colorScheme.onSurface,
                                 modifier = Modifier.weight(1f),
+                            )
+                            MiuixTextButton(
+                                text = "服务",
+                                onClick = { actions.onSwitchLogSource(false) },
+                            )
+                            MiuixTextButton(
+                                text = "Logcat",
+                                onClick = { actions.onSwitchLogSource(true) },
                             )
                             MiuixIconButton(onClick = actions.onRefresh) {
                                 MiuixIcon(
@@ -385,7 +403,7 @@ private fun ShizukuScreenMiuix(onBack: () -> Unit) {
                         ) {
                             if (state.log.isBlank()) {
                                 MiuixText(
-                                    text = if (state.running) "暂无日志" else "服务未启动",
+                                    text = if (state.running) "暂无日志" else "暂无日志（服务未启动或启动失败）",
                                     fontSize = 13.sp,
                                     color = Color(0xFF888888),
                                     modifier = Modifier.align(Alignment.Center),
@@ -643,11 +661,17 @@ private fun ShizukuScreenMaterial(onBack: () -> Unit) {
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Text(
-                                text = "服务日志",
+                                text = if (state.showLogcat) "系统日志 (logcat)" else "服务日志",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Medium,
                                 modifier = Modifier.weight(1f),
                             )
+                            TextButton(onClick = { actions.onSwitchLogSource(false) }) {
+                                Text("服务", style = MaterialTheme.typography.labelMedium)
+                            }
+                            TextButton(onClick = { actions.onSwitchLogSource(true) }) {
+                                Text("Logcat", style = MaterialTheme.typography.labelMedium)
+                            }
                             IconButton(onClick = actions.onRefresh) {
                                 Icon(
                                     imageVector = Icons.Filled.Refresh,
@@ -671,7 +695,7 @@ private fun ShizukuScreenMaterial(onBack: () -> Unit) {
                         ) {
                             if (state.log.isBlank()) {
                                 Text(
-                                    text = if (state.running) "暂无日志" else "服务未启动",
+                                    text = if (state.running) "暂无日志" else "暂无日志（服务未启动或启动失败）",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = Color(0xFF888888),
                                     modifier = Modifier.align(Alignment.Center),
