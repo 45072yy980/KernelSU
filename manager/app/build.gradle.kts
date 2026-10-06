@@ -272,6 +272,7 @@ dependencies {
 
     implementation(libs.commons.compress)
     implementation(libs.xz)
+    implementation(libs.google.code.gson)
     implementation(libs.protobuf.kotlin.lite)
 
     // Renaming and re-signing the Manager on the device, so an install can pick its own
