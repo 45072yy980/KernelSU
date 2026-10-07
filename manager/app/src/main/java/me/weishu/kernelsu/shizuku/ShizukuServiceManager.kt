@@ -48,6 +48,37 @@ object ShizukuServiceManager {
 
     private fun prefs() = ksuApp.getSharedPreferences("shizuku_settings", Context.MODE_PRIVATE)
 
+    // ==================== 启动诊断 ====================
+
+    /**
+     * Manager 侧启动诊断缓冲。
+     *
+     * 历史顽疾：server 进程秒崩时 shell 重定向的日志文件可能根本不生成
+     * （su 路径不存在 / 嵌套 su 被拒 / 类被混淆等），面板里完全看不到原因。
+     * 这里把每次启动尝试的命令、退出码、stderr 全部留在 manager 进程内，
+     * 并持久化到 SharedPreferences，面板日志查看器无条件可读。
+     */
+    private val startDiagnostics = StringBuilder()
+
+    @Synchronized
+    private fun logDiag(msg: String) {
+        Log.i(TAG, msg)
+        startDiagnostics.append(msg).append('\n')
+        // 内存缓冲最多保留 64KB，防止长期运行膨胀
+        if (startDiagnostics.length > 64 * 1024) {
+            startDiagnostics.delete(0, startDiagnostics.length - 32 * 1024)
+        }
+        // 异步持久化，供崩溃后/跨进程查看
+        prefs().edit().putString("shizuku_start_diagnostics", startDiagnostics.toString()).apply()
+    }
+
+    /** 读取 manager 侧启动诊断（含历史持久化内容）。 */
+    fun getStartDiagnostics(): String {
+        val persisted = prefs().getString("shizuku_start_diagnostics", "").orEmpty()
+        if (persisted.isNotBlank() && persisted != startDiagnostics.toString()) return persisted
+        return startDiagnostics.toString()
+    }
+
     fun isEnabled(): Boolean = prefs().getBoolean(PREF_SHIZUKU_ENABLED, false)
 
     fun setEnabled(enabled: Boolean) {
@@ -120,7 +151,7 @@ object ShizukuServiceManager {
         return try {
             if (isServerRunning()) return true
             if (!waitForRoot(15_000L)) {
-                Log.e(TAG, "start failed: root not available")
+                logDiag("[start] failed: root not available within 15s")
                 return false
             }
             // A process with no usable binder is a failed or stuck previous launch.
@@ -128,7 +159,7 @@ object ShizukuServiceManager {
 
             val apkPath = context.applicationInfo.sourceDir
             if (apkPath.isBlank()) {
-                Log.e(TAG, "start failed: apk path is blank")
+                logDiag("[start] failed: apk path is blank")
                 return false
             }
             val libraryPath = context.applicationInfo.nativeLibraryDir
@@ -138,19 +169,26 @@ object ShizukuServiceManager {
                 "/system/bin --nice-name=$SERVER_PROCESS_NAME $SERVER_CLASS " +
                 ">$SERVER_START_LOG 2>&1 </dev/null &"
 
-            // 不同 su 实现/版本的降权语法存在差异，逐一尝试。
-            // 首选以 root (uid 0) 启动 server：与官方 Shizuku root 模式一致，
-            // 使通过 Shizuku 执行的命令具备 root 权限（可读取 /data 等受保护目录）。
-            // root 启动的 app_process 直接处于全局 mount namespace，config 读写正常。
-            // 降级到 shell (uid 2000) 时用 -M 进入全局 namespace 以保证 config 可写。
-            val candidates = arrayOf(
-                "/system/bin/su -c '$inner'",
-                "/system/bin/su 2000 -M -c '$inner'",
-                "/system/bin/su -M 2000 -c '$inner'",
-                "/system/bin/su 2000 -c '$inner'",
-                "/system/bin/su - 2000 -c '$inner'",
-            )
-            for (cmd in candidates) {
+            // 动态解析 su 路径：KernelSU 的 su 由内核 execve 钩子按文件名提供，
+            // /system/bin/su 这个绝对路径在很多设备上并不存在，
+            // 写死绝对路径是之前版本"日志文件都不生成"的根因之一。
+            val suPath = resolveSuPath()
+            logDiag("[start] resolved su path: ${suPath ?: "<none>"}")
+
+            // 候选启动策略，逐一尝试：
+            // 1. 直接在 root shell 中执行（root shell 本身已是 uid 0，无需嵌套 su）；
+            // 2. 嵌套 su -c（与官方 Shizuku root 模式一致）；
+            // 3-5. 降权 shell (uid 2000)，-M 进入全局 mount namespace 保证 config 可写。
+            val candidates = buildList {
+                add(inner)
+                if (suPath != null) {
+                    add("$suPath -c '$inner'")
+                    add("$suPath 2000 -M -c '$inner'")
+                    add("$suPath -M 2000 -c '$inner'")
+                    add("$suPath 2000 -c '$inner'")
+                }
+            }
+            for ((index, cmd) in candidates.withIndex()) {
                 try {
                     getRootShell().newJob()
                         .add("/system/bin/rm -f $SERVER_START_LOG")
@@ -158,26 +196,48 @@ object ShizukuServiceManager {
                     val out = ArrayList<String>()
                     val err = ArrayList<String>()
                     val result = getRootShell().newJob().add(cmd).to(out, err).exec()
-                    if (!result.isSuccess) {
-                        Log.w(TAG, "start command failed: out=${out.joinToString()} err=${err.joinToString()}")
-                        continue
-                    }
+                    logDiag(
+                        "[start] attempt #${index + 1} exit=${result.code} " +
+                            "out=${out.joinToString()} err=${err.joinToString()}"
+                    )
+                    if (!result.isSuccess) continue
                     if (waitForBinder(SERVER_START_TIMEOUT_MS)) {
+                        logDiag("[start] attempt #${index + 1} succeeded, binder is ready")
                         return true
                     }
-                    Log.w(TAG, "start command did not produce a usable binder: out=${out.joinToString()} err=${err.joinToString()} cmd=$cmd")
+                    // binder 未就绪：把 server 侧日志文件内容抓回来，秒崩也能看到原因
+                    val serverLog = readLogFileViaRoot()
+                    logDiag(
+                        "[start] attempt #${index + 1} produced no usable binder; " +
+                            "server log: ${serverLog.ifBlank { "<empty>" }}"
+                    )
                     killServerProcess()
                 } catch (t: Throwable) {
-                    Log.w(TAG, "start command crashed: $cmd", t)
+                    logDiag("[start] attempt #${index + 1} crashed: ${t.message}")
                     killServerProcess()
                 }
             }
-            Log.e(TAG, "start failed: no launch strategy produced a usable binder")
+            logDiag("[start] failed: no launch strategy produced a usable binder")
             false
         } catch (t: Throwable) {
-            Log.e(TAG, "start failed", t)
+            logDiag("[start] failed with exception: ${t.message}")
             killServerProcess()
             false
+        }
+    }
+
+    /** 在 root shell 里解析 su 的实际路径；找不到返回 null（直接用 root shell 启动）。 */
+    private fun resolveSuPath(): String? {
+        return try {
+            val out = ArrayList<String>()
+            getRootShell().newJob()
+                .add("command -v su || which su")
+                .to(out, null)
+                .exec()
+            out.firstOrNull { it.isNotBlank() }?.trim()
+        } catch (t: Throwable) {
+            Log.w(TAG, "resolveSuPath failed", t)
+            null
         }
     }
 
@@ -316,14 +376,18 @@ object ShizukuServiceManager {
         }
     }
 
+    /**
+     * binder 不可达时的回退读取：manager 侧启动诊断 + server 持久化日志文件。
+     * 诊断在最前面——进程秒崩时文件可能为空，诊断里一定有原因。
+     */
     private fun readLogFileViaRoot(): String {
-        return try {
+        val diag = getStartDiagnostics()
+        val fileLog = try {
             val out = ArrayList<String>()
             val err = ArrayList<String>()
             getRootShell().newJob()
                 .add(
                     "cat $SERVER_START_LOG 2>/dev/null; " +
-                        "cat /data/local/tmp/shizuku_start.log 2>/dev/null; " +
                         "cat $SERVER_LOG_FILE_BACKUP 2>/dev/null; " +
                         "cat $SERVER_LOG_FILE 2>/dev/null"
                 )
@@ -333,6 +397,16 @@ object ShizukuServiceManager {
         } catch (t: Throwable) {
             Log.e(TAG, "readLogFileViaRoot failed", t)
             ""
+        }
+        return buildString {
+            if (diag.isNotBlank()) {
+                append("===== 启动诊断（Manager 侧） =====\n")
+                append(diag).append('\n')
+            }
+            if (fileLog.isNotBlank()) {
+                append("===== 服务端日志 =====\n")
+                append(fileLog)
+            }
         }
     }
 
@@ -353,6 +427,8 @@ object ShizukuServiceManager {
     }
 
     fun clearServerLog(): Boolean {
+        startDiagnostics.clear()
+        prefs().edit().remove("shizuku_start_diagnostics").apply()
         if (Shizuku.pingBinder()) {
             val data = Parcel.obtain()
             val reply = Parcel.obtain()
