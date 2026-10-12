@@ -18,7 +18,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Refresh
@@ -77,7 +76,7 @@ import top.yukonga.miuix.kmp.icon.extended.Back
  * 功能：
  * - 查看服务运行状态，手动启动/停止
  * - 开机自启开关
- * - 已授权应用列表，可撤销权限
+ * - 已授权应用列表，显示授权状态，可授权/撤销
  * - 查看服务器日志，可刷新/清除
  */
 @Composable
@@ -94,10 +93,16 @@ fun ShizukuScreen() {
 
 // ── 共享状态逻辑 ────────────────────────────────────────────────────────────
 
+private data class ShizukuAppEntry(
+    val info: PackageInfo,
+    val uid: Int,
+    val allowed: Boolean,
+)
+
 private data class ShizukuState(
     val running: Boolean = false,
     val bootEnabled: Boolean = false,
-    val apps: List<PackageInfo> = emptyList(),
+    val apps: List<ShizukuAppEntry> = emptyList(),
     val log: String = "",
     /** false = server 持久日志，true = 系统 logcat（Shizuku 相关 tag 过滤） */
     val showLogcat: Boolean = false,
@@ -115,7 +120,16 @@ private fun rememberShizukuState(): Pair<ShizukuState, ShizukuActions> {
     suspend fun refresh(showLogcat: Boolean = state.showLogcat) {
         state = state.copy(loading = true)
         val running = withContext(Dispatchers.IO) { ShizukuServiceManager.isServerRunning() }
-        val apps = withContext(Dispatchers.IO) { ShizukuServiceManager.getApplications() }
+        val apps = withContext(Dispatchers.IO) {
+            ShizukuServiceManager.getApplications()?.mapNotNull { pkg ->
+                val uid = pkg.applicationInfo?.uid ?: return@mapNotNull null
+                ShizukuAppEntry(
+                    info = pkg,
+                    uid = uid,
+                    allowed = runCatching { ShizukuServiceManager.isAllowed(uid) }.getOrDefault(false),
+                )
+            }?.distinctBy { it.uid }
+        }
         // 无条件读取日志：getServerLog 内部先走 binder，不可达时回退
         // 直读 /data/local/tmp/shizuku_ksu.log。服务未启动或启动失败时，
         // 残留的启动日志仍然可见，便于排查"无法启动"根因。
@@ -174,9 +188,9 @@ private fun rememberShizukuState(): Pair<ShizukuState, ShizukuActions> {
                 refresh()
             }
         },
-        onRevokeApp = { uid ->
+        onToggleApp = { uid, currentlyAllowed ->
             scope.launch {
-                withContext(Dispatchers.IO) { ShizukuServiceManager.setAllowed(uid, false) }
+                withContext(Dispatchers.IO) { ShizukuServiceManager.setAllowed(uid, !currentlyAllowed) }
                 refresh()
             }
         },
@@ -192,7 +206,7 @@ private data class ShizukuActions(
     val onRefresh: () -> Unit,
     val onSwitchLogSource: (Boolean) -> Unit,
     val onClearLog: () -> Unit,
-    val onRevokeApp: (Int) -> Unit,
+    val onToggleApp: (uid: Int, currentlyAllowed: Boolean) -> Unit,
 )
 
 // ── Miuix 版本 ──────────────────────────────────────────────────────────────
@@ -320,14 +334,14 @@ private fun ShizukuScreenMiuix(onBack: () -> Unit) {
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             MiuixText(
-                                text = "已授权应用",
+                                text = "应用授权",
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Medium,
                                 color = colorScheme.onSurface,
                                 modifier = Modifier.weight(1f),
                             )
                             MiuixText(
-                                text = "${state.apps.size} 个",
+                                text = "${state.apps.count { it.allowed }} 个已授权",
                                 fontSize = 13.sp,
                                 color = colorScheme.onSurfaceVariantSummary,
                             )
@@ -335,15 +349,15 @@ private fun ShizukuScreenMiuix(onBack: () -> Unit) {
                         Spacer(Modifier.height(8.dp))
                         if (state.apps.isEmpty()) {
                             MiuixText(
-                                text = "暂无已授权应用",
+                                text = if (state.running) "暂无支持 Shizuku 的应用" else "服务未启动，无法获取应用列表",
                                 fontSize = 14.sp,
                                 color = colorScheme.onSurfaceVariantSummary,
                             )
                         } else {
-                            state.apps.forEach { pkg ->
+                            state.apps.forEach { app ->
                                 AppRowMiuix(
-                                    pkg = pkg,
-                                    onRevoke = { actions.onRevokeApp(pkg.applicationInfo?.uid ?: -1) },
+                                    app = app,
+                                    onToggle = { actions.onToggleApp(app.uid, app.allowed) },
                                 )
                             }
                         }
@@ -429,10 +443,10 @@ private fun ShizukuScreenMiuix(onBack: () -> Unit) {
 }
 
 @Composable
-private fun AppRowMiuix(pkg: PackageInfo, onRevoke: () -> Unit) {
+private fun AppRowMiuix(app: ShizukuAppEntry, onToggle: () -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    val appInfo = pkg.applicationInfo
-    val label = appInfo?.loadLabel(context.packageManager)?.toString() ?: pkg.packageName
+    val appInfo = app.info.applicationInfo
+    val label = appInfo?.loadLabel(context.packageManager)?.toString() ?: app.info.packageName
     val icon = try {
         appInfo?.loadIcon(context.packageManager)
     } catch (e: Exception) {
@@ -470,19 +484,15 @@ private fun AppRowMiuix(pkg: PackageInfo, onRevoke: () -> Unit) {
                 color = colorScheme.onSurface,
             )
             MiuixText(
-                text = pkg.packageName,
+                text = if (app.allowed) "${app.info.packageName} · 已授权" else "${app.info.packageName} · 未授权",
                 fontSize = 12.sp,
-                color = colorScheme.onSurfaceVariantSummary,
+                color = if (app.allowed) Color(0xFF4CAF50) else colorScheme.onSurfaceVariantSummary,
             )
         }
-        MiuixIconButton(onClick = onRevoke) {
-            MiuixIcon(
-                imageVector = Icons.Filled.Block,
-                contentDescription = "撤销权限",
-                tint = Color(0xFFE53935),
-                modifier = Modifier.size(20.dp),
-            )
-        }
+        MiuixTextButton(
+            text = if (app.allowed) "撤销" else "授权",
+            onClick = onToggle,
+        )
     }
 }
 
@@ -617,13 +627,13 @@ private fun ShizukuScreenMaterial(onBack: () -> Unit) {
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Text(
-                                text = "已授权应用",
+                                text = "应用授权",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Medium,
                                 modifier = Modifier.weight(1f),
                             )
                             Text(
-                                text = "${state.apps.size} 个",
+                                text = "${state.apps.count { it.allowed }} 个已授权",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -631,15 +641,15 @@ private fun ShizukuScreenMaterial(onBack: () -> Unit) {
                         Spacer(Modifier.height(8.dp))
                         if (state.apps.isEmpty()) {
                             Text(
-                                text = "暂无已授权应用",
+                                text = if (state.running) "暂无支持 Shizuku 的应用" else "服务未启动，无法获取应用列表",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         } else {
-                            state.apps.forEach { pkg ->
+                            state.apps.forEach { app ->
                                 AppRowMaterial(
-                                    pkg = pkg,
-                                    onRevoke = { actions.onRevokeApp(pkg.applicationInfo?.uid ?: -1) },
+                                    app = app,
+                                    onToggle = { actions.onToggleApp(app.uid, app.allowed) },
                                 )
                             }
                         }
@@ -719,10 +729,10 @@ private fun ShizukuScreenMaterial(onBack: () -> Unit) {
 }
 
 @Composable
-private fun AppRowMaterial(pkg: PackageInfo, onRevoke: () -> Unit) {
+private fun AppRowMaterial(app: ShizukuAppEntry, onToggle: () -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    val appInfo = pkg.applicationInfo
-    val label = appInfo?.loadLabel(context.packageManager)?.toString() ?: pkg.packageName
+    val appInfo = app.info.applicationInfo
+    val label = appInfo?.loadLabel(context.packageManager)?.toString() ?: app.info.packageName
     val icon = try {
         appInfo?.loadIcon(context.packageManager)
     } catch (e: Exception) {
@@ -759,17 +769,13 @@ private fun AppRowMaterial(pkg: PackageInfo, onRevoke: () -> Unit) {
                 fontWeight = FontWeight.Medium,
             )
             Text(
-                text = pkg.packageName,
+                text = if (app.allowed) "${app.info.packageName} · 已授权" else "${app.info.packageName} · 未授权",
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = if (app.allowed) Color(0xFF4CAF50) else MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        IconButton(onClick = onRevoke) {
-            Icon(
-                imageVector = Icons.Filled.Block,
-                contentDescription = "撤销权限",
-                tint = Color(0xFFE53935),
-            )
+        TextButton(onClick = onToggle) {
+            Text(if (app.allowed) "撤销" else "授权")
         }
     }
 }

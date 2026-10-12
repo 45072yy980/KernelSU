@@ -3,6 +3,7 @@ package me.weishu.kernelsu.shizuku
 import android.content.Context
 import android.content.pm.PackageInfo
 import android.os.Parcel
+import android.util.Base64
 import android.util.Log
 import me.weishu.kernelsu.ksuApp
 import me.weishu.kernelsu.ui.util.getRootShell
@@ -19,9 +20,9 @@ import rikka.shizuku.server.ServerConstants
  * - 授权记录存储于 /data/user_de/0/com.android.shell/shizuku.json
  *
  * 与 FolkPatch 版本的差异：
- * - 不内置 fpdrop 降权工具（无 native binary），server 以 root 运行时所有命令天然 root 权限
  * - root shell 使用 KernelSU 的 [getRootShell]
  * - 配置存储使用 KernelSU Application 的 SharedPreferences
+ * - fpdrop 降权工具随 assets 内置（源码见 FolkPatch app/src/main/cpp/fpdrop）
  */
 object ShizukuServiceManager {
     private const val TAG = "ShizukuMgr"
@@ -156,6 +157,11 @@ object ShizukuServiceManager {
             }
             // A process with no usable binder is a failed or stuck previous launch.
             killServerProcess()
+            // 部署降权工具 fpdrop（与 FolkPatch 对齐）。失败不阻塞启动：
+            // server 端在 fpdrop 缺失时降级为直接以当前身份执行命令。
+            if (!ensureFpDrop()) {
+                logDiag("[start] fpdrop deploy failed, continuing without per-app demotion")
+            }
 
             val apkPath = context.applicationInfo.sourceDir
             if (apkPath.isBlank()) {
@@ -169,24 +175,27 @@ object ShizukuServiceManager {
                 "/system/bin --nice-name=$SERVER_PROCESS_NAME $SERVER_CLASS " +
                 ">$SERVER_START_LOG 2>&1 </dev/null &"
 
-            // 动态解析 su 路径：KernelSU 的 su 由内核 execve 钩子按文件名提供，
-            // /system/bin/su 这个绝对路径在很多设备上并不存在，
-            // 写死绝对路径是之前版本"日志文件都不生成"的根因之一。
+            // 候选启动策略，与 FolkPatch 对齐：
+            // - 固定使用 /system/bin/su 绝对路径。KernelSU 的 su 由内核 execve 钩子
+            //   提供，文件在磁盘上不存在也能执行；之前用 `command -v su` 探测会
+            //   误判为不存在，导致只剩"直接执行"一个候选、一次失败即整体失败。
+            // - 首选 root (uid 0)：与官方 Shizuku root 模式一致，命令具备 root 权限；
+            // - 降级 shell (uid 2000)：-M 进入全局 mount namespace 保证 config 可写；
+            // - 动态解析到的 su 路径与裸 root shell 直跑作为额外兜底。
             val suPath = resolveSuPath()
-            logDiag("[start] resolved su path: ${suPath ?: "<none>"}")
+            logDiag("[start] resolved su path: ${suPath ?: "<none>"} (not authoritative, /system/bin/su is still tried)")
 
-            // 候选启动策略，逐一尝试：
-            // 1. 直接在 root shell 中执行（root shell 本身已是 uid 0，无需嵌套 su）；
-            // 2. 嵌套 su -c（与官方 Shizuku root 模式一致）；
-            // 3-5. 降权 shell (uid 2000)，-M 进入全局 mount namespace 保证 config 可写。
             val candidates = buildList {
-                add(inner)
-                if (suPath != null) {
+                add("/system/bin/su -c '$inner'")
+                add("/system/bin/su 2000 -M -c '$inner'")
+                add("/system/bin/su -M 2000 -c '$inner'")
+                add("/system/bin/su 2000 -c '$inner'")
+                add("/system/bin/su - 2000 -c '$inner'")
+                if (suPath != null && suPath != "/system/bin/su") {
                     add("$suPath -c '$inner'")
                     add("$suPath 2000 -M -c '$inner'")
-                    add("$suPath -M 2000 -c '$inner'")
-                    add("$suPath 2000 -c '$inner'")
                 }
+                add(inner)
             }
             for ((index, cmd) in candidates.withIndex()) {
                 try {
@@ -218,6 +227,12 @@ object ShizukuServiceManager {
                 }
             }
             logDiag("[start] failed: no launch strategy produced a usable binder")
+            // 全部失败时附一份 logcat 摘要进诊断：ART abort / SELinux denial 只在
+            // 系统日志里可见，面板"服务日志"视图可直接看到，不用切 Logcat 来源。
+            val logcatSnapshot = getLogcat()
+            if (logcatSnapshot.isNotBlank()) {
+                logDiag("[start] recent logcat snapshot:\n$logcatSnapshot")
+            }
             false
         } catch (t: Throwable) {
             logDiag("[start] failed with exception: ${t.message}")
@@ -226,7 +241,34 @@ object ShizukuServiceManager {
         }
     }
 
-    /** 在 root shell 里解析 su 的实际路径；找不到返回 null（直接用 root shell 启动）。 */
+    /**
+     * 部署降权工具 fpdrop 到 /data/local/tmp（与 FolkPatch 对齐）。
+     * 用 base64 经内存直写，避免 root shell 读取 app 私有目录被 SELinux 拒绝。
+     */
+    private fun ensureFpDrop(): Boolean {
+        return try {
+            val bytes = ksuApp.assets.open("fpdrop").readBytes()
+            val b64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
+            val result = getRootShell().newJob()
+                .add("mkdir -p /data/local/tmp")
+                .add("echo '$b64' | base64 -d > /data/local/tmp/fpdrop")
+                .add("chmod 755 /data/local/tmp/fpdrop")
+                .exec()
+            if (result.isSuccess) {
+                Log.i(TAG, "fpdrop deployed (${bytes.size} bytes)")
+            } else {
+                Log.w(TAG, "ensureFpDrop failed: ${result.err.joinToString()}")
+            }
+            result.isSuccess
+        } catch (t: Throwable) {
+            Log.w(TAG, "ensureFpDrop crashed", t)
+            false
+        }
+    }
+
+    /** 在 root shell 里解析 su 的实际路径；找不到返回 null。仅作补充候选，
+     *  不作为 /system/bin/su 是否可用的判据（KernelSU 的 su 由内核钩子提供，
+     *  磁盘上没有文件，command -v 探测不到）。 */
     private fun resolveSuPath(): String? {
         return try {
             val out = ArrayList<String>()
