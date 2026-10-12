@@ -429,6 +429,7 @@ object ShizukuServiceManager {
     fun clearServerLog(): Boolean {
         startDiagnostics.clear()
         prefs().edit().remove("shizuku_start_diagnostics").apply()
+        var cleared = false
         if (Shizuku.pingBinder()) {
             val data = Parcel.obtain()
             val reply = Parcel.obtain()
@@ -436,7 +437,7 @@ object ShizukuServiceManager {
                 data.writeInterfaceToken("moe.shizuku.server.IShizukuService")
                 Shizuku.getBinder()!!.transact(ServerConstants.BINDER_TRANSACTION_clearLog, data, reply, 0)
                 reply.readException()
-                return true
+                cleared = true
             } catch (t: Throwable) {
                 Log.e(TAG, "clearLog via binder failed", t)
             } finally {
@@ -444,14 +445,17 @@ object ShizukuServiceManager {
                 data.recycle()
             }
         }
+        // 启动日志（/data/local/tmp/shizuku_ksu.log）由 shell 重定向产生，
+        // server 侧 clearLog 管不到它；无论 binder 是否可达都统一经 root 删除，
+        // 否则面板上点"清除"后旧的启动日志仍会重新出现。
         return try {
             getRootShell().newJob()
-                .add("rm -f $SERVER_LOG_FILE $SERVER_LOG_FILE_BACKUP")
+                .add("rm -f $SERVER_START_LOG $SERVER_LOG_FILE $SERVER_LOG_FILE_BACKUP")
                 .exec()
-                .isSuccess
+                .isSuccess || cleared
         } catch (t: Throwable) {
             Log.e(TAG, "clearServerLog via root failed", t)
-            false
+            cleared
         }
     }
 }
