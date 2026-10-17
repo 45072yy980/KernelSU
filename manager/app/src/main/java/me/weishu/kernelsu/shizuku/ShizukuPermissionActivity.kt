@@ -245,7 +245,7 @@ private fun PermissionCardMiuix(
                     MiuixText(
                         text = "Shizuku 权限请求",
                         fontSize = 14.sp,
-                        color = colorScheme.onSurfaceVariant,
+                        color = colorScheme.onSurfaceVariantSummary,
                     )
                     Spacer(Modifier.height(2.dp))
                     MiuixText(
