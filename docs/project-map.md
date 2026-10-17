@@ -283,6 +283,22 @@ x86_64/riscv64 上没有该文件，`ensureFpDrop()` 会 catch 后按"不支持�
 `build.gradle.kts` 不再保有副本；解析不到就构建失败并提示"正则要跟着改"，不会静默放过。
 现在校验的是 `Manifest ⊆ ManagerHider.kt`，两端都是真实来源。
 
+### 4.8 美化版主页两个"改过一次又改回去"的坑（3.5.7 前修掉）
+
+**① `overScrollVertical()` 会让列表偶发滑不动。** Miuix 的 overscroll node 只在 placement pass 里刷新滚动范围，
+列表一旦被 remeasure（配置变化、首帧）就留着旧范围并拒绝拖拽，表现是"有时候完全滑不动"。`ca087c71` 曾因此
+去掉它，随后 `3cd07986` 又整份回退，问题回归。现在 `HomeMiuix.kt` 的 `LazyColumn` **刻意不挂**这个修饰符。
+代价只是失去下拉回弹，`scrollEndHaptic` 不受影响。`HomeMiuixStock.kt` 目前仍挂着，若要一并修照着去掉即可。
+
+**② 磨砂面不能放进带 `PressFeedbackType.Tilt` 的 Card 内部。** 按压时整张卡做 3D 旋转，磨砂面若跟着转，
+投影在一侧窄进去的那条缝就会露出底层背景，看到的是白边/黑边。`b50a5cf1` 为了"玻璃跟着卡一起倾斜"把它挪进
+Card，代价正是这条缝。现在磨砂面是 `Card` 的**静态底板**（同级、先画），卡绕着它转，缝里露出的仍是磨砂面；
+外层 Box 已按 `cardShape` 裁剪，对齐用的 `GlassNudge`/`PanelMetrics` 数学不变。
+
+**③ 设置页三套皮肤共用一套分组。** `SettingsMiuix.kt`、`SettingsMiuixStock.kt`、`SettingsMaterial.kt` 现在
+都是：通用 / 外观 / 功能 / 隐私 / 关于 / 危险操作（卸载单独成组压最末）。新增条目要三处同改；
+「隐藏管理器」入口目前只有美化版有，另外两套没有。
+
 ---
 
 ## 五、构建与发布
@@ -294,6 +310,7 @@ x86_64/riscv64 上没有该文件，`ensureFpDrop()` 会 catch 后按"不支持�
 | 内核模块 | `cd kernel && make`（或 `build-all.sh` 产 8 个 KMI） | 需 DDK / 内核树 |
 | 一键 | `just build_manager`（会先把 ksud 拷进 `jniLibs`） | |
 | 构建期自检 | `checkManagerHiderSuffixes` + `:checkVersionFormula`（`preBuild` 依赖） | Manifest 出现未登记后缀、或管理器/内核两侧 versionCode 权重不一致即失败 |
+| 产物自检 | CI 在 `assembleRelease` 之后 `unzip -l` 核对 `assets/fpdrop` | `merge*Assets → native` 那条依赖匹配不到任务名时会静默"构建绿、包里没文件"，只有这一层能挡住 |
 
 CI（`.github/workflows/`）：`build-manager`、`build-lkm`、`ddk-lkm`、`ksud`、`ksud-extra`、`ksuinit`、`release`、
 外加 `clang-format` / `rustfmt` / `clippy` / `shellcheck` / `deploy-website`。
@@ -315,7 +332,7 @@ CI（`.github/workflows/`）：`build-manager`、`build-lkm`、`ddk-lkm`、`ksud
 | 授权 / 应用配置 | `kernel/policy/allowlist.c`、`app_profile.c`、`ui/screen/superuser/`、`ui/component/profile/` |
 | WebUI 接口 | `userspace/ksud/src/webui.rs` + `assets/web/index.html` |
 | 模块安装 | `userspace/ksud/src/module.rs`、`metamodule.rs`、`ui/screen/install/` |
-| 设置项 | `data/repository/SettingsRepositoryImpl.kt`（SharedPreferences key + `ksud feature set`）+ `ui/screen/settings/*` |
+| 设置项 | `data/repository/SettingsRepositoryImpl.kt`（SharedPreferences key + `ksud feature set`）+ `ui/screen/settings/*`；三套皮肤的分组顺序要保持一致（见 4.8③） |
 | 随机包名 / 重打包 | `ui/util/ManagerHider.kt`（设备内原位改写，清单在 `PACKAGE_NAME_SUFFIXES`）+ `build.gradle.kts` 的 `checkManagerHiderSuffixes`、`LauncherRenamer.kt`、`CalculatorLauncher.kt`、`repack_apk.py`（离线换 ksud + 重签） |
 | 内置 Shizuku 服务 | `shizuku/ShizukuServiceManager.kt`（启动/部署/日志）→ `rikka/shizuku/server/ShizukuService.java`（Binder）→ `moe/shizuku/starter/ServiceStarter.java`（user service） |
 | Shizuku 授权 / 分权 | `ShizukuServiceManager.getShellOnly/setShellOnly` → `ShizukuConfigManager`；弹窗在 `shizuku/ShizukuPermissionActivity.kt` + `res/values/themes.xml` 的 `Theme.KernelSU.Permission` |
@@ -327,7 +344,7 @@ CI（`.github/workflows/`）：`build-manager`、`build-lkm`、`ddk-lkm`、`ksud
 
 ## 七、下一步：做过什么、哪些**故意不做**
 
-### 已在本地提交（未推送）
+### 已推送、CI 已验证
 
 - **4.6** fpdrop 不再入库、不再写源码树；顺带修掉"多 ABI 争抢同一个 assets 文件"的架构隐患
 - **4.7** 后缀自检改为解析 `ManagerHider.kt`，清单收敛为单一来源
@@ -336,6 +353,14 @@ CI（`.github/workflows/`）：`build-manager`、`build-lkm`、`ddk-lkm`、`ksud
 
 改动文件：`manager/build.gradle.kts`、`manager/app/build.gradle.kts`、`manager/app/src/main/cpp/CMakeLists.txt`、
 `manager/app/.gitignore`，外加 `git rm --cached`（fpdrop）与 `git rm -r`（uapi 6 个文件）。
+这些已随 `717233b9` / `0da567bf` 推到 main，CI 第 113 次构建通过。
+
+### 3.5.7 前的 UI 修复（本轮）
+
+- **4.8①** 美化版主页 `LazyColumn` 去掉 `overScrollVertical()` —— 修"偶尔完全滑不动"
+- **4.8②** 状态卡磨砂面改回静态底板 —— 修按压时的白边/黑边
+- **4.8③** 三套皮肤设置页统一分组标题，卸载单独成组压到最末
+- **五** CI 增加产物断言：`assembleRelease` 后核对 APK 里确有 `assets/fpdrop`
 
 ### 故意不做（附判断依据）
 
