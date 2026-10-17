@@ -9,7 +9,12 @@ find_package(cxx REQUIRED CONFIG)
 link_libraries(cxx::cxx)
 
 add_library(kernelsu SHARED jni.cc ksu.cc)
-target_include_directories(kernelsu PRIVATE .)
+# uapi 头只保留内核那一份（kernel/include/uapi/），仓库里不再存副本 ——
+# 副本只能靠人肉同步，63abf487 之前就漏过 feature id 5/6。
+# 从 cpp/ 往上 5 层是仓库根：cpp → main → src → app → manager → <repo>。
+target_include_directories(kernelsu PRIVATE
+        .
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../kernel/include")
 find_library(log-lib log)
 target_link_libraries(kernelsu ${log-lib})
 
