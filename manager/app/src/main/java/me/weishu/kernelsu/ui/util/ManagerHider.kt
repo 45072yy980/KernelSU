@@ -58,6 +58,10 @@ object ManagerHider {
         ".androidx-startup",
         ".fileprovider",
         ".webui",
+        // 内置 Shizuku：provider authority 与授权 action 都由 ${applicationId} 派生，
+        // 隐藏管理器时必须同步改写，否则 server 端找不到 provider、授权 Intent 解析不到 Activity。
+        ".shizuku",
+        ".intent.action.REQUEST_PERMISSION",
     )
 
     private const val ANDROID_MANIFEST = "AndroidManifest.xml"
