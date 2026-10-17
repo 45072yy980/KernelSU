@@ -81,6 +81,9 @@ fun OtherFeaturesScreen() {
     val onOpenKeymint = dropUnlessResumed { navigator.push(Route.Keymint) }
     val onOpenShizuku = dropUnlessResumed { navigator.push(Route.Shizuku) }
 
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
     // 原来「维护工具」整页只有这三件事，页签去掉之后直接放这里：
     // 重载模块是功能操作，两个软重启是打扰性操作，所以重启一律先确认。
     var pendingReboot by remember { mutableStateOf(RebootKind.None) }
@@ -97,9 +100,6 @@ fun OtherFeaturesScreen() {
     }
     val onSoftReboot: () -> Unit = { pendingReboot = RebootKind.Plain }
     val onSoftRebootHidden: () -> Unit = { pendingReboot = RebootKind.Hidden }
-
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     // System-partition guard: forced on (locked) in jailbreak/late-load mode,
     // otherwise it follows the user setting.
     val isLateLoad = Natives.isLateLoadMode
