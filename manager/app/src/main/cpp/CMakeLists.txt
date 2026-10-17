@@ -62,9 +62,10 @@ endif()
 #   缺少此库会导致 server 启动后核心功能不可用（UnsatisfiedLinkError）。
 #
 # fpdrop — Shizuku 分权控制的 shell 级降权可执行文件（setuid/setgid +
-#   清空 capability）。编译产物拷贝到 src/main/assets/fpdrop，由 manager
-#   释放到 /data/local/tmp/fpdrop，server 降权执行时以
-#   `/data/local/tmp/fpdrop 2000 2000 -- <cmd...>` 调用。
+#   清空 capability）。产物写进 Gradle 的生成 assets 目录
+#   （KSU_FPDROP_ASSET_DIR，由 app/build.gradle.kts 传入），**不再落进源码树**，
+#   以免每次构建都把工作区弄脏。manager 把它释放到 /data/local/tmp/fpdrop，
+#   server 降权执行时以 `/data/local/tmp/fpdrop 2000 2000 -- <cmd...>` 调用。
 # ---------------------------------------------------------------------------
 
 add_library(rish SHARED
@@ -79,10 +80,21 @@ if (NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
             COMMAND ${CMAKE_STRIP} --remove-section=.comment "$<TARGET_FILE:rish>")
 endif ()
 
-add_executable(fpdrop fpdrop/fpdrop.c)
-target_compile_options(fpdrop PRIVATE -ffunction-sections -fdata-sections -fno-unwind-tables)
-target_link_libraries(fpdrop ${log-lib})
-target_link_options(fpdrop PRIVATE "-Wl,--build-id=none" "-Wl,-s,-x,--gc-sections")
-add_custom_command(TARGET fpdrop POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_SOURCE_DIR}/../assets"
-        COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:fpdrop>" "${CMAKE_CURRENT_SOURCE_DIR}/../assets/fpdrop")
+# fpdrop 是给真机执行的降权工具，只编 arm64-v8a：assets 里的 fpdrop 是**单个**文件，
+# 多 ABI 同时构建会各自 POST_BUILD 覆盖它，最后谁完成由调度决定 —— 有可能把
+# riscv64 / x86_64 的 ELF 塞进 arm64 的安装包里，运行时 exec 直接失败。
+if (ANDROID_ABI STREQUAL "arm64-v8a")
+    # 由 Gradle 传入（见 app/build.gradle.kts 的 -DKSU_FPDROP_ASSET_DIR），
+    # 兜底值只是让单独跑 cmake 的人也能构建。
+    if (NOT DEFINED KSU_FPDROP_ASSET_DIR)
+        set(KSU_FPDROP_ASSET_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../build/generated/fpdrop-assets")
+    endif()
+
+    add_executable(fpdrop fpdrop/fpdrop.c)
+    target_compile_options(fpdrop PRIVATE -ffunction-sections -fdata-sections -fno-unwind-tables)
+    target_link_libraries(fpdrop ${log-lib})
+    target_link_options(fpdrop PRIVATE "-Wl,--build-id=none" "-Wl,-s,-x,--gc-sections")
+    add_custom_command(TARGET fpdrop POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${KSU_FPDROP_ASSET_DIR}"
+            COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:fpdrop>" "${KSU_FPDROP_ASSET_DIR}/fpdrop")
+endif ()

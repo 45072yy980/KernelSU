@@ -35,6 +35,9 @@ val keystorePassword = project.findProperty("KEYSTORE_PASSWORD")?.toString().orE
 val keyAlias = project.findProperty("KEY_ALIAS")?.toString().orEmpty()
 val keyPassword = project.findProperty("KEY_PASSWORD")?.toString().orEmpty()
 val generatedKeystoreAssets = layout.buildDirectory.dir("generated/ksu-keystore-assets").get().asFile
+// fpdrop 由 CMake 从 cpp/fpdrop/fpdrop.c 编出来，产物落在 build/ 下的生成 assets 目录，
+// 不写源码树（写源码树会让每次构建都把工作区弄脏，且容易误提交二进制）。
+val generatedFpdropAssets = layout.buildDirectory.dir("generated/fpdrop-assets").get().asFile
 
 apksign {
     storeFileProperty = "KEYSTORE_FILE"
@@ -72,6 +75,7 @@ android {
     namespace = "me.weishu.kernelsu"
 
     sourceSets.getByName("main").assets.srcDir(generatedKeystoreAssets)
+    sourceSets.getByName("main").assets.srcDir(generatedFpdropAssets)
 
     buildTypes {
         debug {
@@ -167,6 +171,8 @@ android {
         externalNativeBuild {
             cmake {
                 arguments += "-DANDROID_STL=none"
+                // fpdrop 的产物目录（见 cpp/CMakeLists.txt 的 POST_BUILD）
+                arguments += "-DKSU_FPDROP_ASSET_DIR=${generatedFpdropAssets.absolutePath}"
                 cFlags += baseCFlags + "-std=c2x"
                 cppFlags += baseCppFlags + "-std=c++2b"
             }
@@ -196,6 +202,27 @@ val copyKsuKeystore = tasks.register<Copy>("copyKsuKeystore") {
 
 tasks.matching { it.name.startsWith("merge") && it.name.endsWith("Assets") }.configureEach {
     dependsOn(copyKsuKeystore)
+}
+
+// fpdrop 也是"打包前必须已经在位"的生成资产：它由 CMake 的 fpdrop 目标写进
+// generatedFpdropAssets，所以 mergeAssets 之前必须先跑完同名变体的 native 构建。
+// 不接这条线的话，全新 clone（CI 就是全新 clone）会打出**不含 fpdrop** 的包，
+// 分权功能静默失效——而这正是把二进制移出源码树后最容易踩的坑。
+tasks.matching { it.name.startsWith("merge") && it.name.endsWith("Assets") }.configureEach {
+    val variant = name.removePrefix("merge").removeSuffix("Assets")
+    // mergeDebugAssets → native 的 debug 构建，mergeReleaseAssets → release；
+    // androidTest 之类的变体没有对应的 native 任务，跳过。
+    if (variant == "Debug" || variant == "Release") {
+        // AGP 的 native 构建任务：锚点 `externalNativeBuild<变体>`，其下按 ABI 拆成
+        // `buildCMake<变体>[abi]`。两个都挂上——万一某个版本重命名了锚点，另一个还在；
+        // 多依赖没有副作用（native 构建本来就要跑）。两个都不存在时 dependsOn 的是空集合，
+        // 不会让构建失败（但 fresh clone 的包可能缺 fpdrop，所以改名时要回来改这里）。
+        dependsOn(
+            tasks.matching {
+                it.name == "externalNativeBuild$variant" || it.name.startsWith("buildCMake$variant")
+            }
+        )
+    }
 }
 
 androidComponents {
@@ -311,7 +338,11 @@ tasks.register("checkManagerHiderSuffixes") {
     description = "检查 AndroidManifest 中所有 \${applicationId} 后缀是否都在 ManagerHider 清单中"
 
     val manifestFile = layout.projectDirectory.file("src/main/AndroidManifest.xml")
+    val hiderFile = layout.projectDirectory.file(
+        "src/main/java/me/weishu/kernelsu/ui/util/ManagerHider.kt"
+    )
     inputs.file(manifestFile)
+    inputs.file(hiderFile)
 
     doLast {
         val manifest = manifestFile.asFile.readText()
@@ -320,17 +351,20 @@ tasks.register("checkManagerHiderSuffixes") {
             .map { it.groupValues[1] }
             .toSet()
 
-        // ⚠️ 必须与 ManagerHider.kt 中的 PACKAGE_NAME_SUFFIXES 保持同步。
-        // 新增后缀时两处都要改。
-        val expectedSuffixes = setOf(
-            "",
-            ".DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION",
-            ".androidx-startup",
-            ".fileprovider",
-            ".webui",
-            ".shizuku",
-            ".intent.action.REQUEST_PERMISSION",
-        )
+        // 清单只在 ManagerHider.kt 里维护一份，这里直接解析那份源码。
+        // （早先此处手抄过一份副本，等于把"一处清单"变成"两处要同步"，比原来的问题更难维护。）
+        val listBody = Regex("""PACKAGE_NAME_SUFFIXES\s*=\s*listOf\(([\s\S]*?)\n\s*\)""")
+            .find(hiderFile.asFile.readText())
+            ?.groupValues
+            ?.get(1)
+            ?: throw GradleException(
+                "无法从 ${hiderFile.asFile.path} 解析出 PACKAGE_NAME_SUFFIXES = listOf(...)；" +
+                    "如果那段代码改了写法，请同步更新本 task 的正则。"
+            )
+        val expectedSuffixes = Regex("\"([^\"]*)\"")
+            .findAll(listBody)
+            .map { it.groupValues[1] }
+            .toSet()
 
         val missing = foundSuffixes - expectedSuffixes
         if (missing.isNotEmpty()) {
@@ -342,17 +376,21 @@ tasks.register("checkManagerHiderSuffixes") {
                 |隐藏管理器（随机包名）时，这些后缀对应的包名字符串不会被改写，
                 |导致相关组件在隐藏管理器下失效。
                 |
-                |修复：将上述后缀同时添加到
-                |  1. ManagerHider.kt 的 PACKAGE_NAME_SUFFIXES 清单
-                |  2. 本 task (build.gradle.kts) 的 expectedSuffixes
+                |修复：把上面每个后缀加进 ManagerHider.kt 的 PACKAGE_NAME_SUFFIXES 清单
+                |（那是唯一定义处，本 task 会自动读到新清单，不需要再改这里）。
                 """.trimMargin()
             )
         }
-        logger.lifecycle("ManagerHider suffix check passed: ${foundSuffixes.size} suffix(es) found, all covered.")
+        logger.lifecycle(
+            "ManagerHider suffix check passed: ${foundSuffixes.size} in manifest, " +
+                "${expectedSuffixes.size} registered, all covered."
+        )
     }
 }
 
 // 构建早期执行，避免编译大半才发现
 tasks.named("preBuild") {
     dependsOn("checkManagerHiderSuffixes")
+    // 管理器与内核的 versionCode 公式各写一份，这里在构建期做一致性校验
+    dependsOn(":checkVersionFormula")
 }

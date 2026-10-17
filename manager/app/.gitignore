@@ -1,4 +1,6 @@
 /build
 /release/
-# fpdrop 是 CMake 构建期生成的降权可执行文件，每次构建都会覆写，不入库
+# fpdrop 是 CMake 构建期生成的降权可执行文件，现在产物走
+# build/generated/fpdrop-assets（见 build.gradle.kts），源码树下这条路径只用来
+# 兜住"旧 CMake 缓存仍往里写"的情况，防止二进制被误提交。
 /src/main/assets/fpdrop

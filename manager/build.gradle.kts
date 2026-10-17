@@ -61,12 +61,19 @@ private fun parseVersionTag(): Triple<Int, Int, Int> {
     return Triple(major.toInt(), minor.toInt(), patch.toInt())
 }
 
+// versionCode 的权重。kernel/Kbuild 的 KSU_VERSION 用的是同一组数字 —— 两边语言不同，
+// 没法共用一个实现，所以这里显式写出来，再由文件末尾的 checkVersionFormula 校验：
+// 改了一侧没改另一侧，构建会直接失败。
+val versionMajorWeight = 10000
+val versionMinorWeight = 1000
+val versionPatchWeight = 100
+
 fun getVersionCode(): Int {
     val (major, minor, patch) = parseVersionTag()
     // ⚠️ 此公式必须与 kernel/Kbuild 中 KSU_VERSION 的计算保持一致：
     // major*10000 + minor*1000 + patch*100 + commits_after_tag
-    // 改一处必须同步改另一处，否则管理器与内核模块的 versionCode 会错位。
-    return major * 10000 + minor * 1000 + patch * 100 + getCommitsSinceTag()
+    return major * versionMajorWeight + minor * versionMinorWeight +
+        patch * versionPatchWeight + getCommitsSinceTag()
 }
 
 fun getVersionName(): String {
@@ -79,3 +86,47 @@ fun getVersionName(): String {
 // would hand a null pattern to find() and fail the build.
 extra["managerVersionCode"] = getVersionCode()
 extra["managerVersionName"] = getVersionName()
+
+// ── 构建期自检：versionCode 公式一致性 ──────────────────────────────────────
+// 管理器（本文件）与内核（kernel/Kbuild 的 KSU_VERSION）各算一遍 versionCode。
+// 两侧分叉时，管理器会认为内核版本对不上（状态卡报错、拒绝安装），而症状完全看不出
+// 是"公式被改了"，所以在构建期直接拦住，并指出该改哪两处。
+tasks.register("checkVersionFormula") {
+    group = "verification"
+    description = "校验 kernel/Kbuild 的 KSU_VERSION 权重与本文件的 versionCode 公式一致"
+
+    val kbuildFile = file("../kernel/Kbuild")
+    inputs.file(kbuildFile)
+
+    doLast {
+        if (!kbuildFile.isFile) {
+            throw GradleException("找不到 ${kbuildFile.path}，无法校验 versionCode 公式")
+        }
+        val kbuildLine = kbuildFile.readLines().firstOrNull { it.contains("KSU_VERSION :=") }
+            ?: throw GradleException("kernel/Kbuild 里找不到 `KSU_VERSION :=` 定义")
+
+        val kernelWeights = Regex("""\*\s*(\d+)""")
+            .findAll(kbuildLine)
+            .map { it.groupValues[1].toInt() }
+            .toList()
+        val managerWeights = listOf(versionMajorWeight, versionMinorWeight, versionPatchWeight)
+
+        if (kernelWeights != managerWeights) {
+            throw GradleException(
+                """
+                |versionCode 公式分叉了：
+                |  kernel/Kbuild (KSU_VERSION)  的权重: $kernelWeights
+                |  manager/build.gradle.kts     的权重: $managerWeights
+                |
+                |期望两边都是: major*$versionMajorWeight + minor*$versionMinorWeight +
+                |             patch*$versionPatchWeight + commits_after_tag
+                |
+                |改公式时两处必须同时改：
+                |  1. kernel/Kbuild 的 KSU_VERSION 定义
+                |  2. manager/build.gradle.kts 的 versionMajorWeight / versionMinorWeight / versionPatchWeight
+                """.trimMargin()
+            )
+        }
+        logger.lifecycle("versionCode 公式一致（权重 $managerWeights）")
+    }
+}
