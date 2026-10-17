@@ -213,6 +213,28 @@ static void resolve_stage_dir(int argc, char **argv)
     snprintf(g_prefs_path, sizeof(g_prefs_path), "%s/shared_prefs/dfroot.xml", base);
 }
 
+/* 内核模块只把 selinux_state 改成 permissive，自己加载完就退出、不会恢复。
+ * 成功时 ksud 起来会接管（它自己切回 enforcing）；失败的时候没人收拾，
+ * 机器就带着 permissive 一直在跑。这里把失败的收尾补上。 */
+static void set_enforcing(int on)
+{
+    int fd = open("/sys/fs/selinux/enforce", O_WRONLY);
+    if (fd < 0)
+        return;
+    const char c = on ? '1' : '0';
+    write(fd, &c, 1);
+    close(fd);
+}
+
+/* 失败收尾：恢复 enforcing，并删掉 shellcode 的互斥标记 /dev/df，
+ * 这样用户可以立刻重试，不用先重启。 */
+static int fail_close(int code)
+{
+    set_enforcing(1);
+    unlink("/dev/df");
+    return code;
+}
+
 int main(int argc, char **argv)
 {
     resolve_stage_dir(argc, argv);
@@ -221,7 +243,7 @@ int main(int argc, char **argv)
     int soft_reboot, disable_mods;
     if (read_prefs(su_manager, sizeof(su_manager), &soft_reboot, &disable_mods) != 0) {
         touch("/dev/dfme0");
-        return 1;
+        return fail_close(1);
     }
 
     touch("/dev/dfm2");
@@ -236,7 +258,7 @@ int main(int argc, char **argv)
         touch("/dev/dfm4");
         if (disable_modules()) {
             touch("/dev/dfme1");
-            return 1;
+            return fail_close(1);
         }
     }
 
@@ -246,7 +268,7 @@ int main(int argc, char **argv)
     // switch our context while we still can
     pid_t pid = fork();
     if (pid < 0)
-        return 1;
+        return fail_close(1);
     if (pid == 0) {
         int fd = open("/proc/self/attr/current", O_WRONLY);
         if (fd >= 0) {
@@ -267,6 +289,11 @@ int main(int argc, char **argv)
     }
     int status;
     waitpid(pid, &status, 0);
+
+    /* 子进程成功时会在最后 touch /dev/dfm6；没有它说明 late-load 没成，
+     * 这时候同样要把机器恢复原样，而不是留一个 permissive 的内核在跑。 */
+    if (access("/dev/dfm6", F_OK) != 0)
+        return fail_close(1);
 
     return 0;
 }
