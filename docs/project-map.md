@@ -118,6 +118,33 @@
 5. 之后管理器通过 `KSU_GET_INFO_FLAG_LATE_LOAD`（`supercall/dispatch.c`）知道当前是越狱模式，
    `Natives.isLateLoadMode` 驱动首页「工作中（越狱模式）」卡片、越狱守卫卡片、软重启默认值等。
 
+**备用路径二：DirtyFrag 漏洞（3.5.7 起内置）**
+
+CVE-2026-43284 是另一条完全独立的提权路，和 ghostlock 不共用任何代码。它内置的方式和 ghostlock 一样：
+源码在 `cpp/dirtyfrag/`，CMake 编成 `libdirtyfrag.so`（8 个 KMI 的 `dfroot-*.ko` 和 `splicehelper` 用
+`.incbin` 内嵌，纯原生、无 Java 依赖）与 `libdirtyfrag_bootstrap.so`，两者都落在 `lib/arm64-v8a/`，
+运行时从 `nativeLibraryDir` 执行。
+
+链路：页缓存写（IPsec ESP + `splice`，`exp.c`）→ 改 `libc++.so` 让 `crash_dump64` 执行 shellcode →
+`insmod dfroot.ko` → 模块关 SELinux enforcing、补 DEFEX、`call_usermodehelper` 拉起 bootstrap →
+`ksud late-load --package-name <本 App>`。注意**顺序是「先有 root 才能 insmod」**，模块是成功后的载荷，
+不是前提；模块 init 末尾 `return -ENODEV` 让内核立即卸载它，所以模块本身不常驻。
+
+移植时只改了两处上游写死的东西：
+
+1. `bootstrap` 的暂存目录：[`bootstrap.c`](../manager/app/src/main/cpp/dirtyfrag/bootstrap.c) 从 `argv[0]` 推导；
+2. 模块里的 `bootstrap` 路径：[`lkm/dfroot.c`](../manager/app/src/main/cpp/dirtyfrag/lkm/dfroot.c) 改成 96 字节可写槽位
+   （初值哨兵 `/data/user_de/0/DFROOT_STAGE/bootstrap`），`exp.c` 用 `--stage-dir` 在写入 page cache 前整块改写。
+
+模块由 `.github/workflows/ddk-lkm.yml` 和 `kernelsu.ko` 在同一个 DDK 容器里、同一批 KMI 编出来，
+并进现有 `aarch64-<kmi>-lkm` 产物，不额外增加 artifact；构建时会校验 ko 里带着哨兵。
+
+失败出口统一走 `fail_close()`：写回 `/sys/fs/selinux/enforce=1` 并 `unlink("/dev/df")`，用户可以直接重试；
+成功路径留给 ksud 切回 enforcing。真机验证（Xiaomi 24129RT7CC / Android 16 / 6.6.77，安全补丁 2026-06-01）通过。
+
+和 ghostlock 的分工：ghostlock 按内核构建号定制、链条短，命中它的目标表时更稳；DirtyFrag 按 KMI 覆盖更广，
+链更长、更容易被厂商 backport 修掉，作为第二条路保留。
+
 **备用路径：App Zygote 预加载（Magica）**
 
 `AppZygotePreload.doPreload()` → `System.loadLibrary("kernelsu")` → `forkDontCareAndExecKsud()` →
