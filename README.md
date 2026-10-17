@@ -1,6 +1,6 @@
 # DikSU · 越狱模式
 
-**一个面向未解锁 Bootloader 设备的 KernelSU 分支：不改 boot，不刷 system，靠漏洞把内核模块挂进去。**
+**一个面向未解锁 Bootloader 设备的 KernelSU 分支：不改 boot，不刷 system，靠漏洞把内核模块挂进去。内置 ghostlock 与 DirtyFrag 两条提权路径，任何一条成功都能让系统进入越狱模式。**
 
 - **GitHub**：https://github.com/45072yy980/KernelSU
 - **基线（原作者）**：https://github.com/wuhudiao/DikSU
@@ -12,10 +12,11 @@
 ## 目录
 
 - [一、这个分支做了什么](#一这个分支做了什么)
-  - [1. 越狱模式（Jailbreak / Magica / late-load）](#1-越狱模式jailbreak--magica--late-load)
+  - [1. 越狱模式：两条提权路径](#1-越狱模式两条提权路径)
   - [2. 系统分区保护（Partition Guard）](#2-系统分区保护partition-guard)
-  - [3. 版本号与发布](#3-版本号与发布)
-  - [4. 更新记录](#4-更新记录)
+  - [3. SUSFS 与内置 Shizuku](#3-susfs-与内置-shizuku)
+  - [4. 版本号与发布](#4-版本号与发布)
+  - [5. 更新记录](#5-更新记录)
 - [二、来自基线的功能](#二来自基线的功能)
 - [三、界面风格](#三界面风格)
 - [四、构建](#四构建)
@@ -28,38 +29,80 @@
 
 # 一、这个分支做了什么
 
-## 1. 越狱模式（Jailbreak / Magica / late-load）
+## 1. 越狱模式：两条提权路径
 
 **这是本分支存在的理由。**
 
 官方 KernelSU 与绝大多数内核方案都要求**解锁 Bootloader 并刷入 boot 镜像**。对很多设备来说这条路是堵死的：厂商不给解锁、解锁会清空数据、或者解锁后保修 / 部分功能（支付、银行类应用）直接受影响。
 
-本分支提供了另一条路：**在不碰 boot、不碰 system 的前提下，把一个内核模块挂进正在运行的系统里。**
-
-### 它是怎么工作的
-
-整条链路藏在 Android 的 **App Zygote 预加载**里：
+本分支提供了另一条路：**在不碰 boot、不碰 system 的前提下，把一个内核模块挂进正在运行的系统里。** 并且内置了**两条互相独立的提权路径**——ghostlock 与 DirtyFrag。任何一条跑通，收尾都是同一个：
 
 ```
-MagicaService / BootCompletedReceiver
-        │  触发一次应用进程启动
-        ▼
-AppZygotePreload.doPreload()                 ← Android 的 ZygotePreload 接口
-        │  System.loadLibrary("kernelsu")
-        │  native: forkDontCareAndExecKsud(libksud.so, packageName)
-        ▼
-fork() 出一个子进程，随即 exec ksud
-        │  ksud 利用设备上的提权漏洞拿到 root
-        ▼
-ksud  insmod kernelsu.ko                     ← 内核模块在这一刻被挂载
-        │  此时 current->pid != 1，模块自己知道：
-        ▼
-ksu_late_loaded == true                      ← 进入"越狱模式"
+提权成功
+   │
+   ▼
+ksud late-load --package-name <本 App 包名>
+   │
+   ▼
+ksud insmod kernelsu.ko            ← 内核模块在这一刻被挂载
+   │  此时 current->pid != 1，模块自己知道：
+   ▼
+ksu_late_loaded == true            ← 进入"越狱模式"
 ```
 
 关键在于最后一步。KernelSU 原本假定自己是在 **init 阶段**（`pid == 1`）被加载的，因此可以随意改动 SELinux 策略、接管挂载、注册各种钩子。**late load 破坏了这个假设**：模块挂载时系统已经跑起来很久了，SELinux 已经加载完毕，很多进程也已经带着旧的状态在跑。
 
-本分支把这条链路整个理顺了：
+### 两条路怎么选
+
+| | ghostlock（CVE-2026-43499） | DirtyFrag（CVE-2026-43284） |
+|---|---|---|
+| 思路 | 直接拿到 root 代码执行 | 页缓存写 → 改 `libc++.so` → 内核模块 → bootstrap |
+| 覆盖 | 按**内核构建号**定制，内置 53 个目标内核 | 按 **KMI**（android12-5.10 ~ android17-6.18），同 KMI 通用 |
+| 链长 | 短：漏洞 → ksud | 长：页缓存写 → shellcode → insmod → bootstrap → ksud |
+| 副作用 | 几乎没有；失败重启即净 | 中间会短暂关闭 SELinux enforcing；失败出口会自动恢复 |
+| 何时用 | **首选**，命中目标表时最稳 | 目标表没覆盖，或 ghostlock 失败时的第二条路 |
+
+两条路都**完整内置在管理器里**，不依赖任何外部 APK：
+
+- **ghostlock**：`cpp/ghostlock/core/*.c` → `libghostlock.so`，自带各内核的偏移表，`uname -r` 不在表里就拒绝运行；
+- **DirtyFrag**：`cpp/dirtyfrag/` → `libdirtyfrag.so`（8 个 KMI 的 `dfroot.ko` 与 `splicehelper` 用 `.incbin` 内嵌）+ `libdirtyfrag_bootstrap.so`。
+
+### ghostlock 链路
+
+```
+越狱激活（ghostlock）
+   │  执行 nativeLibraryDir/libghostlock.so
+   ▼
+利用 CVE-2026-43499 拿到 root 代码执行
+   │  在 /data/app/**/lib/arm64/libksud.so 找到管理器自带的 ksud
+   ▼
+ksud late-load --package-name <本 App 包名>
+```
+
+### DirtyFrag 链路
+
+```
+越狱激活（DirtyFrag）
+   │  生成 IPsec ESP 传输变换，执行 libdirtyfrag.so
+   ▼
+用 ESP + splice 把任意字节写进只读文件的 page cache
+   │  改 libc++.so 几条指令，拉起 crash_dump64 触发 shellcode
+   ▼
+shellcode（root，vendor_modprobe 域）→ insmod dfroot.ko
+   │  模块关 SELinux enforcing、绕 DEFEX，再 call_usermodehelper 拉起 bootstrap
+   ▼
+bootstrap → ksud late-load --package-name <本 App 包名>
+```
+
+有两点容易被误解，这里写清楚：
+
+- **顺序是"先有 root 才能 insmod"**：模块是漏洞成功之后的载荷，不是提权的前提。没有第一步的 root 代码执行，`insmod` 必然失败。
+- **模块不常驻**：`dfroot.ko` 的 init 末尾 `return -ENODEV`，内核随即卸载它；它的作用是关闭 SELinux enforcing、绕开 DEFEX、把 bootstrap 拉起来。
+- **移植改动只有一处**：模块里原本写死 `df.root` 包名的 bootstrap 路径，改成了 96 字节可写槽位，由 `exp.c --stage-dir` 在写入前改成本应用的实际目录；模块本身由本项目的 DDK 与 `kernelsu.ko` 一起编译。
+
+### late load 下的适配
+
+本分支把 late-load 这条链路整个理顺了：
 
 | 子系统 | 在 late load 下做的适配 |
 |---|---|
@@ -72,12 +115,14 @@ ksu_late_loaded == true                      ← 进入"越狱模式"
 
 - 首页状态卡片显示 **「工作中（越狱模式）」**，而不是普通的「工作中」
 - 下方有一张 **越狱守卫卡片**，说明当前状态下系统分区写入受保护、**重启即还原**
+- 越狱激活弹窗里两条路径并列：**ghostlock（推荐）** 与 **DirtyFrag**，各自带说明
 - 越狱模式下的模块安装会被拦截真正写入分区的部分，避免把系统改坏
 
 ### 为什么它值得存在
 
 - **不改 boot / system**：全程只做内存里的加载，重启后系统回到完全原样的状态，不存在"刷坏了"的风险
 - **不需要解锁 BL**：只要设备上存在可用的提权漏洞，就能拿到 root
+- **两条路互为备份**：ghostlock 覆盖不到的内核，还有 DirtyFrag 按 KMI 兜底
 - **可逆**：想退出，重启即可；想彻底不装，卸载管理器即可
 - **代价**：越狱模式的生效依赖漏洞，漏洞被修补后旧设备仍可用、新设备可能不行；重启后需要重新触发一次
 
@@ -142,7 +187,25 @@ partition_guard: blocked remount rw of /system (src /dev/block/sda1)
 
 ---
 
-## 3. 版本号与发布
+## 3. SUSFS 与内置 Shizuku
+
+### SUSFS
+
+- **ksud** 带 SuSFS 用户态客户端：规则列表持久化，开机时重放；
+- **管理器** 有独立面板：特性状态列表、SUSFS 版本，完整中文本地化；
+- 首页状态里能直接看到 SUSFS 是否可用及其版本。
+
+### 内置 Shizuku
+
+- 服务端按 FolkPatch 的实现重写，**随管理器内置**，不用另装 Shizuku；
+- 完整管理面板与日志页：启停、授权管理、日志查看与清空；
+- **fpdrop 分权**：`setuid/setgid` + 清空 capability 的降权可执行文件，按应用授权（含仅 shell 权限模式）；
+- 授权弹窗直接渲染居中卡片（浮动窗口下系统 `Popup` 尺寸为 0 的老问题）；
+- 隐藏管理器（随机包名）下会同步改写 Shizuku 的 provider / action，组件不会失效。
+
+---
+
+## 4. 版本号与发布
 
 版本号**不再手写**，而是从 git tag 推导，管理器与内核**用同一个公式**：
 
@@ -167,7 +230,19 @@ versionCode = major × 10000 + minor × 1000 + patch × 100 + tag 之后的提�
 
 ---
 
-## 4. 更新记录
+## 5. 更新记录
+
+### v3.5.7-diksu
+
+自 v3.5.5 以来共 **77 个提交、150 个文件**（42 fix / 13 feat / 7 ci / 8 docs / 2 build / 2 refactor）。
+
+- **越狱激活第二条路：DirtyFrag（CVE-2026-43284）** —— 源码编译进管理器，8 个 KMI 的 `dfroot.ko` 与 `splicehelper` 全部内嵌，不依赖外部应用；模块路径改成可改写槽位，失败会自动恢复 SELinux enforcing 并清掉 `/dev/df` 标记。
+- **SUSFS** —— ksud 用户态客户端 + 管理器面板，规则持久化并开机重放。
+- **内置 Shizuku 重写** —— 服务端按 FolkPatch 实现重写，修好内置服务起不来的问题；补完整管理面板与日志页；授权弹窗改直接渲染。
+- **美化版主页卡片对齐基线** —— 保留 110dp 出血圆环，磨砂背景与按压反馈跟随卡片；修复主页无法上滑。
+- **设置整理** —— 维护工具并入「其他功能」；状态卡片模糊背景开关移入「主题设置」；Stock / Material 设置页统一分组标题。
+- **修复** —— 隐藏管理器下 Shizuku provider / action 改写；`uapi` 只保留内核侧单一权威定义；版本号公式加同步校验；`fpdrop` 移出源码树、只编 arm64-v8a。
+- 已知小问题：美化版状态卡按压变形时，卡片下方可能看到一块略小的亮色块，暂未定位，不影响功能。
 
 ### v3.5.5-diksu
 
@@ -216,7 +291,8 @@ versionCode = major × 10000 + minor × 1000 + patch × 100 + tag 之后的提�
 
 - **三档界面风格**：`miuix（美化版）` / `miuix（原版）` / `Material 3`，设置中自由切换
 - **美化版 UI**：图片 / 视频壁纸背景、玻璃拟态导航与面板、可调背景暗度
-- **本分支的调整**：越狱模式下的状态卡片、守卫卡片、提示卡片沿用同一套毛玻璃切片方案；桌面图标、禁止左右滑动、更新检测地址已按本分支重新对齐
+- **本分支的调整**：越狱模式下的状态卡片、守卫卡片、提示卡片沿用同一套毛玻璃切片方案（3.5.7 按基线重新对齐：保留 110dp 出血圆环，磨砂背景与按压反馈跟随卡片）
+- **设置页**：三类界面风格共用同一套分组标题；维护动作并入「其他功能」，状态卡片模糊背景开关在「主题设置」
 
 ---
 
@@ -232,6 +308,9 @@ cd kernel && make
 # 用户态工具
 cargo build --release
 ```
+
+**native 部分**：`libghostlock.so`、`libdirtyfrag.so`、`libdirtyfrag_bootstrap.so` 都由 CMake 随管理器一起编（需要 NDK）；
+`dfroot.ko` 不在本地编，CI 用 DDK 与 `kernelsu.ko` 同批构建，按 KMI 一起发布。
 
 **打包发布**：打 tag 并推送即可，CI 会产出管理器 APK、各 KMI 的内核模块、`ksud`（8 个平台）、`ksuinit`（3 个架构）：
 
@@ -261,6 +340,8 @@ CI 完成构建后，由维护者手工创建 Release 并上传产物。
 - **越狱模式（Jailbreak / Magica / late-load）** —— 面向未解锁 BL 设备的整套加载链路
 - **系统分区保护（Partition Guard）** —— 运行时的系统分区写拦截
 - 与之配套的管理器侧改动（状态卡片、守卫卡片、提示卡片、滑动控制、图标与更新检测地址）
+- **DirtyFrag 提权路径** —— 移植自 [mitschud/DirtyFrag](https://github.com/mitschud/DirtyFrag)（上游为 [diabl0w/DFRoot](https://github.com/diabl0w/DFRoot)），源码内置、改为本应用可用的暂存路径；上游未声明许可证，此处仅作来源标注
+- **ghostlock 提权路径** —— 来自 [45072yy980/ghostlock-app](https://github.com/45072yy980/ghostlock-app)
 
 ## 关于 DeepSeek
 
@@ -273,6 +354,8 @@ CI 完成构建后，由维护者手工创建 Release 并上传产物。
 - **版本号体系**（管理器与内核共用的 tag 推导公式，替换掉原先会漂移的手写值）
 - **发布与 CI**（多架构构建、产物打包与上传流程）
 - **移植期的全部缺陷修复**（图标、滑动、毛玻璃、更新地址、误报的 PR 构建标志等）
+- **DirtyFrag 移植**（页缓存写链路、内核模块槽位改写、DDK 构建接入、失败收尾）
+- **3.5.7 的界面整理**（主页卡片对齐、设置项重排、SUSFS 与 Shizuku 面板对接）
 
 ## 致谢
 
@@ -280,6 +363,8 @@ CI 完成构建后，由维护者手工创建 Release 并上传产物。
 - 感谢 [Aster](https://github.com/LyraVoid/Aster) —— 美化版 UI 的设计与实现
 - 感谢 [KernelSU](https://github.com/tiann/KernelSU) 原项目及社区
 - 感谢 **DeepSeek** —— 越狱模式、分区保护与全部修复的实现
+- 感谢 [mitschud](https://github.com/mitschud/DirtyFrag) 与 [diabl0w](https://github.com/diabl0w/DFRoot) —— DirtyFrag 利用链
+- 感谢 [45072yy980](https://github.com/45072yy980/ghostlock-app) —— ghostlock 利用链
 - [Kernel-Assisted Superuser](https://git.zx2c4.com/kernel-assisted-superuser/about/)：The KernelSU idea.
 - [Magisk](https://github.com/topjohnwu/Magisk)：The powerful root tool.
 - [genuine](https://github.com/brevent/genuine/)：APK v2 signature validation.
