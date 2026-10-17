@@ -1,2 +1,4 @@
 /build
 /release/
+# fpdrop 是 CMake 构建期生成的降权可执行文件，每次构建都会覆写，不入库
+/src/main/assets/fpdrop
