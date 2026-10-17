@@ -223,6 +223,21 @@ jobs:
             ./gradlew clean assembleRelease
           fi
 
+      # fpdrop 是 CMake 产物，靠 merge*Assets → native 构建的依赖在打包前生成。
+      # 那条依赖一旦匹配不到任务名就会静默退化成"构建绿、包里没文件"，
+      # 装到机器上只表现为 Shizuku 分权悄悄失效，所以这里核对一次产物。
+      - name: Check fpdrop is packaged
+        run: |
+          set -euo pipefail
+          apk=$(ls manager/app/build/outputs/apk/release/*.apk | head -n1)
+          echo "checking $apk"
+          if ! unzip -l "$apk" | grep -q 'assets/fpdrop'; then
+            echo "::error file=.github/workflows/build-manager.yml::APK 里缺少 assets/fpdrop：CMake 产物没有在 mergeAssets 之前生成（检查 merge*Assets 对 native 构建的依赖）"
+            unzip -l "$apk" | grep 'assets/' || true
+            exit 1
+          fi
+          unzip -l "$apk" | grep 'assets/fpdrop'
+
       - name: Upload build artifact
         if: ${{ github.event_name == 'pull_request' || (github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev')) || github.ref_type == 'tag' }}
         uses: actions/upload-artifact@v7
