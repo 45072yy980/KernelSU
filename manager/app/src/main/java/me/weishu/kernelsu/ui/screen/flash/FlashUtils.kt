@@ -39,6 +39,7 @@ import me.weishu.kernelsu.ksuApp
 import me.weishu.kernelsu.ui.LocalUiMode
 import me.weishu.kernelsu.ui.UiMode
 import me.weishu.kernelsu.ui.util.FlashResult
+import me.weishu.kernelsu.ui.util.DirtyFragExploit
 import me.weishu.kernelsu.ui.util.JailbreakExploit as JailbreakExploitRunner
 import me.weishu.kernelsu.ui.util.LkmSelection
 import me.weishu.kernelsu.ui.util.downloadBoot
@@ -122,6 +123,13 @@ sealed class FlashIt : Parcelable {
      */
     @Parcelize
     data object JailbreakExploit : FlashIt()
+
+    /**
+     * DirtyFrag（CVE-2026-43284）：另一条独立的提权路径。
+     * 和 ghostlock 一样走这个进度页，日志、成功/失败横幅、保存日志都复用。
+     */
+    @Parcelize
+    data object DirtyFrag : FlashIt()
 }
 
 fun flashModulesSequentially(
@@ -174,6 +182,23 @@ fun flashIt(
 
         FlashIt.FlashRestore -> restoreBoot(onStdout, onStderr)
         FlashIt.FlashUninstall -> uninstallPermanently(onStdout, onStderr)
+        FlashIt.DirtyFrag -> {
+            onStdout("==== jailbreak (DirtyFrag) ====")
+            val appContext = ksuApp.applicationContext
+            if (!DirtyFragExploit.isAvailable(appContext)) {
+                onStderr("exploit binary not bundled for this ABI")
+                FlashResult(1, "exploit binary not bundled", false)
+            } else {
+                val result = DirtyFragExploit.run(appContext) { line -> onStdout(line) }
+                if (result.success) {
+                    // 成功后链子会自己把 root 交给本应用的 ksud，不需要再手动重启。
+                    FlashResult(0, "", false)
+                } else {
+                    FlashResult(result.exitCode.coerceAtLeast(1), result.output, false)
+                }
+            }
+        }
+
         FlashIt.JailbreakExploit -> {
             onStdout("==== jailbreak (exploit) ====")
             val appContext = ksuApp.applicationContext

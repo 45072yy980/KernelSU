@@ -395,7 +395,7 @@
     <string name="jailbreak_manual_action">Manual install</string>
     <string name="jailbreak_exploit_action">Jailbreak (exploit)</string>
     <string name="jailbreak_engine_ghostlock">ghostlock (built in)</string>
-    <string name="jailbreak_engine_dirtyfrag">DirtyFrag (external app)</string>
+    <string name="jailbreak_engine_dirtyfrag">DirtyFrag (built in)</string>
     <string name="jailbreak_dirtyfrag_installed">DirtyFrag is installed. In its SU Manager card pick this app, then press Run exploit; root comes back here through ksud late-load.</string>
     <string name="jailbreak_dirtyfrag_launched">Opened DirtyFrag: pick this app as the SU manager, then press Run exploit.</string>
     <string name="jailbreak_dirtyfrag_launch_failed">Could not open DirtyFrag.</string>
