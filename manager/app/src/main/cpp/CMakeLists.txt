@@ -72,35 +72,32 @@ if(ANDROID_ABI STREQUAL "arm64-v8a")
     enable_language(ASM)
 
     set(DIRTYFRAG_DIR "${CMAKE_CURRENT_SOURCE_DIR}/dirtyfrag")
-    set(DIRTYFRAG_BUILD "${CMAKE_CURRENT_BINARY_DIR}/dirtyfrag")
-    set(DIRTYFRAG_SPLICEHELPER "${DIRTYFRAG_BUILD}/splicehelper")
+    file(GLOB DIRTYFRAG_KO_SOURCES "${DIRTYFRAG_DIR}/ko/*.ko")
 
-    # splicehelper 是个独立的静态小二进制（不能带 libc），exp.c 用 .incbin 嵌它。
+    # .incbin 的路径是按编译器工作目录解析的，所以把 ko/ 和 splicehelper
+    # 都摆到构建目录里，exp.c 里那些相对路径就能直接找到。
     add_custom_command(
-            OUTPUT "${DIRTYFRAG_SPLICEHELPER}"
-            COMMAND ${CMAKE_COMMAND} -E make_directory "${DIRTYFRAG_BUILD}"
+            OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/splicehelper"
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+                    "${DIRTYFRAG_DIR}/ko" "${CMAKE_CURRENT_BINARY_DIR}/ko"
             COMMAND ${CMAKE_C_COMPILER} --target=${CMAKE_C_COMPILER_TARGET}
                     --sysroot=${CMAKE_SYSROOT}
-                    "${DIRTYFRAG_DIR}/splicehelper.c" -o "${DIRTYFRAG_SPLICEHELPER}"
+                    "${DIRTYFRAG_DIR}/splicehelper.c"
+                    -o "${CMAKE_CURRENT_BINARY_DIR}/splicehelper"
                     -nodefaultlibs -nostartfiles -ffreestanding -static
-            DEPENDS "${DIRTYFRAG_DIR}/splicehelper.c"
-            COMMENT "Building dirtyfrag splicehelper")
-    add_custom_target(dirtyfrag_splicehelper DEPENDS "${DIRTYFRAG_SPLICEHELPER}")
+            DEPENDS "${DIRTYFRAG_DIR}/splicehelper.c" ${DIRTYFRAG_KO_SOURCES}
+            COMMENT "Building dirtyfrag blobs")
+    add_custom_target(dirtyfrag_blobs DEPENDS "${CMAKE_CURRENT_BINARY_DIR}/splicehelper")
 
     add_executable(dirtyfrag
             "${DIRTYFRAG_DIR}/exp.c"
             "${DIRTYFRAG_DIR}/libcxx.S"
             "${DIRTYFRAG_DIR}/elf_parser.c")
-    add_dependencies(dirtyfrag dirtyfrag_splicehelper)
-    target_include_directories(dirtyfrag PRIVATE "${DIRTYFRAG_DIR}" "${DIRTYFRAG_BUILD}")
+    add_dependencies(dirtyfrag dirtyfrag_blobs)
     target_compile_definitions(dirtyfrag PRIVATE _GNU_SOURCE)
     target_compile_options(dirtyfrag PRIVATE
             $<$<COMPILE_LANGUAGE:C>:-std=gnu11;-O2;-Wall;-Wextra;-Wno-unused-parameter;-Wno-sign-compare;-fno-stack-protector;-fomit-frame-pointer>
-            -I${DIRTYFRAG_DIR}
-            -I${DIRTYFRAG_BUILD}
-            # .incbin 走的是集成汇编器的搜索路径，普通 -I 对它无效。
-            -Wa,-I,${DIRTYFRAG_DIR}
-            -Wa,-I,${DIRTYFRAG_BUILD})
+            -I${DIRTYFRAG_DIR})
     target_link_options(dirtyfrag PRIVATE -fPIE -pie)
     set_target_properties(dirtyfrag PROPERTIES
             OUTPUT_NAME "dirtyfrag"
