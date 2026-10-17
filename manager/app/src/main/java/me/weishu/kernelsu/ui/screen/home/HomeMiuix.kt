@@ -404,6 +404,22 @@ private fun StatusCard(
                                         .background(brush = cardBrush, shape = cardShape),
                                 )
                             }
+                            // 右下角的大圆是这张卡的设计：故意画到卡片外面一圈，由卡片
+                            // 裁出一段弧。用 matchParentSize 让它不参与卡片尺寸计算，
+                            // 卡片高度只由左边的文字决定。
+                            Box(
+                                modifier = Modifier
+                                    .matchParentSize()
+                                    .offset(27.dp, 31.dp),
+                                contentAlignment = Alignment.BottomEnd,
+                            ) {
+                                Icon(
+                                    modifier = Modifier.size(110.dp),
+                                    imageVector = Icons.Rounded.CheckCircleOutline,
+                                    tint = colorScheme.primary.copy(alpha = 0.8f),
+                                    contentDescription = null,
+                                )
+                            }
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -447,14 +463,6 @@ private fun StatusCard(
                                         )
                                     }
                                 }
-                                Icon(
-                                    imageVector = Icons.Rounded.CheckCircleOutline,
-                                    contentDescription = null,
-                                    modifier = Modifier
-                                        .padding(start = 8.dp)
-                                        .size(64.dp),
-                                    tint = colorScheme.primary.copy(alpha = 0.75f),
-                                )
                             }
                         }
                     }
