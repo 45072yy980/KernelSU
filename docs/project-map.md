@@ -347,11 +347,24 @@ CI（`.github/workflows/`）：`build-manager`、`build-lkm`、`ddk-lkm`、`ksud
 
 ### 真正还剩的
 
-1. **首次构建后确认 fpdrop 真进了包**：`unzip -l app-release.apk | grep fpdrop`。这是本轮改动里唯一需要人工看一眼的地方
-   （见 4.6 的三条接线）。
-2. **补测试空白**：整个仓库没有单元测试。`ManagerHider` 的字符串替换、`ServerConstants.override` 的联动这类纯逻辑
+1. **补测试空白**：整个仓库没有单元测试。`ManagerHider` 的字符串替换、`ServerConstants.override` 的联动这类纯逻辑
    本可以用 JVM 单测覆盖，而且不需要真机——属于投入小、长期收益明确的项。
-3. 4.5 的六条真机项**已全部通过**，不再需要复查。
+2. 4.5 的六条真机项**已全部通过**，不再需要复查。
+
+### 本轮的端到端验证（已完成）
+
+`build-manager` 的触发条件是 **push 到 main 且路径命中 `manager/**`**，所以这批改动一推上去就会跑
+`./gradlew clean assembleRelease`。CI 第 113 次构建**通过**，并已确认产物 APK 内含 `assets/fpdrop`。这一次构建同时证明了：
+
+| 之前的"只能静态推断" | 结论 |
+|---|---|
+| 删除 `cpp/uapi/` 后，`uapi/ksu.h` 及内部 `"uapi/..."` 链能在 NDK 下解析 | ✅ 编译通过 |
+| `-DKSU_FPDROP_ASSET_DIR` 传参 + CMake `if (ANDROID_ABI ...)` 块语法 | ✅ native 构建通过 |
+| `merge*Assets → externalNativeBuild<变体>` 的 `dependsOn` 匹配到了真实任务名，且无任务环 | ✅ clean 构建下 fpdrop 按时生成并被打进包 |
+| `checkVersionFormula` 在 CI 环境能读到 `../kernel/Kbuild` | ✅ preBuild 通过 |
+| `checkManagerHiderSuffixes` 的新解析逻辑在 CI 上可用 | ✅ preBuild 通过 |
+
+也就是说，"构建绿了但包里没 fpdrop"这个唯一残留风险已经被实际产物排除，不需要再人工盯。
 
 ---
 
