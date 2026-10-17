@@ -20,4 +20,15 @@
         <item name="android:windowLightNavigationBar">true</item>
     </style>
 
+    <!-- Shizuku 授权弹窗专用主题：半透明、无标题、浮于其他应用之上 -->
+    <style name="Theme.KernelSU.Permission" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowContentOverlay">@null</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowIsFloating">true</item>
+        <item name="android:backgroundDimEnabled">true</item>
+        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
+    </style>
+
 </resources>
