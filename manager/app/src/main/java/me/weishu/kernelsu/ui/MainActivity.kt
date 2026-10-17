@@ -61,6 +61,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import me.weishu.kernelsu.Natives
+import me.weishu.kernelsu.ui.component.miuix.PageBackdrop
 import me.weishu.kernelsu.ui.component.bottombar.BottomBar
 import me.weishu.kernelsu.ui.component.bottombar.MainPagerState
 import me.weishu.kernelsu.ui.component.bottombar.NavigationBadgeState
@@ -482,6 +483,12 @@ fun MainScreen(
         drawContent()
     }
 
+    // 页面壁纸那一层的记录。卡片上的磨砂直接取这一层，位置交给 backdrop 自己换算，
+    // 不再靠「面板坐标 − 卡片坐标」去猜，显示缩放和应用内留白都不会再让它错位。
+    val glassCards = LocalHomeCardBlur.current
+    val pageBackdrop = rememberLayerBackdrop { drawContent() }
+    SideEffect { PageBackdrop.layer.value = if (glassCards) pageBackdrop else null }
+
     val settledPage = mainPagerState.pagerState.settledPage
     LaunchedEffect(settledPage) {
         onPageChanged(settledPage)
@@ -694,6 +701,19 @@ fun MainScreen(
                             ) {
                                 // The same picture inside the line, sharp: the blur belongs to the
                                 // frame outside it, and the page sits on the untouched photograph.
+                                // 壁纸这一层单独记录成 backdrop：卡片的磨砂取的就是它，
+                                // 所以卡片里的画面永远和页面上的位置一致。
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .then(
+                                            if (glassCards) {
+                                                Modifier.layerBackdrop(pageBackdrop)
+                                            } else {
+                                                Modifier
+                                            }
+                                        ),
+                                ) {
                                 if (videoPath != null) {
                                     // Sharp inside the panel, like the still: the blur belongs to
                                     // the outer frame, not the page the reader looks at.
@@ -720,6 +740,7 @@ fun MainScreen(
                                             Color.Black.copy(alpha = BackgroundDim.value.floatValue)
                                         )
                                     )
+                                }
                                 }
                                 // One scheme for the whole page instead of a colour at every card:
                                 // the Miuix surfaces are what the reader sees, so handing them the

@@ -358,18 +358,15 @@ private fun StatusCard(
                 }
 
                 val cardShape = RoundedCornerShape(16.dp)
-                var cardWindowPos by remember { mutableStateOf(Offset.Zero) }
                 // 卡片只有一层：阴影留在外层负责压边，内容全部排进 Card 里。
                 // 以前是一摞 fillMaxSize 的叠加层（标题、LKM、大图标各占满整张卡，
                 // 再靠 offset 挪位置），行高一变就互相压到，装饰图标还会被卡片裁掉。
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .onGloballyPositioned { coords ->
-                            val pos = coords.positionInWindow()
-                            if (pos != cardWindowPos) cardWindowPos = pos
-                        }
-                        .shadow(12.dp, cardShape, clip = true),
+                        // shadow 不再 clip：按压反馈会把卡片稍微放大/倾斜，
+                        // 一旦在原尺寸上裁剪，边缘就会被切掉一条。
+                        .shadow(12.dp, cardShape, clip = false),
                 ) {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
@@ -385,11 +382,7 @@ private fun StatusCard(
                         Box(modifier = Modifier.fillMaxWidth()) {
                             when {
                                 // 页面有壁纸就磨砂：卡片是页面的一块玻璃，跟着卡片一起转。
-                                glassBackdrop -> FrostedCardBackground(
-                                    shape = cardShape,
-                                    cardPos = cardWindowPos,
-                                    wallpaper = homeWallpaper,
-                                )
+                                glassBackdrop -> FrostedCardBackground(shape = cardShape)
                                 // 卡片自带图片时，图片本身就是底。
                                 statusImage != null -> Image(
                                     bitmap = statusImage,
@@ -904,15 +897,10 @@ private fun JailbreakGuardCard(modifier: Modifier = Modifier) {
         colorScheme.onTertiaryContainer.copy(alpha = 0.8f)
     }
     val guardShape = RoundedCornerShape(16.dp)
-    var guardWindowPos by remember { mutableStateOf(Offset.Zero) }
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .onGloballyPositioned { coords ->
-                val pos = coords.positionInWindow()
-                if (pos != guardWindowPos) guardWindowPos = pos
-            }
-            .shadow(8.dp, guardShape, clip = true)
+            .shadow(8.dp, guardShape, clip = false)
             .background(
                 color = if (onGlass) Color.Transparent else colorScheme.tertiaryContainer,
                 shape = guardShape,
@@ -929,11 +917,7 @@ private fun JailbreakGuardCard(modifier: Modifier = Modifier) {
             Box {
                 // 磨砂面画在 Card 里面：按压反馈是变换，底板若留在外面就不会跟着动。
                 if (onGlass && guardWallpaper != null) {
-                    FrostedCardBackground(
-                        shape = guardShape,
-                        cardPos = guardWindowPos,
-                        wallpaper = guardWallpaper,
-                    )
+                    FrostedCardBackground(shape = guardShape)
                 }
                 Row(
                 modifier = Modifier

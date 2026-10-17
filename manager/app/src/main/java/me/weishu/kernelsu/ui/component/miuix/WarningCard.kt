@@ -75,15 +75,11 @@ fun WarningCard(
     if (LocalGlassNotice.current) {
         val textColor = lerp(colorScheme.primary, Color.White, 0.75f)
         val cardShape = RoundedCornerShape(16.dp)
-        var cardWindowPos by remember { mutableStateOf(Offset.Zero) }
         Box(
             modifier = modifier
                 .fillMaxWidth()
-                .onGloballyPositioned { coords ->
-                    val pos = coords.positionInWindow()
-                    if (pos != cardWindowPos) cardWindowPos = pos
-                }
-                .shadow(8.dp, cardShape, clip = true)
+                // 不在原尺寸上裁剪，否则按压反馈放大/倾斜时边缘会被切掉。
+                .shadow(8.dp, cardShape, clip = false)
                 .background(color = Color.Transparent, shape = cardShape),
         ) {
             Card(
@@ -105,11 +101,7 @@ fun WarningCard(
                     // 磨砂面统一走 FrostedCardBackground：按面板原尺寸 1:1 对位，
                     // 画在 Card 里面所以跟着按压反馈一起动。
                     if (glassWallpaper != null) {
-                        FrostedCardBackground(
-                            shape = cardShape,
-                            cardPos = cardWindowPos,
-                            wallpaper = glassWallpaper,
-                        )
+                        FrostedCardBackground(shape = cardShape)
                     }
                     Row(
                         modifier = Modifier
