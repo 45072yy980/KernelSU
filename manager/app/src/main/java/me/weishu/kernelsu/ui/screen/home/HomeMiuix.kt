@@ -33,6 +33,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.MenuBook
@@ -49,6 +50,7 @@ import androidx.compose.material.icons.rounded.CheckCircleOutline
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
@@ -181,17 +183,17 @@ fun HomePagerMiuix(
         contentWindowInsets = WindowInsets.systemBars.add(WindowInsets.displayCutout).only(WindowInsetsSides.Horizontal)
     ) { innerPadding ->
         Box(modifier = if (backdrop != null) Modifier.layerBackdrop(backdrop) else Modifier) {
+            // DEBUG-DIAG: 定位“滑不动”，修完即删。
+            val diagState = rememberLazyListState()
+            var diagContentH by remember { mutableIntStateOf(0) }
+            var diagViewportH by remember { mutableIntStateOf(0) }
             LazyColumn(
+                state = diagState,
                 modifier = Modifier
                     .fillMaxHeight()
+                    .onGloballyPositioned { diagViewportH = it.size.height }
                     .scrollEndHaptic()
-                    // 这里刻意不挂 overScrollVertical()：Miuix 的 overscroll node 只在 layout
-                    // 时刷新滚动范围，列表被 remeasure（配置变化、首帧）后会保留旧范围并
-                    // 拒绝拖拽，表现为"有时完全滑不动"。代价只是失去下拉回弹，
-                    // scrollEndHaptic 照旧。详见提交 ca087c71 的诊断。
-                    //
-                    // nestedScroll 接线也一并去掉：美化版主页没有顶栏，没有可折叠的东西，
-                    // 这条连接只会平白参与竖直手势的分发。
+                    .overScrollVertical()
                     .padding(horizontal = 12.dp),
                 contentPadding = innerPadding,
                 overscrollEffect = null,
@@ -210,10 +212,21 @@ fun HomePagerMiuix(
                     val noticeBlur = LocalHomeCardBlur.current
                     val noticeGlassed = noticeBlur && noticeWallpaper != null
                     Column(
-                        modifier = Modifier.padding(top = 12.dp),
+                        modifier = Modifier
+                            .padding(top = 12.dp)
+                            .onGloballyPositioned { diagContentH = it.size.height },
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
+                        // DEBUG-DIAG
+                        Text(
+                            text = "DIAG 内容=$diagContentH 视口=$diagViewportH " +
+                                "可前=${diagState.canScrollForward} 可后=${diagState.canScrollBackward} " +
+                                "idx=${diagState.firstVisibleItemIndex} off=${diagState.firstVisibleItemScrollOffset}",
+                            fontSize = 11.sp,
+                            color = Color.White,
+                            modifier = Modifier.background(Color.Red).padding(4.dp),
+                        )
                         CompositionLocalProvider(
                             LocalGlassNotice provides noticeGlassed,
                             LocalGlassWallpaper provides if (noticeGlassed) noticeWallpaper else null,
