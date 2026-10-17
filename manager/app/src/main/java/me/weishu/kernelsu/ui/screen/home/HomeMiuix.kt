@@ -97,6 +97,7 @@ import me.weishu.kernelsu.ui.PanelMetrics
 import me.weishu.kernelsu.ui.component.ManagerHiddenRecovery
 import me.weishu.kernelsu.ui.component.WarningLevel
 import me.weishu.kernelsu.ui.component.dialog.rememberConfirmDialog
+import me.weishu.kernelsu.ui.component.miuix.FrostedCardBackground
 import me.weishu.kernelsu.ui.component.miuix.WarningCard
 import me.weishu.kernelsu.ui.component.statustag.StatusTag
 import me.weishu.kernelsu.ui.theme.LocalEnableBlur
@@ -119,56 +120,6 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme
 import top.yukonga.miuix.kmp.utils.PressFeedbackType
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
-
-/**
- * Live alignment nudges for the frosted pane, dialled from the theme settings sliders and kept
- * across restarts. Read during composition so dragging a slider retriggers the pane's layout.
- */
-object GlassNudge {
-    private const val PREF = "glass_nudge"
-    val x = mutableFloatStateOf(0f)
-    val y = mutableFloatStateOf(0f)
-
-    /** What the values fall back to when nothing has been saved yet. */
-    const val DEFAULT_X = 0f
-    const val DEFAULT_Y = 0f
-
-    // 磨砂层改成按面板原尺寸 1:1 对位之后，以前为了补缩放误差而调出来的数值
-    // 全部作废（它们是给“放大 9% 再偏移”的旧画法调出来的，留着反而会把面板推歪）。
-    // 和 pager 手势那次一样，只迁移一次，之后用户自己调的值照旧保留。
-    private const val KEY_VERSION = "nudge_version"
-    private const val VERSION = 2
-
-    fun load(context: Context) {
-        val sp = context.getSharedPreferences(PREF, Context.MODE_PRIVATE)
-        if (sp.getInt(KEY_VERSION, 0) < VERSION) {
-            x.floatValue = DEFAULT_X
-            y.floatValue = DEFAULT_Y
-            sp.edit().putFloat("x", DEFAULT_X).putFloat("y", DEFAULT_Y)
-                .putInt(KEY_VERSION, VERSION).apply()
-            return
-        }
-        x.floatValue = sp.getFloat("x", DEFAULT_X)
-        y.floatValue = sp.getFloat("y", DEFAULT_Y)
-    }
-
-    /** Persist the current nudge, so the pane stays where the slider left it. */
-    fun save(context: Context) {
-        context.getSharedPreferences(PREF, Context.MODE_PRIVATE)
-            .edit()
-            .putFloat("x", x.floatValue)
-            .putFloat("y", y.floatValue)
-            .putInt(KEY_VERSION, VERSION)
-            .apply()
-    }
-
-    /** Put both nudges back to the shipped values and forget the saved ones. */
-    fun reset(context: Context) {
-        x.floatValue = DEFAULT_X
-        y.floatValue = DEFAULT_Y
-        save(context)
-    }
-}
 
 @Composable
 fun HomePagerMiuix(
@@ -463,60 +414,15 @@ private fun StatusCard(
                             pressFeedbackType = PressFeedbackType.Tilt
                         ) {
                         Box {
-                            // The frosted face has to move with the card, so it belongs inside the
-                            // Card, which is what the Tilt feedback transforms. Keeping it still
-                            // (as a sibling of the Card) was worse: the glass then stayed put while
-                            // the card tilted over it, and the two visibly disagreed.
-                            //
-                            // 纵向保持基线的做法：裁切高度就等于面板高度，不加余量也不做 -48 下移。
-                            // b50a5cf1 曾经给它加过 96px 纵向余量，实测反而在按压时露出边沿，
-                            // 退回基线后恢复正常。横向的 +96 是基线本来就有的，不要动。
+                            // 磨砂面画在 Card 里面，跟着 Tilt 一起转；怎么和页面对齐
+                            // 由 FrostedCardBackground 统一负责，卡片这里只把自己在
+                            // 窗口里的位置交出去。
                             if (glassBackdrop) {
-                                val panelSize = PanelMetrics.size.value
-                                val nudgeX = GlassNudge.x.floatValue
-                                val nudgeY = GlassNudge.y.floatValue
-                                val panelPos = PanelMetrics.pos.value
-                                // Read in composition so scrolling retriggers layout.
-                                val cardPos = cardWindowPos
-                                if (panelSize != IntSize.Zero) {
-                                    val paneDensity = LocalDensity.current
-                                    Box(
-                                        modifier = Modifier
-                                            .matchParentSize()
-                                            .clip(cardShape)
-                                    ) {
-                                        Image(
-                                            bitmap = homeWallpaper,
-                                            contentDescription = null,
-                                            contentScale = ContentScale.Crop,
-                                            modifier = Modifier
-                                                // 按面板原尺寸 1:1 铺，不做缩放：页面上的壁纸
-                                                // 就是按面板尺寸 Crop 画的，只要尺寸一致，
-                                                // 采样点就逐像素对得上。以前这里 +96 宽再 -48
-                                                // 偏移，等于把图放大约 9% 再用经验值补回来，
-                                                // 永远补不齐，卡片边沿就会露出未压暗的底。
-                                                .requiredSize(
-                                                    with(paneDensity) { panelSize.width.toDp() },
-                                                    with(paneDensity) { panelSize.height.toDp() },
-                                                )
-                                                .blur(16.dp)
-                                                .offset {
-                                                    // 只做坐标差，剩下的微调仅用于用户手动校准。
-                                                    IntOffset(
-                                                        panelPos.x.roundToInt() - cardPos.x.roundToInt()
-                                                            + with(paneDensity) { nudgeX.dp.toPx() }.roundToInt(),
-                                                        panelPos.y.roundToInt() - cardPos.y.roundToInt()
-                                                            + with(paneDensity) { nudgeY.dp.toPx() }.roundToInt(),
-                                                    )
-                                                },
-                                        )
-                                        Box(
-                                            modifier = Modifier
-                                                .matchParentSize()
-                                                .background(Color.Black.copy(alpha = BackgroundDim.value.floatValue)),
-                                        )
-                                    }
-                                }
+                                FrostedCardBackground(
+                                    shape = cardShape,
+                                    cardPos = cardWindowPos,
+                                    wallpaper = homeWallpaper,
+                                )
                             }
                             if (statusImage != null) {
                                 Image(
@@ -1044,44 +950,6 @@ private fun JailbreakGuardCard(modifier: Modifier = Modifier) {
                 shape = guardShape,
             ),
     ) {
-        if (onGlass && guardWallpaper != null) {
-            val panelSize = PanelMetrics.size.value
-            val panelPos = PanelMetrics.pos.value
-            val cardPos = guardWindowPos
-            if (panelSize != IntSize.Zero) {
-                val guardDensity = LocalDensity.current
-                Box(
-                    modifier = Modifier
-                        .matchParentSize()
-                        .clip(guardShape)
-                ) {
-                    Image(
-                        bitmap = guardWallpaper,
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier
-                            .requiredSize(
-                                with(guardDensity) { panelSize.width.toDp() },
-                                with(guardDensity) { panelSize.height.toDp() },
-                            )
-                            .blur(16.dp)
-                            .offset {
-                                IntOffset(
-                                    panelPos.x.roundToInt() - cardPos.x.roundToInt()
-                                        + with(guardDensity) { GlassNudge.x.floatValue.dp.toPx() }.roundToInt(),
-                                    panelPos.y.roundToInt() - cardPos.y.roundToInt()
-                                        + with(guardDensity) { GlassNudge.y.floatValue.dp.toPx() }.roundToInt(),
-                                )
-                            },
-                    )
-                    Box(
-                        modifier = Modifier
-                            .matchParentSize()
-                            .background(Color.Black.copy(alpha = BackgroundDim.value.floatValue)),
-                    )
-                }
-            }
-        }
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.defaultColors(
@@ -1090,7 +958,16 @@ private fun JailbreakGuardCard(modifier: Modifier = Modifier) {
             showIndication = false,
             pressFeedbackType = PressFeedbackType.Sink,
         ) {
-            Row(
+            Box {
+                // 磨砂面画在 Card 里面：按压反馈是变换，底板若留在外面就不会跟着动。
+                if (onGlass && guardWallpaper != null) {
+                    FrostedCardBackground(
+                        shape = guardShape,
+                        cardPos = guardWindowPos,
+                        wallpaper = guardWallpaper,
+                    )
+                }
+                Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(16.dp),
@@ -1115,8 +992,9 @@ private fun JailbreakGuardCard(modifier: Modifier = Modifier) {
                         text = stringResource(R.string.jailbreak_guard_running_summary),
                         fontSize = MiuixTheme.textStyles.body2.fontSize,
                         color = summaryColor,
-                        modifier = Modifier.padding(top = 2.dp),
-                    )
+                            modifier = Modifier.padding(top = 2.dp),
+                        )
+                    }
                 }
             }
         }

@@ -35,7 +35,6 @@ import androidx.compose.ui.unit.sp
 import me.weishu.kernelsu.ui.BackgroundDim
 import me.weishu.kernelsu.ui.PanelMetrics
 import me.weishu.kernelsu.ui.component.WarningLevel
-import me.weishu.kernelsu.ui.screen.home.GlassNudge
 import me.weishu.kernelsu.ui.theme.LocalGlassNotice
 import me.weishu.kernelsu.ui.theme.LocalGlassWallpaper
 import me.weishu.kernelsu.ui.theme.isInDarkTheme
@@ -103,48 +102,14 @@ fun WarningCard(
                 pressFeedbackType = PressFeedbackType.Tilt,
             ) {
                 Box {
-                    // The frosted face: the panel's own crop of the wallpaper, blurred,
-                    // so the card is a pane of the page rather than a colour sampled out
-                    // of it. Drawn from inside the Card so it rides the press feedback;
-                    // the crop is overscanned by the blur radius on each side so the
-                    // blur does not pull transparent pixels in from the edges.
+                    // 磨砂面统一走 FrostedCardBackground：按面板原尺寸 1:1 对位，
+                    // 画在 Card 里面所以跟着按压反馈一起动。
                     if (glassWallpaper != null) {
-                        val panelSize = PanelMetrics.size.value
-                        val panelPos = PanelMetrics.pos.value
-                        val cardPos = cardWindowPos
-                        if (panelSize != IntSize.Zero) {
-                            val paneDensity = LocalDensity.current
-                            Box(
-                                modifier = Modifier
-                                    .matchParentSize()
-                                    .clip(cardShape),
-                            ) {
-                                Image(
-                                    bitmap = glassWallpaper,
-                                    contentDescription = null,
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier
-                                        .requiredSize(
-                                            with(paneDensity) { panelSize.width.toDp() },
-                                            with(paneDensity) { panelSize.height.toDp() },
-                                        )
-                                        .blur(16.dp)
-                                        .offset {
-                                            IntOffset(
-                                                panelPos.x.roundToInt() - cardPos.x.roundToInt()
-                                                    + with(paneDensity) { GlassNudge.x.floatValue.dp.toPx() }.roundToInt(),
-                                                panelPos.y.roundToInt() - cardPos.y.roundToInt()
-                                                    + with(paneDensity) { GlassNudge.y.floatValue.dp.toPx() }.roundToInt(),
-                                            )
-                                        },
-                                )
-                                Box(
-                                    modifier = Modifier
-                                        .matchParentSize()
-                                        .background(Color.Black.copy(alpha = BackgroundDim.value.floatValue)),
-                                )
-                            }
-                        }
+                        FrostedCardBackground(
+                            shape = cardShape,
+                            cardPos = cardWindowPos,
+                            wallpaper = glassWallpaper,
+                        )
                     }
                     Row(
                         modifier = Modifier

@@ -111,7 +111,6 @@ import me.weishu.kernelsu.ui.util.getSuperuserCount
 import me.weishu.kernelsu.ui.util.install
 import me.weishu.kernelsu.ui.util.ManagerHider
 import me.weishu.kernelsu.ui.util.rememberBlurBackdrop
-import me.weishu.kernelsu.ui.screen.home.GlassNudge
 import me.weishu.kernelsu.ui.util.rememberContentReady
 import me.weishu.kernelsu.ui.viewmodel.MainActivityViewModel
 import me.weishu.kernelsu.ui.viewmodel.MainPagerConfig
@@ -180,7 +179,6 @@ open class MainActivity : ComponentActivity() {
         val splashScreen = installSplashScreen()
         splashStartedAt = SystemClock.uptimeMillis()
         super.onCreate(savedInstanceState)
-        GlassNudge.load(this)
         HomeWallpaperStore.loadVideoCrop(this)
         BackgroundDim.load(this)
         splashScreen.setKeepOnScreenCondition {
@@ -376,9 +374,8 @@ object BackgroundDim {
 }
 
 /**
- * The page panel's real pixel size and window position. The frosted card crops the wallpaper with
- * exactly these numbers so its picture is the same crop the panel shows; residual error is dialled
- * out by the GlassNudge constants in HomeMiuix.
+ * 页面面板的真实像素尺寸和窗口位置。磨砂卡片按这组数字裁壁纸，取到的就是面板自己
+ * 展示的那一块，因此卡片里的画面和页面严丝合缝，不需要任何手工微调。
  */
 object PanelMetrics {
     val size = mutableStateOf(IntSize.Zero)
