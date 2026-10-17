@@ -81,11 +81,38 @@ jobs:
         llvm-strip -d "$OUT_DIR/$OUTPUT_NAME"
         echo "Size after stripping: $(du -h "$OUT_DIR/$OUTPUT_NAME" | cut -f1)"
 
+    - name: Build dfroot.ko
+      run: |
+        # DirtyFrag 的内核模块跟 kernelsu.ko 用同一个 KMI 的 DDK 头和编译器，
+        # 所以顺手在同一个容器里编掉，省一个 job、也不额外产生产物。
+        # 它里面 bootstrap 的路径是运行时可改写的槽位，不能用上游预编译版。
+        cd manager/app/src/main/cpp/dirtyfrag/lkm
+
+        echo "=== Building dfroot.ko for KMI: ${{ inputs.kmi }} ==="
+        make -j$(nproc)
+
+        OUT_DIR=/github/workspace/out/aarch64
+        mkdir -p "$OUT_DIR"
+        OUTPUT="$OUT_DIR/dfroot-${{ inputs.kmi }}.ko"
+        cp dfroot.ko "$OUTPUT"
+
+        # 这个 ko 是被页缓存逐页写进内核的，体积越小越稳。
+        llvm-objcopy --strip-unneeded \
+          -R .comment -R .note.gnu.property -R .note.Linux -R .note.GNU-stack \
+          -R .BTF -R .BTF.base -R .llvm_addrsig \
+          -R .hyp.text -R .hyp.bss -R .hyp.rodata -R .hyp.event_ids \
+          -R .hyp.patchable_function_entries -R .hyp.data "$OUTPUT"
+
+        grep -q "DFROOT_STAGE/bootstrap" "$OUTPUT" || { echo "dfroot.ko 缺少哨兵"; exit 1; }
+        ls -la "$OUTPUT"
+
     - name: Upload kernelsu.ko artifact
       uses: actions/upload-artifact@v7
       with:
         name: aarch64-${{ inputs.kmi }}-lkm
-        path: /github/workspace/out/aarch64/${{ inputs.kmi }}_kernelsu.ko
+        path: |
+          /github/workspace/out/aarch64/${{ inputs.kmi }}_kernelsu.ko
+          /github/workspace/out/aarch64/dfroot-${{ inputs.kmi }}.ko
 
     - name: Build kernelsu.ko for x64
       env:

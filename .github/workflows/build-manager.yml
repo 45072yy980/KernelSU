@@ -117,23 +117,6 @@ jobs:
       expected_hash2: ${{ needs.generate-key.outputs.expected_hash || '' }}
     secrets: inherit
 
-  build-dfroot-lkm:
-    strategy:
-      fail-fast: false
-      matrix:
-        kmi:
-          - android12-5.10
-          - android13-5.10
-          - android13-5.15
-          - android14-5.15
-          - android14-6.1
-          - android15-6.6
-          - android16-6.12
-          - android17-6.18
-    uses: ./.github/workflows/ddk-dfroot.yml
-    with:
-      kmi: ${{ matrix.kmi }}
-
   build-ksuinit:
     uses: ./.github/workflows/ksuinit.yml
 
@@ -174,8 +157,8 @@ jobs:
       pack_ksuinit: true
 
   build-manager:
-    needs: [generate-key, build-dfroot-lkm]
-    if: always() && needs.generate-key.result == 'success' && needs.build-dfroot-lkm.result == 'success'
+    needs: [generate-key, build-lkm]
+    if: always() && needs.generate-key.result == 'success' && needs.build-lkm.result == 'success'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -190,7 +173,7 @@ jobs:
       - name: Fetch dfroot.ko modules
         uses: actions/download-artifact@v8
         with:
-          pattern: dfroot-ko-*
+          pattern: aarch64-*-lkm
           path: ${{ github.workspace }}/dfroot-ko
           merge-multiple: true
 
