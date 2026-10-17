@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import me.weishu.kernelsu.ui.BackgroundDim
 import me.weishu.kernelsu.ui.PanelMetrics
 import me.weishu.kernelsu.ui.component.WarningLevel
 import me.weishu.kernelsu.ui.screen.home.GlassNudge
@@ -138,7 +139,7 @@ fun WarningCard(
                                 Box(
                                     modifier = Modifier
                                         .matchParentSize()
-                                        .background(Color.Black.copy(alpha = 0.28f)),
+                                        .background(Color.Black.copy(alpha = BackgroundDim.value.floatValue)),
                                 )
                             }
                         }

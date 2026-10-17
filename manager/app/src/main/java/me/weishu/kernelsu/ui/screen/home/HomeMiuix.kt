@@ -83,6 +83,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.sp
 import kotlin.math.roundToInt
+import me.weishu.kernelsu.ui.BackgroundDim
 import me.weishu.kernelsu.KernelVersion
 import me.weishu.kernelsu.Natives
 import me.weishu.kernelsu.R
@@ -477,7 +478,7 @@ private fun StatusCard(
                                         Box(
                                             modifier = Modifier
                                                 .matchParentSize()
-                                                .background(Color.Black.copy(alpha = 0.28f)),
+                                                .background(Color.Black.copy(alpha = BackgroundDim.value.floatValue)),
                                         )
                                     }
                                 }
@@ -1039,7 +1040,7 @@ private fun JailbreakGuardCard(modifier: Modifier = Modifier) {
                     Box(
                         modifier = Modifier
                             .matchParentSize()
-                            .background(Color.Black.copy(alpha = 0.28f)),
+                            .background(Color.Black.copy(alpha = BackgroundDim.value.floatValue)),
                     )
                 }
             }
