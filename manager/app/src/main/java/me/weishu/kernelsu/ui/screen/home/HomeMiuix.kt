@@ -327,7 +327,6 @@ private fun StatusCard(
                     remember(statusContext, statusVersion) {
                         HomeWallpaperStore.videoFile(statusContext).exists()
                     }
-                var cardWindowPos by remember { mutableStateOf(Offset.Zero) }
                 // Over a picture (its own or the glass) the text is the same bright tint the info
                 // card uses; on the theme's gradient it is plain black.
                 val statusTitleColor = when {
