@@ -122,7 +122,7 @@ fun WarningCard(
                                     modifier = Modifier
                                         .requiredSize(
                                             with(paneDensity) { (panelSize.width + 96).toDp() },
-                                            with(paneDensity) { (panelSize.height + 96).toDp() },
+                                            with(paneDensity) { panelSize.height.toDp() },
                                         )
                                         .blur(16.dp)
                                         .offset {
@@ -131,7 +131,6 @@ fun WarningCard(
                                                     - 48
                                                     + with(paneDensity) { GlassNudge.x.floatValue.dp.toPx() }.roundToInt(),
                                                 panelPos.y.roundToInt() - cardPos.y.roundToInt()
-                                                    - 48
                                                     + with(paneDensity) { GlassNudge.y.floatValue.dp.toPx() }.roundToInt(),
                                             )
                                         },

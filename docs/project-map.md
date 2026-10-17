@@ -290,10 +290,13 @@ x86_64/riscv64 上没有该文件，`ensureFpDrop()` 会 catch 后按"不支持�
 去掉它，随后 `3cd07986` 又整份回退，问题回归。现在 `HomeMiuix.kt` 的 `LazyColumn` **刻意不挂**这个修饰符。
 代价只是失去下拉回弹，`scrollEndHaptic` 不受影响。`HomeMiuixStock.kt` 目前仍挂着，若要一并修照着去掉即可。
 
-**② 磨砂面不能放进带 `PressFeedbackType.Tilt` 的 Card 内部。** 按压时整张卡做 3D 旋转，磨砂面若跟着转，
-投影在一侧窄进去的那条缝就会露出底层背景，看到的是白边/黑边。`b50a5cf1` 为了"玻璃跟着卡一起倾斜"把它挪进
-Card，代价正是这条缝。现在磨砂面是 `Card` 的**静态底板**（同级、先画），卡绕着它转，缝里露出的仍是磨砂面；
-外层 Box 已按 `cardShape` 裁剪，对齐用的 `GlassNudge`/`PanelMetrics` 数学不变。
+**② 磨砂面的纵向余量才是坑；不要把磨砂面挪到 Card 外面。** `b50a5cf1` 给玻璃裁切加了 96px 纵向余量、
+整体下移 48，结果按压（`PressFeedbackType.Tilt`）时边沿反而露出白条/黑条。基线是「裁切高度 = 面板高度、
+纵向不做偏移」，退回去就正常；横向的 `+96` 与 `-48` 是基线本来就有的，不要动。三处玻璃（状态卡、守卫卡、
+`component/miuix/WarningCard.kt`）已统一回基线几何。
+
+另一条岔路别走：把磨砂面挪到 Card **外面**当静态底板，确实不会露边，但玻璃就不再跟着卡片一起倾斜，
+按压手感明显变差（`5a83c9a0` 试过，已回退）。
 
 **③ 设置页三套皮肤共用一套分组。** `SettingsMiuix.kt`、`SettingsMiuixStock.kt`、`SettingsMaterial.kt` 现在
 都是：通用 / 外观 / 功能 / 隐私 / 关于 / 危险操作（卸载单独成组压最末）。新增条目要三处同改；
@@ -358,7 +361,7 @@ CI（`.github/workflows/`）：`build-manager`、`build-lkm`、`ddk-lkm`、`ksud
 ### 3.5.7 前的 UI 修复（本轮）
 
 - **4.8①** 美化版主页 `LazyColumn` 去掉 `overScrollVertical()` —— 修"偶尔完全滑不动"
-- **4.8②** 状态卡磨砂面改回静态底板 —— 修按压时的白边/黑边
+- **4.8②** 三处玻璃回退到基线的裁切几何（高度=面板高度、纵向不偏移）—— 修按压时边沿露白
 - **4.8③** 三套皮肤设置页统一分组标题，卸载单独成组压到最末
 - **五** CI 增加产物断言：`assembleRelease` 后核对 APK 里确有 `assets/fpdrop`
 

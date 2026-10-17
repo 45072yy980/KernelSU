@@ -124,12 +124,12 @@ import top.yukonga.miuix.kmp.utils.scrollEndHaptic
  */
 object GlassNudge {
     private const val PREF = "glass_nudge"
-    val x = mutableFloatStateOf(30f)
-    val y = mutableFloatStateOf(441f)
+    val x = mutableFloatStateOf(15f)
+    val y = mutableFloatStateOf(375f)
 
     /** What the values fall back to when nothing has been saved yet. */
-    const val DEFAULT_X = 30f
-    const val DEFAULT_Y = 441f
+    const val DEFAULT_X = 15f
+    const val DEFAULT_Y = 375f
 
     fun load(context: Context) {
         val sp = context.getSharedPreferences(PREF, Context.MODE_PRIVATE)
@@ -418,55 +418,6 @@ private fun StatusCard(
                                 shape = cardShape,
                             )
                     ) {
-                        // 磨砂面是卡片的静态底板，不跟着 Tilt 走。按压反馈是 3D 旋转，
-                        // 旋转后卡片投影会在一侧窄进去一条，磨砂面若跟着转，那条缝就
-                        // 露出底层背景，读起来正是白边/黑边。把它放在 Card 外面，
-                        // 卡绕着它转，缝里露出的仍是磨砂面；外层 Box 已按 cardShape 裁剪。
-                        if (glassBackdrop) {
-                            val panelSize = PanelMetrics.size.value
-                            val nudgeX = GlassNudge.x.floatValue
-                            val nudgeY = GlassNudge.y.floatValue
-                            val panelPos = PanelMetrics.pos.value
-                            // Read in composition so scrolling retriggers layout.
-                            val cardPos = cardWindowPos
-                            if (panelSize != IntSize.Zero) {
-                                val paneDensity = LocalDensity.current
-                                Box(
-                                    modifier = Modifier
-                                        .matchParentSize()
-                                        .clip(cardShape)
-                                ) {
-                                    Image(
-                                        bitmap = homeWallpaper,
-                                        contentDescription = null,
-                                        contentScale = ContentScale.Crop,
-                                        modifier = Modifier
-                                            .requiredSize(
-                                                with(paneDensity) { (panelSize.width + 96).toDp() },
-                                                with(paneDensity) { (panelSize.height + 96).toDp() },
-                                            )
-                                            .blur(16.dp)
-                                            .offset {
-                                                IntOffset(
-                                                    panelPos.x.roundToInt() - cardPos.x.roundToInt()
-                                                        - 48
-                                                        + with(paneDensity) { nudgeX.dp.toPx() }.roundToInt(),
-                                                    // 纵向同样留出 96px 余量并居中：模糊层边缘是渐隐的，
-                                                    // 没有余量时那条渐隐边正好落在卡片里，读起来是亮带。
-                                                    panelPos.y.roundToInt() - cardPos.y.roundToInt()
-                                                        - 48
-                                                        + with(paneDensity) { nudgeY.dp.toPx() }.roundToInt(),
-                                                )
-                                            },
-                                    )
-                                    Box(
-                                        modifier = Modifier
-                                            .matchParentSize()
-                                            .background(Color.Black.copy(alpha = 0.28f)),
-                                    )
-                                }
-                            }
-                        }
                         Card(
                             modifier = Modifier.fillMaxWidth(),
                             colors = CardDefaults.defaultColors(
@@ -481,6 +432,56 @@ private fun StatusCard(
                             pressFeedbackType = PressFeedbackType.Tilt
                         ) {
                         Box {
+                            // The frosted face has to move with the card, so it belongs inside the
+                            // Card, which is what the Tilt feedback transforms. Keeping it still
+                            // (as a sibling of the Card) was worse: the glass then stayed put while
+                            // the card tilted over it, and the two visibly disagreed.
+                            //
+                            // 纵向保持基线的做法：裁切高度就等于面板高度，不加余量也不做 -48 下移。
+                            // b50a5cf1 曾经给它加过 96px 纵向余量，实测反而在按压时露出边沿，
+                            // 退回基线后恢复正常。横向的 +96 是基线本来就有的，不要动。
+                            if (glassBackdrop) {
+                                val panelSize = PanelMetrics.size.value
+                                val nudgeX = GlassNudge.x.floatValue
+                                val nudgeY = GlassNudge.y.floatValue
+                                val panelPos = PanelMetrics.pos.value
+                                // Read in composition so scrolling retriggers layout.
+                                val cardPos = cardWindowPos
+                                if (panelSize != IntSize.Zero) {
+                                    val paneDensity = LocalDensity.current
+                                    Box(
+                                        modifier = Modifier
+                                            .matchParentSize()
+                                            .clip(cardShape)
+                                    ) {
+                                        Image(
+                                            bitmap = homeWallpaper,
+                                            contentDescription = null,
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier
+                                                .requiredSize(
+                                                    with(paneDensity) { (panelSize.width + 96).toDp() },
+                                                    with(paneDensity) { panelSize.height.toDp() },
+                                                )
+                                                .blur(16.dp)
+                                                .offset {
+                                                    IntOffset(
+                                                        panelPos.x.roundToInt() - cardPos.x.roundToInt()
+                                                            - 48
+                                                            + with(paneDensity) { nudgeX.dp.toPx() }.roundToInt(),
+                                                        panelPos.y.roundToInt() - cardPos.y.roundToInt()
+                                                            + with(paneDensity) { nudgeY.dp.toPx() }.roundToInt(),
+                                                    )
+                                                },
+                                        )
+                                        Box(
+                                            modifier = Modifier
+                                                .matchParentSize()
+                                                .background(Color.Black.copy(alpha = 0.28f)),
+                                        )
+                                    }
+                                }
+                            }
                             if (statusImage != null) {
                                 Image(
                                     bitmap = statusImage,
@@ -1022,7 +1023,7 @@ private fun JailbreakGuardCard(modifier: Modifier = Modifier) {
                         modifier = Modifier
                             .requiredSize(
                                 with(guardDensity) { (panelSize.width + 96).toDp() },
-                                with(guardDensity) { (panelSize.height + 96).toDp() },
+                                with(guardDensity) { panelSize.height.toDp() },
                             )
                             .blur(16.dp)
                             .offset {
@@ -1031,7 +1032,6 @@ private fun JailbreakGuardCard(modifier: Modifier = Modifier) {
                                         - 48
                                         + with(guardDensity) { GlassNudge.x.floatValue.dp.toPx() }.roundToInt(),
                                     panelPos.y.roundToInt() - cardPos.y.roundToInt()
-                                        - 48
                                         + with(guardDensity) { GlassNudge.y.floatValue.dp.toPx() }.roundToInt(),
                                 )
                             },
