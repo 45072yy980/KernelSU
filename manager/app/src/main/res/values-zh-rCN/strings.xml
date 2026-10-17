@@ -520,4 +520,11 @@
     <string name="open_redirect_feature_label">open 重定向</string>
     <string name="enable_log_feature_label">日志支持</string>
     <string name="hide_symbols_feature_label">隐藏 KSU / SUSFS 符号</string>
+    <!-- 设置页分组标题 -->
+    <string name="settings_section_general">通用</string>
+    <string name="settings_section_appearance">外观</string>
+    <string name="settings_section_features">功能</string>
+    <string name="settings_section_privacy">隐私</string>
+    <string name="settings_section_about">关于</string>
+    <string name="settings_section_danger">危险操作</string>
 </resources>

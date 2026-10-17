@@ -116,7 +116,6 @@ import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme
 import top.yukonga.miuix.kmp.utils.PressFeedbackType
-import top.yukonga.miuix.kmp.utils.overScrollVertical
 import top.yukonga.miuix.kmp.utils.scrollEndHaptic
 
 /**
@@ -173,7 +172,10 @@ fun HomePagerMiuix(
                 modifier = Modifier
                     .fillMaxHeight()
                     .scrollEndHaptic()
-                    .overScrollVertical()
+                    // 这里刻意不挂 overScrollVertical()：Miuix 的 overscroll node 只在 layout
+                    // 时刷新滚动范围，列表被 remeasure（配置变化、首帧）后会保留旧范围并
+                    // 拒绝拖拽，表现为"有时完全滑不动"。代价只是失去下拉回弹，
+                    // scrollEndHaptic 照旧。详见提交 ca087c71 的诊断。
                     .nestedScroll(scrollBehavior.nestedScrollConnection)
                     .padding(horizontal = 12.dp),
                 contentPadding = innerPadding,

@@ -47,6 +47,7 @@ import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Scaffold
+import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.preference.ArrowPreference
@@ -100,6 +101,10 @@ fun SettingPagerMiuix(
                 overscrollEffect = null,
             ) {
                 item {
+                    SmallTitle(
+                        text = stringResource(R.string.settings_section_general),
+                        modifier = Modifier.padding(top = 12.dp),
+                    )
                     Card(
                         modifier = Modifier
                             .padding(top = 12.dp)
@@ -137,6 +142,10 @@ fun SettingPagerMiuix(
                         }
                     }
 
+                    SmallTitle(
+                        text = stringResource(R.string.settings_section_appearance),
+                        modifier = Modifier.padding(top = 12.dp),
+                    )
                     Card(
                         modifier = Modifier
                             .padding(top = 12.dp)
@@ -174,6 +183,10 @@ fun SettingPagerMiuix(
 
 
                     KsuIsValid {
+                        SmallTitle(
+                            text = stringResource(R.string.settings_section_features),
+                            modifier = Modifier.padding(top = 12.dp),
+                        )
                         Card(
                             modifier = Modifier
                                 .padding(top = 12.dp)
@@ -240,32 +253,15 @@ fun SettingPagerMiuix(
                     }
 
 
+                    SmallTitle(
+                        text = stringResource(R.string.settings_section_privacy),
+                        modifier = Modifier.padding(top = 12.dp),
+                    )
                     Card(
                         modifier = Modifier
-                            .padding(vertical = 12.dp)
+                            .padding(top = 12.dp)
                             .fillMaxWidth(),
                     ) {
-                        if (uiState.isLkmMode) {
-                            val uninstall = stringResource(id = R.string.settings_uninstall)
-                            ArrowPreference(
-                                title = uninstall,
-                                enabled = !uiState.isLateLoadMode,
-                                startAction = {
-                                    Icon(
-                                        Icons.Rounded.Delete,
-                                        modifier = Modifier.padding(end = 6.dp),
-                                        contentDescription = uninstall,
-                                        tint = colorScheme.onBackground,
-                                    )
-                                },
-                                onClick = { showUninstallDialog.value = true },
-                            )
-                            UninstallDialog(
-                                show = showUninstallDialog.value,
-                                onDismissRequest = { showUninstallDialog.value = false }
-                            )
-                        }
-
                         val hideManager = stringResource(id = R.string.settings_hide_manager)
                         ArrowPreference(
                             title = hideManager,
@@ -281,9 +277,13 @@ fun SettingPagerMiuix(
                             onClick = actions.onHideManager,
                         )
                     }
+                    SmallTitle(
+                        text = stringResource(R.string.settings_section_about),
+                        modifier = Modifier.padding(top = 12.dp),
+                    )
                     Card(
                         modifier = Modifier
-                            .padding(vertical = 12.dp)
+                            .padding(top = 12.dp)
                             .fillMaxWidth(),
                     ) {
                         ArrowPreference(
@@ -316,6 +316,38 @@ fun SettingPagerMiuix(
                             },
                             onClick = actions.onOpenAbout,
                         )
+                    }
+
+                    // 卸载是破坏性操作，单独成组并压到最末，不再和隐私开关挤同一张卡片。
+                    if (uiState.isLkmMode) {
+                        SmallTitle(
+                            text = stringResource(R.string.settings_section_danger),
+                            modifier = Modifier.padding(top = 12.dp),
+                        )
+                        Card(
+                            modifier = Modifier
+                                .padding(top = 12.dp)
+                                .fillMaxWidth(),
+                        ) {
+                            val uninstall = stringResource(id = R.string.settings_uninstall)
+                            ArrowPreference(
+                                title = uninstall,
+                                enabled = !uiState.isLateLoadMode,
+                                startAction = {
+                                    Icon(
+                                        Icons.Rounded.Delete,
+                                        modifier = Modifier.padding(end = 6.dp),
+                                        contentDescription = uninstall,
+                                        tint = colorScheme.onBackground,
+                                    )
+                                },
+                                onClick = { showUninstallDialog.value = true },
+                            )
+                            UninstallDialog(
+                                show = showUninstallDialog.value,
+                                onDismissRequest = { showUninstallDialog.value = false }
+                            )
+                        }
                     }
                     Spacer(Modifier.height(bottomInnerPadding))
                 }

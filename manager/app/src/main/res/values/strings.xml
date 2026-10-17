@@ -557,4 +557,11 @@
     <string name="susfs_field_blksize">块大小</string>
     <!-- 内置 Shizuku -->
     <string name="shizuku_permission_binder_timeout">Shizuku 服务未就绪，请稍后重试</string>
+    <!-- 设置页分组标题 -->
+    <string name="settings_section_general">General</string>
+    <string name="settings_section_appearance">Appearance</string>
+    <string name="settings_section_features">Features</string>
+    <string name="settings_section_privacy">Privacy</string>
+    <string name="settings_section_about">About</string>
+    <string name="settings_section_danger">Danger zone</string>
 </resources>
