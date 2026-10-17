@@ -64,6 +64,16 @@ import rikka.shizuku.server.util.UserHandleCompat;
 public class ShizukuService extends Service<ShizukuUserServiceManager, ShizukuClientManager, ShizukuConfigManager> {
 
     public static void main(String[] args) {
+        // 隐藏管理器（随机包名）场景：管理器启动 server 时通过
+        // -Dshizuku.manager.packageName=<实际包名> 传入运行时包名。
+        // 必须在构造 ShizukuService（其构造函数会用 MANAGER_APPLICATION_ID
+        // 查找管理器 ApplicationInfo、注册 ContentProvider 等）之前覆盖，
+        // 否则 server 会因找不到管理器而 System.exit(MANAGER_APP_NOT_FOUND)。
+        String runtimePackageName = System.getProperty("shizuku.manager.packageName");
+        if (runtimePackageName != null && !runtimePackageName.isEmpty()) {
+            ServerConstants.overrideManagerApplicationId(runtimePackageName);
+        }
+
         DdmHandleAppName.setAppName("shizuku_server", 0);
         RishConfig.setLibraryPath(System.getProperty("shizuku.library.path"));
 

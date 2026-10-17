@@ -1,9 +1,7 @@
 package me.weishu.kernelsu.ui.screen.shizuku
 
-import android.content.pm.ApplicationInfo
 import android.content.pm.PackageInfo
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,11 +16,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Article
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.WaterDrop
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -46,7 +43,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -58,6 +54,7 @@ import me.weishu.kernelsu.shizuku.ShizukuServiceManager
 import me.weishu.kernelsu.ui.LocalUiMode
 import me.weishu.kernelsu.ui.isMiuixFamily
 import me.weishu.kernelsu.ui.navigation3.LocalNavigator
+import me.weishu.kernelsu.ui.navigation3.Route
 import top.yukonga.miuix.kmp.basic.Card as MiuixCard
 import top.yukonga.miuix.kmp.basic.Icon as MiuixIcon
 import top.yukonga.miuix.kmp.basic.IconButton as MiuixIconButton
@@ -74,38 +71,37 @@ import top.yukonga.miuix.kmp.icon.extended.Back
  * Shizuku 内置服务管理面板。
  *
  * 功能：
- * - 查看服务运行状态，手动启动/停止
+ * - 查看服务运行状态与运行身份（root / shell），手动启动/停止
  * - 开机自启开关
- * - 已授权应用列表，显示授权状态，可授权/撤销
- * - 查看服务器日志，可刷新/清除
+ * - 已授权应用列表，按名称排序，显示授权状态与权限等级
+ * - 每个应用可独立控制授权与 root 访问（shellOnly 分权）
+ * - 入口跳转至独立日志页面
  */
 @Composable
 fun ShizukuScreen() {
     val navigator = LocalNavigator.current
-
     val uiMode = LocalUiMode.current
     if (uiMode.isMiuixFamily) {
-        ShizukuScreenMiuix(onBack = { navigator.pop() })
+        ShizukuScreenMiuix(onBack = { navigator.pop() }, onOpenLog = { navigator.push(Route.ShizukuLog) })
     } else {
-        ShizukuScreenMaterial(onBack = { navigator.pop() })
+        ShizukuScreenMaterial(onBack = { navigator.pop() }, onOpenLog = { navigator.push(Route.ShizukuLog) })
     }
 }
 
-// ── 共享状态逻辑 ────────────────────────────────────────────────────────────
+// ── 共享状态与数据模型 ──────────────────────────────────────────────────────
 
 private data class ShizukuAppEntry(
     val info: PackageInfo,
     val uid: Int,
     val allowed: Boolean,
+    val shellOnly: Boolean,
 )
 
 private data class ShizukuState(
     val running: Boolean = false,
+    val serverIsRoot: Boolean = false,
     val bootEnabled: Boolean = false,
     val apps: List<ShizukuAppEntry> = emptyList(),
-    val log: String = "",
-    /** false = server 持久日志，true = 系统 logcat（Shizuku 相关 tag 过滤） */
-    val showLogcat: Boolean = false,
     val loading: Boolean = false,
     val starting: Boolean = false,
     val stopping: Boolean = false,
@@ -116,33 +112,35 @@ private data class ShizukuState(
 private fun rememberShizukuState(): Pair<ShizukuState, ShizukuActions> {
     var state by remember { mutableStateOf(ShizukuState()) }
     val scope = rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
 
-    suspend fun refresh(showLogcat: Boolean = state.showLogcat) {
+    suspend fun refresh() {
         state = state.copy(loading = true)
         val running = withContext(Dispatchers.IO) { ShizukuServiceManager.isServerRunning() }
-        val apps = withContext(Dispatchers.IO) {
-            ShizukuServiceManager.getApplications()?.mapNotNull { pkg ->
-                val uid = pkg.applicationInfo?.uid ?: return@mapNotNull null
-                ShizukuAppEntry(
-                    info = pkg,
-                    uid = uid,
-                    allowed = runCatching { ShizukuServiceManager.isAllowed(uid) }.getOrDefault(false),
-                )
-            }?.distinctBy { it.uid }
-        }
-        // 无条件读取日志：getServerLog 内部先走 binder，不可达时回退
-        // 直读 /data/local/tmp/shizuku_ksu.log。服务未启动或启动失败时，
-        // 残留的启动日志仍然可见，便于排查"无法启动"根因。
-        // showLogcat 时读取 logcat 作为补充来源。
-        val log = withContext(Dispatchers.IO) {
-            if (showLogcat) ShizukuServiceManager.getLogcat()
-            else ShizukuServiceManager.getServerLog()
+        val serverIsRoot = if (running) withContext(Dispatchers.IO) { ShizukuServiceManager.isRootServer() } else false
+        val apps = if (running) {
+            withContext(Dispatchers.IO) {
+                ShizukuServiceManager.getApplications()?.mapNotNull { pkg ->
+                    val uid = pkg.applicationInfo?.uid ?: return@mapNotNull null
+                    ShizukuAppEntry(
+                        info = pkg,
+                        uid = uid,
+                        allowed = runCatching { ShizukuServiceManager.isAllowed(uid) }.getOrDefault(false),
+                        shellOnly = runCatching { ShizukuServiceManager.getShellOnly(uid) }.getOrDefault(false),
+                    )
+                }?.distinctBy { it.uid }?.sortedBy { app ->
+                    runCatching {
+                        app.info.applicationInfo?.loadLabel(context.packageManager)?.toString()?.lowercase().orEmpty()
+                    }.getOrDefault("")
+                }
+            } ?: emptyList()
+        } else {
+            emptyList()
         }
         state = state.copy(
             running = running,
-            apps = apps ?: emptyList(),
-            log = log,
-            showLogcat = showLogcat,
+            serverIsRoot = serverIsRoot,
+            apps = apps,
             loading = false,
         )
     }
@@ -159,11 +157,7 @@ private fun rememberShizukuState(): Pair<ShizukuState, ShizukuActions> {
                 val ok = withContext(Dispatchers.IO) { ShizukuServiceManager.start(it) }
                 state = state.copy(starting = false)
                 if (!ok) {
-                    val log = withContext(Dispatchers.IO) { ShizukuServiceManager.getServerLog() }
-                    state = state.copy(
-                        startError = "启动失败，请查看日志",
-                        log = log,
-                    )
+                    state = state.copy(startError = "启动失败，请查看日志")
                 }
                 refresh()
             }
@@ -181,16 +175,15 @@ private fun rememberShizukuState(): Pair<ShizukuState, ShizukuActions> {
             state = state.copy(bootEnabled = enabled)
         },
         onRefresh = { scope.launch { refresh() } },
-        onSwitchLogSource = { showLogcat -> scope.launch { refresh(showLogcat) } },
-        onClearLog = {
+        onToggleApp = { uid, currentlyAllowed ->
             scope.launch {
-                withContext(Dispatchers.IO) { ShizukuServiceManager.clearServerLog() }
+                runCatching { ShizukuServiceManager.setAllowed(uid, !currentlyAllowed) }
                 refresh()
             }
         },
-        onToggleApp = { uid, currentlyAllowed ->
+        onToggleRoot = { uid, currentlyShellOnly ->
             scope.launch {
-                withContext(Dispatchers.IO) { ShizukuServiceManager.setAllowed(uid, !currentlyAllowed) }
+                runCatching { ShizukuServiceManager.setShellOnly(uid, !currentlyShellOnly) }
                 refresh()
             }
         },
@@ -204,15 +197,14 @@ private data class ShizukuActions(
     val onStop: () -> Unit,
     val onBootChange: (Boolean) -> Unit,
     val onRefresh: () -> Unit,
-    val onSwitchLogSource: (Boolean) -> Unit,
-    val onClearLog: () -> Unit,
     val onToggleApp: (uid: Int, currentlyAllowed: Boolean) -> Unit,
+    val onToggleRoot: (uid: Int, currentlyShellOnly: Boolean) -> Unit,
 )
 
 // ── Miuix 版本 ──────────────────────────────────────────────────────────────
 
 @Composable
-private fun ShizukuScreenMiuix(onBack: () -> Unit) {
+private fun ShizukuScreenMiuix(onBack: () -> Unit, onOpenLog: () -> Unit) {
     val (state, actions) = rememberShizukuState()
     val context = androidx.compose.ui.platform.LocalContext.current
 
@@ -225,6 +217,22 @@ private fun ShizukuScreenMiuix(onBack: () -> Unit) {
                         MiuixIcon(
                             imageVector = MiuixIcons.Back,
                             contentDescription = null,
+                            tint = colorScheme.onSurface,
+                        )
+                    }
+                },
+                actions = {
+                    MiuixIconButton(onClick = onOpenLog) {
+                        MiuixIcon(
+                            imageVector = Icons.Filled.Article,
+                            contentDescription = "日志",
+                            tint = colorScheme.onSurface,
+                        )
+                    }
+                    MiuixIconButton(onClick = actions.onRefresh) {
+                        MiuixIcon(
+                            imageVector = Icons.Filled.Refresh,
+                            contentDescription = "刷新",
                             tint = colorScheme.onSurface,
                         )
                     }
@@ -261,7 +269,14 @@ private fun ShizukuScreenMiuix(onBack: () -> Unit) {
                                     color = colorScheme.onSurface,
                                 )
                                 MiuixText(
-                                    text = if (state.running) "Shizuku 服务正在运行" else "Shizuku 服务未启动",
+                                    text = buildString {
+                                        if (state.running) {
+                                            append(if (state.serverIsRoot) "Root 模式" else "Shell 模式")
+                                            append(" · Shizuku 服务正在运行")
+                                        } else {
+                                            append("Shizuku 服务未启动")
+                                        }
+                                    },
                                     fontSize = 13.sp,
                                     color = colorScheme.onSurfaceVariantSummary,
                                 )
@@ -347,9 +362,15 @@ private fun ShizukuScreenMiuix(onBack: () -> Unit) {
                             )
                         }
                         Spacer(Modifier.height(8.dp))
-                        if (state.apps.isEmpty()) {
+                        if (!state.running) {
                             MiuixText(
-                                text = if (state.running) "暂无支持 Shizuku 的应用" else "服务未启动，无法获取应用列表",
+                                text = "服务未启动，无法获取应用列表",
+                                fontSize = 14.sp,
+                                color = colorScheme.onSurfaceVariantSummary,
+                            )
+                        } else if (state.apps.isEmpty()) {
+                            MiuixText(
+                                text = "暂无支持 Shizuku 的应用",
                                 fontSize = 14.sp,
                                 color = colorScheme.onSurfaceVariantSummary,
                             )
@@ -357,80 +378,10 @@ private fun ShizukuScreenMiuix(onBack: () -> Unit) {
                             state.apps.forEach { app ->
                                 AppRowMiuix(
                                     app = app,
-                                    onToggle = { actions.onToggleApp(app.uid, app.allowed) },
+                                    serverIsRoot = state.serverIsRoot,
+                                    onToggleAllowed = { actions.onToggleApp(app.uid, app.allowed) },
+                                    onToggleRoot = { actions.onToggleRoot(app.uid, app.shellOnly) },
                                 )
-                            }
-                        }
-                    }
-                }
-            }
-
-            item { Spacer(Modifier.height(12.dp)) }
-
-            // 日志卡片
-            item {
-                MiuixCard(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            MiuixText(
-                                text = if (state.showLogcat) "系统日志 (logcat)" else "服务日志",
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = colorScheme.onSurface,
-                                modifier = Modifier.weight(1f),
-                            )
-                            MiuixTextButton(
-                                text = "服务",
-                                onClick = { actions.onSwitchLogSource(false) },
-                            )
-                            MiuixTextButton(
-                                text = "Logcat",
-                                onClick = { actions.onSwitchLogSource(true) },
-                            )
-                            MiuixIconButton(onClick = actions.onRefresh) {
-                                MiuixIcon(
-                                    imageVector = Icons.Filled.Refresh,
-                                    contentDescription = "刷新",
-                                    tint = colorScheme.onSurface,
-                                    modifier = Modifier.size(20.dp),
-                                )
-                            }
-                            MiuixIconButton(onClick = actions.onClearLog) {
-                                MiuixIcon(
-                                    imageVector = Icons.Filled.Delete,
-                                    contentDescription = "清除",
-                                    tint = colorScheme.onSurface,
-                                    modifier = Modifier.size(20.dp),
-                                )
-                            }
-                        }
-                        Spacer(Modifier.height(8.dp))
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(200.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(Color(0xFF1A1A1A)),
-                        ) {
-                            if (state.log.isBlank()) {
-                                MiuixText(
-                                    text = if (state.running) "暂无日志" else "暂无日志（服务未启动或启动失败）",
-                                    fontSize = 13.sp,
-                                    color = Color(0xFF888888),
-                                    modifier = Modifier.align(Alignment.Center),
-                                )
-                            } else {
-                                androidx.compose.foundation.text.selection.SelectionContainer {
-                                    MiuixText(
-                                        text = state.log,
-                                        fontSize = 11.sp,
-                                        color = Color(0xFFCCCCCC),
-                                        fontFamily = FontFamily.Monospace,
-                                    )
-                                }
                             }
                         }
                     }
@@ -443,7 +394,12 @@ private fun ShizukuScreenMiuix(onBack: () -> Unit) {
 }
 
 @Composable
-private fun AppRowMiuix(app: ShizukuAppEntry, onToggle: () -> Unit) {
+private fun AppRowMiuix(
+    app: ShizukuAppEntry,
+    serverIsRoot: Boolean,
+    onToggleAllowed: () -> Unit,
+    onToggleRoot: () -> Unit,
+) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val appInfo = app.info.applicationInfo
     val label = appInfo?.loadLabel(context.packageManager)?.toString() ?: app.info.packageName
@@ -453,54 +409,134 @@ private fun AppRowMiuix(app: ShizukuAppEntry, onToggle: () -> Unit) {
         null
     }
 
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .padding(vertical = 10.dp),
     ) {
-        if (icon != null) {
-            androidx.compose.foundation.Image(
-                painter = androidx.compose.ui.graphics.painter.BitmapPainter(
-                    icon.toBitmap().asImageBitmap()
-                ),
-                contentDescription = null,
-                modifier = Modifier.size(36.dp),
-            )
-        } else {
-            MiuixIcon(
-                imageVector = Icons.Filled.Check,
-                contentDescription = null,
-                tint = colorScheme.primary,
-                modifier = Modifier.size(36.dp),
-            )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (icon != null) {
+                androidx.compose.foundation.Image(
+                    painter = androidx.compose.ui.graphics.painter.BitmapPainter(
+                        icon.toBitmap().asImageBitmap()
+                    ),
+                    contentDescription = null,
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(10.dp)),
+                )
+            } else {
+                MiuixIcon(
+                    imageVector = Icons.Filled.Check,
+                    contentDescription = null,
+                    tint = colorScheme.primary,
+                    modifier = Modifier.size(40.dp),
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                MiuixText(
+                    text = label,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = colorScheme.onSurface,
+                )
+                MiuixText(
+                    text = "${app.info.packageName} · UID ${app.uid}",
+                    fontSize = 12.sp,
+                    color = colorScheme.onSurfaceVariantSummary,
+                )
+                // 状态标签行
+                Row(
+                    modifier = Modifier.padding(top = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    StatusChip(
+                        text = if (app.allowed) "已授权" else "未授权",
+                        color = if (app.allowed) Color(0xFF4CAF50) else colorScheme.onSurfaceVariantSummary,
+                    )
+                    if (serverIsRoot) {
+                        StatusChip(
+                            text = if (app.shellOnly) "Shell 权限" else "Root 权限",
+                            color = if (!app.shellOnly) Color(0xFF2196F3) else colorScheme.onSurfaceVariantSummary,
+                        )
+                    }
+                }
+            }
         }
-        Spacer(Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            MiuixText(
-                text = label,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium,
-                color = colorScheme.onSurface,
-            )
-            MiuixText(
-                text = if (app.allowed) "${app.info.packageName} · 已授权" else "${app.info.packageName} · 未授权",
-                fontSize = 12.sp,
-                color = if (app.allowed) Color(0xFF4CAF50) else colorScheme.onSurfaceVariantSummary,
-            )
+
+        // 控制开关行
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                MiuixText(
+                    text = "Shizuku 授权",
+                    fontSize = 14.sp,
+                    color = colorScheme.onSurface,
+                )
+                MiuixText(
+                    text = if (app.allowed) "允许该应用使用 Shizuku" else "拒绝该应用使用 Shizuku",
+                    fontSize = 12.sp,
+                    color = colorScheme.onSurfaceVariantSummary,
+                )
+            }
+            Switch(checked = app.allowed, onCheckedChange = { onToggleAllowed() })
         }
-        MiuixTextButton(
-            text = if (app.allowed) "撤销" else "授权",
-            onClick = onToggle,
+
+        if (serverIsRoot) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    MiuixText(
+                        text = "Root 访问",
+                        fontSize = 14.sp,
+                        color = colorScheme.onSurface,
+                    )
+                    MiuixText(
+                        text = if (app.shellOnly) "降级为 Shell 权限执行命令" else "以 Root 权限执行命令",
+                        fontSize = 12.sp,
+                        color = colorScheme.onSurfaceVariantSummary,
+                    )
+                }
+                Switch(checked = !app.shellOnly, onCheckedChange = { onToggleRoot() })
+            }
+        }
+    }
+}
+
+@Composable
+private fun StatusChip(text: String, color: Color) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(color.copy(alpha = 0.15f))
+            .padding(horizontal = 8.dp, vertical = 2.dp),
+    ) {
+        MiuixText(
+            text = text,
+            fontSize = 11.sp,
+            color = color,
+            fontWeight = FontWeight.Medium,
         )
     }
 }
 
-// ── Material 版本 ────────────────────────────────────────────────────────────
+// ── Material 3 版本 ─────────────────────────────────────────────────────────
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ShizukuScreenMaterial(onBack: () -> Unit) {
+private fun ShizukuScreenMaterial(onBack: () -> Unit, onOpenLog: () -> Unit) {
     val (state, actions) = rememberShizukuState()
     val context = androidx.compose.ui.platform.LocalContext.current
 
@@ -511,9 +547,17 @@ private fun ShizukuScreenMaterial(onBack: () -> Unit) {
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(
-                            imageVector = Icons.Filled.WaterDrop,
+                            imageVector = MiuixIcons.Back,
                             contentDescription = null,
                         )
+                    }
+                },
+                actions = {
+                    IconButton(onClick = onOpenLog) {
+                        Icon(Icons.Filled.Article, contentDescription = "日志")
+                    }
+                    IconButton(onClick = actions.onRefresh) {
+                        Icon(Icons.Filled.Refresh, contentDescription = "刷新")
                     }
                 },
             )
@@ -551,7 +595,14 @@ private fun ShizukuScreenMaterial(onBack: () -> Unit) {
                                     fontWeight = FontWeight.SemiBold,
                                 )
                                 Text(
-                                    text = if (state.running) "Shizuku 服务正在运行" else "Shizuku 服务未启动",
+                                    text = buildString {
+                                        if (state.running) {
+                                            append(if (state.serverIsRoot) "Root 模式" else "Shell 模式")
+                                            append(" · Shizuku 服务正在运行")
+                                        } else {
+                                            append("Shizuku 服务未启动")
+                                        }
+                                    },
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -639,9 +690,15 @@ private fun ShizukuScreenMaterial(onBack: () -> Unit) {
                             )
                         }
                         Spacer(Modifier.height(8.dp))
-                        if (state.apps.isEmpty()) {
+                        if (!state.running) {
                             Text(
-                                text = if (state.running) "暂无支持 Shizuku 的应用" else "服务未启动，无法获取应用列表",
+                                text = "服务未启动，无法获取应用列表",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        } else if (state.apps.isEmpty()) {
+                            Text(
+                                text = "暂无支持 Shizuku 的应用",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -649,76 +706,10 @@ private fun ShizukuScreenMaterial(onBack: () -> Unit) {
                             state.apps.forEach { app ->
                                 AppRowMaterial(
                                     app = app,
-                                    onToggle = { actions.onToggleApp(app.uid, app.allowed) },
+                                    serverIsRoot = state.serverIsRoot,
+                                    onToggleAllowed = { actions.onToggleApp(app.uid, app.allowed) },
+                                    onToggleRoot = { actions.onToggleRoot(app.uid, app.shellOnly) },
                                 )
-                            }
-                        }
-                    }
-                }
-            }
-
-            // 日志卡片
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                    ),
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                text = if (state.showLogcat) "系统日志 (logcat)" else "服务日志",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Medium,
-                                modifier = Modifier.weight(1f),
-                            )
-                            TextButton(onClick = { actions.onSwitchLogSource(false) }) {
-                                Text("服务", style = MaterialTheme.typography.labelMedium)
-                            }
-                            TextButton(onClick = { actions.onSwitchLogSource(true) }) {
-                                Text("Logcat", style = MaterialTheme.typography.labelMedium)
-                            }
-                            IconButton(onClick = actions.onRefresh) {
-                                Icon(
-                                    imageVector = Icons.Filled.Refresh,
-                                    contentDescription = "刷新",
-                                )
-                            }
-                            IconButton(onClick = actions.onClearLog) {
-                                Icon(
-                                    imageVector = Icons.Filled.Delete,
-                                    contentDescription = "清除",
-                                )
-                            }
-                        }
-                        Spacer(Modifier.height(8.dp))
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(200.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(Color(0xFF1A1A1A)),
-                        ) {
-                            if (state.log.isBlank()) {
-                                Text(
-                                    text = if (state.running) "暂无日志" else "暂无日志（服务未启动或启动失败）",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = Color(0xFF888888),
-                                    modifier = Modifier.align(Alignment.Center),
-                                )
-                            } else {
-                                androidx.compose.foundation.text.selection.SelectionContainer {
-                                    Text(
-                                        text = state.log,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = Color(0xFFCCCCCC),
-                                        fontFamily = FontFamily.Monospace,
-                                    )
-                                }
                             }
                         }
                     }
@@ -729,7 +720,12 @@ private fun ShizukuScreenMaterial(onBack: () -> Unit) {
 }
 
 @Composable
-private fun AppRowMaterial(app: ShizukuAppEntry, onToggle: () -> Unit) {
+private fun AppRowMaterial(
+    app: ShizukuAppEntry,
+    serverIsRoot: Boolean,
+    onToggleAllowed: () -> Unit,
+    onToggleRoot: () -> Unit,
+) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val appInfo = app.info.applicationInfo
     val label = appInfo?.loadLabel(context.packageManager)?.toString() ?: app.info.packageName
@@ -739,43 +735,120 @@ private fun AppRowMaterial(app: ShizukuAppEntry, onToggle: () -> Unit) {
         null
     }
 
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .padding(vertical = 10.dp),
     ) {
-        if (icon != null) {
-            androidx.compose.foundation.Image(
-                painter = androidx.compose.ui.graphics.painter.BitmapPainter(
-                    icon.toBitmap().asImageBitmap()
-                ),
-                contentDescription = null,
-                modifier = Modifier.size(36.dp),
-            )
-        } else {
-            Icon(
-                imageVector = Icons.Filled.Check,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(36.dp),
-            )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (icon != null) {
+                androidx.compose.foundation.Image(
+                    painter = androidx.compose.ui.graphics.painter.BitmapPainter(
+                        icon.toBitmap().asImageBitmap()
+                    ),
+                    contentDescription = null,
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(10.dp)),
+                )
+            } else {
+                Icon(
+                    imageVector = Icons.Filled.Check,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(40.dp),
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Medium,
+                )
+                Text(
+                    text = "${app.info.packageName} · UID ${app.uid}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Row(
+                    modifier = Modifier.padding(top = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    StatusChipMaterial(
+                        text = if (app.allowed) "已授权" else "未授权",
+                        color = if (app.allowed) Color(0xFF4CAF50) else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (serverIsRoot) {
+                        StatusChipMaterial(
+                            text = if (app.shellOnly) "Shell 权限" else "Root 权限",
+                            color = if (!app.shellOnly) Color(0xFF2196F3) else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
         }
-        Spacer(Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Medium,
-            )
-            Text(
-                text = if (app.allowed) "${app.info.packageName} · 已授权" else "${app.info.packageName} · 未授权",
-                style = MaterialTheme.typography.bodySmall,
-                color = if (app.allowed) Color(0xFF4CAF50) else MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Shizuku 授权",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Text(
+                    text = if (app.allowed) "允许该应用使用 Shizuku" else "拒绝该应用使用 Shizuku",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Switch(checked = app.allowed, onCheckedChange = { onToggleAllowed() })
         }
-        TextButton(onClick = onToggle) {
-            Text(if (app.allowed) "撤销" else "授权")
+
+        if (serverIsRoot) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Root 访问",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Text(
+                        text = if (app.shellOnly) "降级为 Shell 权限执行命令" else "以 Root 权限执行命令",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(checked = !app.shellOnly, onCheckedChange = { onToggleRoot() })
+            }
         }
+    }
+}
+
+@Composable
+private fun StatusChipMaterial(text: String, color: Color) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(color.copy(alpha = 0.15f))
+            .padding(horizontal = 8.dp, vertical = 2.dp),
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelSmall,
+            color = color,
+            fontWeight = FontWeight.Medium,
+        )
     }
 }

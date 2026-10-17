@@ -42,7 +42,7 @@ public class ServiceStarter {
         }
     }
 
-    private static final String USER_SERVICE_CMD_FORMAT = "(CLASSPATH='%s' %s%s /system/bin " +
+    private static final String USER_SERVICE_CMD_FORMAT = "(CLASSPATH='%s' %s%s -Dshizuku.manager.packageName='%s' /system/bin " +
             "--nice-name='%s' moe.shizuku.starter.ServiceStarter " +
             "--token='%s' --package='%s' --class='%s' --uid=%d%s)&";
 
@@ -51,15 +51,24 @@ public class ServiceStarter {
     @SuppressWarnings("FieldCanBeLocal")
     private static IBinder shizukuBinder;
 
-    public static String commandForUserService(String appProcess, String managerApkPath, String token, String packageName, String classname, String processNameSuffix, int callingUid, boolean debug) {
+    public static String commandForUserService(String appProcess, String managerApkPath, String managerPackageName, String token, String packageName, String classname, String processNameSuffix, int callingUid, boolean debug) {
         String processName = String.format("%s:%s", packageName, processNameSuffix);
         return String.format(Locale.ENGLISH, USER_SERVICE_CMD_FORMAT,
                 managerApkPath, appProcess, debug ? (" " + DEBUG_ARGS) : "",
+                managerPackageName,
                 processName,
                 token, packageName, classname, callingUid, debug ? (" " + "--debug-name=" + processName) : "");
     }
 
     public static void main(String[] args) {
+        // 隐藏管理器（随机包名）场景：server 启动 user service 时通过
+        // -Dshizuku.manager.packageName 传入实际包名，需在 sendBinder 查找
+        // 管理器 ContentProvider 之前覆盖 ServerConstants.MANAGER_APPLICATION_ID。
+        String runtimePackageName = System.getProperty("shizuku.manager.packageName");
+        if (runtimePackageName != null && !runtimePackageName.isEmpty()) {
+            rikka.shizuku.server.ServerConstants.overrideManagerApplicationId(runtimePackageName);
+        }
+
         if (Looper.getMainLooper() == null) {
             Looper.prepareMainLooper();
         }

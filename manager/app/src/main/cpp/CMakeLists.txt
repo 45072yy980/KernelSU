@@ -52,3 +52,37 @@ if(ANDROID_ABI STREQUAL "arm64-v8a")
             SUFFIX ".so"
             PREFIX "lib")
 endif()
+
+# ---------------------------------------------------------------------------
+# Shizuku 内置服务所需 native 库
+#
+# librish.so — Shizuku server 执行 shell 命令的核心交互库（PTY 终端、
+#   进程托管）。由 app_process 启动的 rikka.shizuku.server.ShizukuService
+#   通过 System.loadLibrary("rish") 加载，是 Shizuku 能够执行命令的前提。
+#   缺少此库会导致 server 启动后核心功能不可用（UnsatisfiedLinkError）。
+#
+# fpdrop — Shizuku 分权控制的 shell 级降权可执行文件（setuid/setgid +
+#   清空 capability）。编译产物拷贝到 src/main/assets/fpdrop，由 manager
+#   释放到 /data/local/tmp/fpdrop，server 降权执行时以
+#   `/data/local/tmp/fpdrop 2000 2000 -- <cmd...>` 调用。
+# ---------------------------------------------------------------------------
+
+add_library(rish SHARED
+        rish/main.cpp
+        rish/pts.cpp
+        rish/rikka_rish_RishTerminal.cpp
+        rish/rikka_rish_RishHost.cpp)
+target_compile_options(rish PRIVATE -fno-exceptions -fno-rtti -ffunction-sections -fdata-sections)
+target_link_libraries(rish ${log-lib})
+if (NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
+    add_custom_command(TARGET rish POST_BUILD
+            COMMAND ${CMAKE_STRIP} --remove-section=.comment "$<TARGET_FILE:rish>")
+endif ()
+
+add_executable(fpdrop fpdrop/fpdrop.c)
+target_compile_options(fpdrop PRIVATE -ffunction-sections -fdata-sections -fno-unwind-tables)
+target_link_libraries(fpdrop ${log-lib})
+target_link_options(fpdrop PRIVATE "-Wl,--build-id=none" "-Wl,-s,-x,--gc-sections")
+add_custom_command(TARGET fpdrop POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_SOURCE_DIR}/../assets"
+        COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:fpdrop>" "${CMAKE_CURRENT_SOURCE_DIR}/../assets/fpdrop")

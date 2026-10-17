@@ -169,9 +169,16 @@ object ShizukuServiceManager {
                 return false
             }
             val libraryPath = context.applicationInfo.nativeLibraryDir
+            // 隐藏管理器（随机包名）场景：编译时 BuildConfig.APPLICATION_ID 与
+            // 实际安装包名不一致，server 端的 ServerConstants.MANAGER_APPLICATION_ID
+            // 是编译时常量，会导致 server 找不到管理器而退出。
+            // 通过 -Dshizuku.manager.packageName 把 context.packageName（实际运行包名）
+            // 传入 server，由 ShizukuService.main() 在初始化前覆盖常量。
+            val actualPackageName = context.packageName
             val inner = "/system/bin/setsid -d /system/bin/env CLASSPATH=\"$apkPath\" /system/bin/app_process " +
                 "-Djava.class.path=\"$apkPath\" " +
                 "-Dshizuku.library.path=\"$libraryPath\" " +
+                "-Dshizuku.manager.packageName=\"$actualPackageName\" " +
                 "/system/bin --nice-name=$SERVER_PROCESS_NAME $SERVER_CLASS " +
                 ">$SERVER_START_LOG 2>&1 </dev/null &"
 
@@ -380,6 +387,47 @@ object ShizukuServiceManager {
             Shizuku.pingBinder() && Shizuku.getUid() == 0
         } catch (t: Throwable) {
             false
+        }
+    }
+
+    /**
+     * 分权控制：该 uid 的应用是否降级为 shell (uid 2000) 执行。
+     * 仅当 server 以 root 运行时才有区分意义；shell 模式下所有命令天然是 shell 权限。
+     */
+    fun getShellOnly(uid: Int): Boolean {
+        if (!Shizuku.pingBinder()) return false
+        val data = Parcel.obtain()
+        val reply = Parcel.obtain()
+        return try {
+            data.writeInterfaceToken("moe.shizuku.server.IShizukuService")
+            data.writeInt(uid)
+            Shizuku.getBinder()!!.transact(ServerConstants.BINDER_TRANSACTION_getShellOnly, data, reply, 0)
+            reply.readException()
+            reply.readInt() != 0
+        } catch (t: Throwable) {
+            Log.e(TAG, "getShellOnly failed", t)
+            false
+        } finally {
+            reply.recycle()
+            data.recycle()
+        }
+    }
+
+    fun setShellOnly(uid: Int, shellOnly: Boolean) {
+        if (!Shizuku.pingBinder()) return
+        val data = Parcel.obtain()
+        val reply = Parcel.obtain()
+        try {
+            data.writeInterfaceToken("moe.shizuku.server.IShizukuService")
+            data.writeInt(uid)
+            data.writeInt(if (shellOnly) 1 else 0)
+            Shizuku.getBinder()!!.transact(ServerConstants.BINDER_TRANSACTION_setShellOnly, data, reply, 0)
+            reply.readException()
+        } catch (t: Throwable) {
+            Log.e(TAG, "setShellOnly failed", t)
+        } finally {
+            reply.recycle()
+            data.recycle()
         }
     }
 
