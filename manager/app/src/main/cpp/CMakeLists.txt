@@ -97,7 +97,10 @@ if(ANDROID_ABI STREQUAL "arm64-v8a")
     target_compile_options(dirtyfrag PRIVATE
             $<$<COMPILE_LANGUAGE:C>:-std=gnu11;-O2;-Wall;-Wextra;-Wno-unused-parameter;-Wno-sign-compare;-fno-stack-protector;-fomit-frame-pointer>
             -I${DIRTYFRAG_DIR}
-            -I${DIRTYFRAG_BUILD})
+            -I${DIRTYFRAG_BUILD}
+            # .incbin 走的是集成汇编器的搜索路径，普通 -I 对它无效。
+            -Wa,-I,${DIRTYFRAG_DIR}
+            -Wa,-I,${DIRTYFRAG_BUILD})
     target_link_options(dirtyfrag PRIVATE -fPIE -pie)
     set_target_properties(dirtyfrag PROPERTIES
             OUTPUT_NAME "dirtyfrag"
