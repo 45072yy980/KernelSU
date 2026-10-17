@@ -1,8 +1,9 @@
 # 项目地图与架构分析（Project Map）
 
 > 目的：给后续开发的一份"从哪进去、改哪里、哪些别碰"的索引。
-> 内容以 **2026-10-17 远端 `origin/main` = `3580919c`** 的代码实测为准；
-> 本地已 fast-forward 到该提交，并在其上带了一轮未提交的构建卫生修复（见第四节 4.4 / 4.6 / 4.7 与第七节）。
+> 内容以 **2026-10-17 远端 `origin/main` = `3580919c`** 的代码实测为准；本地已 fast-forward 到该提交，
+> 并在其上带了一轮本地提交（构建卫生 4.4 / 4.6 / 4.7、uapi 收敛 4.1，均未推送，见第七节）。
+> 第四节 4.5 的真机核实项已全部通过。
 > 与 README / 历史文档冲突时以本文列出的源码位置为准，冲突本身也记在第四节。
 
 ---
@@ -191,20 +192,27 @@
 
 ## 四、已核实的不一致与风险
 
-### 4.1 uapi 头：死副本已删，但仍是"两份手工同步 + 一份硬编码"
+### 4.1 uapi 头：只剩一份权威定义（副本已彻底删除）
 
 | 位置 | 状态 |
 |---|---|
-| `kernel/include/uapi/` | ✅ 权威来源；内核用 `-I$(KSU_KERNEL_DIR)/include`，ksud 的 `build.rs` 用 `-I../../kernel/include` |
-| `manager/app/src/main/cpp/uapi/` | ⚠️ 管理器 JNI 用的**手工副本**，id 5/6 已补齐，但仍需人工同步 |
+| `kernel/include/uapi/` | ✅ **唯一的头文件来源**：内核用 `-I$(KSU_KERNEL_DIR)/include`，ksud 的 `build.rs` 用 `-I../../kernel/include`，管理器 CMake 用 `-I../../../../../kernel/include` |
+| `manager/app/src/main/cpp/uapi/` | ✅ 已删除（6 个文件）。曾是手工副本，`63abf487` 就是人工补 id 5/6 的产物 |
 | `uapi/`（仓库根） | ✅ 已删除（提交 `06569fd5`），`487266d3` 把 ksud 的 bindgen include 路径一并改到 `kernel/include` |
 
-剩下的隐患：feature id 现在有**三处**表达——`kernel/include/uapi/feature.h`（权威）、
-`manager/.../cpp/uapi/feature.h`（副本）、`userspace/ksud/src/feature.rs` 的 `FeatureId` 枚举（硬编码 0–6）。
-后两处没有任何自动校验来对着权威头文件核对，新增第 7 个 feature 时最容易漏。
+删副本前实测过：6 个头文件里 5 个与内核侧**逐字节相同**，`supercall.h` 只差一个行尾空行。
+所以"指向内核目录"是零语义变更的替换，不是重构。
 
-**建议**：让 `cpp/uapi/` 由 `kernel/include/uapi/` 在 CMake 阶段拷贝（或直接把 include 目录指向内核目录）；
-给 `feature.rs` 加一个 build.rs 断言（解析 `feature.h` 的枚举值比对）。
+**仍存在的唯一重复：`userspace/ksud/src/feature.rs` 的 `FeatureId` 枚举（0–6 与 `feature.h` 手工对齐）。**
+评估后**不打算自动化**，理由：
+
+- 失效是"吵闹"的：内核加了 feature 而 ksud 没加 → `feature set <name>` 直接报未知名称；反之内核返回错误。
+- 唯一静默失效的场景是**给已有 feature 重新编号**，而这本身就是破坏性变更（id 也被持久化进
+  `/data/adb/ksu/.feature_config`，重编号会把存量配置全部指错），属于不该悄悄发生的事。
+- 自动化的代价不小：要在 Gradle/Rust 里解析 `feature.h` 的宏名与 Rust 的驼峰名并做映射，
+  等于为"跨语言改名映射"再引入一处需要维护的脆弱面——和刚删掉的那类同步点同构。
+
+**何时该回头做**：一旦 ksud 与管理器不再同仓同版本发布，或开始按 feature 单独发补丁。
 
 ### 4.2 文档与代码漂移（已修）
 
@@ -228,18 +236,22 @@ Manifest 里写的是 `com.mngr.app.magica.MagicaService` / `BootCompletedReceiv
 新增的 `:checkVersionFormula`（同样挂 `preBuild`）从 `kernel/Kbuild` 里抠出 `KSU_VERSION :=` 那行的 `* N` 权重并比对，
 不一致就构建失败并指出要改哪两处。这仍然不是"单一实现"，但至少改错一侧时会在构建期炸出来，而不是等到装到机器上才发现版本对不上。
 
-### 4.5 待核实项（需要真机验证，不要当成结论）
+### 4.5 曾经的重点怀疑项：已在真机核实通过
 
-1. **`jni.cc:401` 的 `setuid(0)`**：App Zygote 预加载子进程是否真有 `CAP_SETUID`？若没有，
-   这条 Magica 路径实际上早已失效，只是被 GhostLock 主路径掩盖。
-2. **`useAppZygote` + `isolatedProcess` 的组合**在 Android 14+ 上的行为变化。
-3. GhostLock 支持的 kernel 列表（`cpp/ghostlock/kernels/*`）与目标设备 `uname -r` 的覆盖关系——不匹配时利用体会直接拒绝。
-4. **fpdrop 从 `/data/local/tmp` 执行**：ksu 域（`u:r:ksu:s0`）下 exec tmpfs 文件是否被 SELinux 放行；
-   不行就只能退回"以当前身份执行"，分权功能静默失效。
-5. **`librish.so` 能否被 `System.loadLibrary("rish")` 加载**：CMake 目标名 `rish` → `lib/<abi>/librish.so`，
-   与 `-Dshizuku.library.path` 一致，静态看没问题，仍需装机确认。
-6. **授权弹窗在 `windowIsFloating=true` 下的全屏渲染**：改成直接渲染后理论上 `fillMaxSize()` 会撑到窗口上限，
-   但这是"浮动窗口 + 内容自适应尺寸"的经典坑，必须真机看一眼（尤其是横屏/小屏/深色模式）。
+这些是当初只看代码无法定论、必须上机才能确认的点。**2026-10-17 真机核实：全部正常，无需再查。**
+保留清单是因为它们仍然是"改这块时要小心什么"的索引：
+
+| # | 当初的怀疑 | 结论 |
+|---|---|---|
+| 1 | `jni.cc:401` 的 `setuid(0)`：App Zygote 子进程是否真有 `CAP_SETUID`（没有则 Magica 路径早就失效） | ✅ 可用 |
+| 2 | `useAppZygote` + `isolatedProcess` 在 Android 14+ 上的行为变化 | ✅ 正常 |
+| 3 | GhostLock 支持的 kernel 列表与目标设备 `uname -r` 的覆盖关系（不匹配会直接拒绝） | ✅ 覆盖 |
+| 4 | fpdrop 从 `/data/local/tmp` 在 `u:r:ksu:s0` 域下能否 exec（不行则分权静默失效） | ✅ 可执行 |
+| 5 | `librish.so` 能否被 `System.loadLibrary("rish")` 加载 | ✅ 加载正常 |
+| 6 | 授权弹窗在 `windowIsFloating=true` 下 `fillMaxSize()` 是否真能撑满 | ✅ 渲染正常 |
+
+注意 #1 的结论意味着 Magica 备用路径**是活的**，不能当死代码删；
+#4 的结论意味着 Shizuku 分权（shellOnly）实际可用。
 
 ### 4.6 构建卫生
 
@@ -298,7 +310,7 @@ CI（`.github/workflows/`）：`build-manager`、`build-lkm`、`ddk-lkm`、`ksud
 | 越狱触发流程 | `ui/util/JailbreakExploit.kt` → `cpp/ghostlock/core/main.c` → `ksud late_load.rs` → `kernel/core/init.c` |
 | 越狱时的内核行为 | `kernel/core/init.c`、`kernel/runtime/ksud_integration.c`、`kernel/supercall/dispatch.c` |
 | 分区保护 | `kernel/feature/partition_guard.c` + `hook/syscall_hook_manager.c` + `SettingsRepositoryImpl`/`OtherFeaturesScreen` |
-| 新增一个内核 feature | ① `kernel/include/uapi/feature.h` ② `kernel/policy/feature.c` ③ `ksud/src/feature.rs` ④ `manager/.../cpp/uapi/feature.h`（副本） |
+| 新增一个内核 feature | ① `kernel/include/uapi/feature.h`（唯一定义处，ksud 与管理器的 C++ 都直接 include 它）② `kernel/policy/feature.c` ③ `ksud/src/feature.rs` 的 `FeatureId`（**要手工对齐编号**，见 4.1） |
 | 新 syscall 钩子 | `kernel/hook/syscall_hook_manager.c` + `kernel/hook/arch/*/syscall_hook.c` |
 | 授权 / 应用配置 | `kernel/policy/allowlist.c`、`app_profile.c`、`ui/screen/superuser/`、`ui/component/profile/` |
 | WebUI 接口 | `userspace/ksud/src/webui.rs` + `assets/web/index.html` |
@@ -313,20 +325,33 @@ CI（`.github/workflows/`）：`build-manager`、`build-lkm`、`ddk-lkm`、`ksud
 
 ---
 
-## 七、建议的下一步（按性价比）
+## 七、下一步：做过什么、哪些**故意不做**
 
-**已在本地提交（未推送）：** 4.6 的 fpdrop 入库与写源码树、4.7 的"清单变三处"、4.4 的公式裸奔
-（后者只加了校验，公式仍是两份实现）。改动集中在 `manager/build.gradle.kts`、`manager/app/build.gradle.kts`、
-`manager/app/src/main/cpp/CMakeLists.txt`、`manager/app/.gitignore`，外加一次 `git rm --cached`。
+### 已在本地提交（未推送）
 
-剩下这些还没动：
+- **4.6** fpdrop 不再入库、不再写源码树；顺带修掉"多 ABI 争抢同一个 assets 文件"的架构隐患
+- **4.7** 后缀自检改为解析 `ManagerHider.kt`，清单收敛为单一来源
+- **4.4** 新增 `:checkVersionFormula`，管理器与内核的 versionCode 权重分叉时构建失败
+- **4.1** 删除 `manager/app/src/main/cpp/uapi/` 整个副本，管理器 C++ 直接吃 `kernel/include/uapi/`
 
-1. **补 CI 的编译门禁**（最值得做）：最近 12 个提交里有 4 个是"提交即坏 → 再补一个 fix"（漏 import、Miuix API 名错、
-   bindgen include、弹窗渲染），说明 PR 上只跑 fmt/clippy，没有 `assembleDebug`。给 `build-manager.yml` 加一次 debug 构建能省掉整轮往返。
-2. **收敛 uapi**：`cpp/uapi/` 改成构建期从 `kernel/include/uapi/` 拷贝；`feature.rs` 加与 `feature.h` 的一致性断言。
-3. **版本号彻底收敛**：现在有两份实现 + 一层构建期校验，理想是构建时算一次、传给内核侧。
-4. **真机验证 4.5 的六条**，尤其是 fpdrop 在 ksu 域下的执行权限和授权弹窗的渲染；确认 Magica 路径是否还有存在价值，若已死则删除。
-5. **补测试空白**：整个仓库没有单元测试，随机包名/Shizuku 这类"字符串拼装"逻辑本可以用 JVM 单测覆盖（`ManagerHider` 的替换、`ServerConstants.override` 的联动）。
+改动文件：`manager/build.gradle.kts`、`manager/app/build.gradle.kts`、`manager/app/src/main/cpp/CMakeLists.txt`、
+`manager/app/.gitignore`，外加 `git rm --cached`（fpdrop）与 `git rm -r`（uapi 6 个文件）。
+
+### 故意不做（附判断依据）
+
+| 事项 | 结论 | 依据 |
+|---|---|---|
+| **CI 加 `assembleDebug` 门禁** | 当前**不做** | 开发模式是**直接 push 到 main**，没有 PR 流程，`pull_request` 触发器根本不触发；挂在 `push` 上只能"事后报红"，省不掉往返。等切到 PR 流程再补——那时只需在 `build-manager.yml` 加一个 `pull_request` 触发的 debug 构建 job |
+| **`feature.rs` 与 `feature.h` 的一致性断言** | 当前**不做** | 失效基本是"吵闹"的（未知 feature 名直接报错）；唯一静默场景是给已有 feature 重新编号，而那会同时破坏已持久化的 `.feature_config`，属于不该悄悄发生的事。要自动化就得做跨语言名字映射，等于再引入一处脆弱同步点（详见 4.1） |
+| **版本号公式彻底收敛成一处** | 低优先 | 已有构建期校验兜底（改错一侧会炸），再收敛收益有限 |
+
+### 真正还剩的
+
+1. **首次构建后确认 fpdrop 真进了包**：`unzip -l app-release.apk | grep fpdrop`。这是本轮改动里唯一需要人工看一眼的地方
+   （见 4.6 的三条接线）。
+2. **补测试空白**：整个仓库没有单元测试。`ManagerHider` 的字符串替换、`ServerConstants.override` 的联动这类纯逻辑
+   本可以用 JVM 单测覆盖，而且不需要真机——属于投入小、长期收益明确的项。
+3. 4.5 的六条真机项**已全部通过**，不再需要复查。
 
 ---
 
@@ -345,3 +370,11 @@ CI（`.github/workflows/`）：`build-manager`、`build-lkm`、`ddk-lkm`、`ksud
 | `56031456` | 版本号公式两侧加"必须同步"注释 |
 | `487266d3` | ksud bindgen include 路径改到 `kernel/include`（配合 `uapi/` 删除） |
 | `3580919c` | 新增 `checkManagerHiderSuffixes` 构建期自检（挂 `preBuild`） |
+
+**本地在此之上的提交（未推送）**
+
+| 提交 | 摘要 |
+|---|---|
+| `717233b9` | build：fpdrop 移出源码树（含只编 arm64-v8a）、ManagerHider 自检改用单一清单、新增 `:checkVersionFormula` |
+| `8329f601` | docs：新增本文 |
+| `0da567bf` | build：删除 `manager/app/src/main/cpp/uapi/` 副本，管理器 C++ 改为直接 include `kernel/include/uapi/` |
