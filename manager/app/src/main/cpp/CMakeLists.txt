@@ -87,7 +87,10 @@ if(ANDROID_ABI STREQUAL "arm64-v8a")
             COMMENT "Building dirtyfrag splicehelper")
     add_custom_target(dirtyfrag_splicehelper DEPENDS "${DIRTYFRAG_SPLICEHELPER}")
 
-    add_executable(dirtyfrag exp.c libcxx.S elf_parser.c)
+    add_executable(dirtyfrag
+            "${DIRTYFRAG_DIR}/exp.c"
+            "${DIRTYFRAG_DIR}/libcxx.S"
+            "${DIRTYFRAG_DIR}/elf_parser.c")
     add_dependencies(dirtyfrag dirtyfrag_splicehelper)
     target_include_directories(dirtyfrag PRIVATE "${DIRTYFRAG_DIR}" "${DIRTYFRAG_BUILD}")
     target_compile_definitions(dirtyfrag PRIVATE _GNU_SOURCE)
@@ -101,7 +104,7 @@ if(ANDROID_ABI STREQUAL "arm64-v8a")
             SUFFIX ".so"
             PREFIX "lib")
 
-    add_executable(dirtyfrag_bootstrap bootstrap.c)
+    add_executable(dirtyfrag_bootstrap "${DIRTYFRAG_DIR}/bootstrap.c")
     target_compile_definitions(dirtyfrag_bootstrap PRIVATE _GNU_SOURCE)
     target_compile_options(dirtyfrag_bootstrap PRIVATE -std=gnu11 -O2 -Wall -Wno-unused-parameter)
     target_link_options(dirtyfrag_bootstrap PRIVATE -fPIE -pie)
