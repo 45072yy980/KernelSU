@@ -135,6 +135,9 @@ KSU_TAG_MINOR := $(word 2,$(KSU_TAG_NUMBERS))
 KSU_TAG_PATCH := $(word 3,$(KSU_TAG_NUMBERS))
 KSU_COMMITS_AFTER_TAG := $(shell cd $(GIT_ROOT) && $(GIT) rev-list --count '$(KSU_TAG)'..HEAD 2>/dev/null)
 # Arithmetic through the shell's own $(( )) so no bare `*` ever reaches a glob.
+# ⚠️ 此公式必须与 manager/build.gradle.kts 中 getVersionCode() 保持一致：
+# major*10000 + minor*1000 + patch*100 + commits_after_tag
+# 改一处必须同步改另一处，否则管理器与内核模块的 versionCode 会错位。
 KSU_VERSION := $(shell echo $$(( $(KSU_TAG_MAJOR) * 10000 + $(KSU_TAG_MINOR) * 1000 + $(KSU_TAG_PATCH) * 100 + $(KSU_COMMITS_AFTER_TAG) )))
 $(info -- KernelSU version: $(KSU_VERSION) (from tag $(KSU_TAG) + $(KSU_COMMITS_AFTER_TAG) commits))
 ccflags-y += -DKSU_VERSION=$(KSU_VERSION)

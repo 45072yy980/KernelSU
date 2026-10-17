@@ -63,6 +63,9 @@ private fun parseVersionTag(): Triple<Int, Int, Int> {
 
 fun getVersionCode(): Int {
     val (major, minor, patch) = parseVersionTag()
+    // ⚠️ 此公式必须与 kernel/Kbuild 中 KSU_VERSION 的计算保持一致：
+    // major*10000 + minor*1000 + patch*100 + commits_after_tag
+    // 改一处必须同步改另一处，否则管理器与内核模块的 versionCode 会错位。
     return major * 10000 + minor * 1000 + patch * 100 + getCommitsSinceTag()
 }
 
