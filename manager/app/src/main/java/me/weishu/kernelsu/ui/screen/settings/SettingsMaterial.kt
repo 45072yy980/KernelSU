@@ -220,21 +220,6 @@ fun SettingPagerMaterial(
                             )
                         },
                         {
-                            val maint = stringResource(id = R.string.settings_maintenance)
-                            SegmentedListItem(
-                                onClick = actions.onOpenMaintenance,
-                                headlineContent = { Text(maint) },
-                                supportingContent = { Text(stringResource(id = R.string.settings_maintenance_summary)) },
-                                leadingContent = { Icon(Icons.Filled.Build, maint) },
-                                trailingContent = {
-                                    Icon(
-                                        Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                        null
-                                    )
-                                }
-                            )
-                        },
-                        {
                             val susfs = stringResource(id = R.string.settings_susfs)
                             SegmentedListItem(
                                 onClick = actions.onOpenSusfs,

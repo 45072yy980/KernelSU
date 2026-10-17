@@ -220,20 +220,6 @@ fun SettingPagerMiuix(
                                 },
                                 onClick = actions.onOpenOtherFeatures,
                             )
-                            val maint = stringResource(id = R.string.settings_maintenance)
-                            ArrowPreference(
-                                title = maint,
-                                summary = stringResource(id = R.string.settings_maintenance_summary),
-                                startAction = {
-                                    Icon(
-                                        Icons.Rounded.Build,
-                                        modifier = Modifier.padding(end = 6.dp),
-                                        contentDescription = maint,
-                                        tint = colorScheme.onBackground
-                                    )
-                                },
-                                onClick = actions.onOpenMaintenance,
-                            )
                             val susfs = stringResource(id = R.string.settings_susfs)
                             ArrowPreference(
                                 title = susfs,

@@ -38,10 +38,13 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.dropUnlessResumed
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.weishu.kernelsu.Natives
 import me.weishu.kernelsu.R
+import me.weishu.kernelsu.ui.util.reboot
+import me.weishu.kernelsu.ui.util.reloadModules
 import me.weishu.kernelsu.ui.LocalUiMode
 import me.weishu.kernelsu.ui.UiMode
 import me.weishu.kernelsu.ui.component.material.SegmentedColumn
@@ -77,6 +80,23 @@ fun OtherFeaturesScreen() {
     val onBack = dropUnlessResumed { navigator.pop() }
     val onOpenKeymint = dropUnlessResumed { navigator.push(Route.Keymint) }
     val onOpenShizuku = dropUnlessResumed { navigator.push(Route.Shizuku) }
+
+    // 原来「维护工具」整页只有这三件事，页签去掉之后直接放这里：
+    // 重载模块是功能操作，两个软重启是打扰性操作，所以重启一律先确认。
+    var pendingReboot by remember { mutableStateOf(RebootKind.None) }
+    val onReloadModules: () -> Unit = {
+        scope.launch {
+            val ok = withContext(Dispatchers.IO) { reloadModules() }
+            val text = if (ok == 3) {
+                context.getString(R.string.maintenance_log_reload_ok)
+            } else {
+                context.getString(R.string.maintenance_log_reload_partial, ok)
+            }
+            Toast.makeText(context, text, Toast.LENGTH_SHORT).show()
+        }
+    }
+    val onSoftReboot: () -> Unit = { pendingReboot = RebootKind.Plain }
+    val onSoftRebootHidden: () -> Unit = { pendingReboot = RebootKind.Hidden }
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -247,6 +267,9 @@ fun OtherFeaturesScreen() {
             calculatorInstalled = calcInstalled,
             onCalculatorChange = onCalculatorChange,
             onOpenShizuku = onOpenShizuku,
+            onReloadModules = onReloadModules,
+            onSoftReboot = onSoftReboot,
+            onSoftRebootHidden = onSoftRebootHidden,
         )
         UiMode.Miuix, UiMode.MiuixStock -> OtherFeaturesMiuix(
             onBack = onBack,
@@ -263,6 +286,9 @@ fun OtherFeaturesScreen() {
             calculatorInstalled = calcInstalled,
             onCalculatorChange = onCalculatorChange,
             onOpenShizuku = onOpenShizuku,
+            onReloadModules = onReloadModules,
+            onSoftReboot = onSoftReboot,
+            onSoftRebootHidden = onSoftRebootHidden,
         )
     }
 
@@ -272,6 +298,38 @@ fun OtherFeaturesScreen() {
             phase = open,
             onDismiss = { phase = null },
             onRun = onRunHideAppList,
+        )
+    }
+
+    if (pendingReboot != RebootKind.None) {
+        val hidden = pendingReboot == RebootKind.Hidden
+        val done = {
+            pendingReboot = RebootKind.None
+            scope.launch {
+                // 隐藏重启：先把开关写进内核，再重启；写失败也照常重启，
+                // 只是这一趟回来管理器仍然可见。
+                if (hidden && stealthSupported) {
+                    withContext(Dispatchers.IO) { setStealthEnabled(true) }
+                }
+                delay(1200)
+                withContext(Dispatchers.IO) { reboot("soft_reboot") }
+            }
+            Unit
+        }
+        AlertDialog(
+            onDismissRequest = { pendingReboot = RebootKind.None },
+            title = { Text(stringResource(R.string.maintenance_confirm_title)) },
+            text = { Text(stringResource(R.string.maintenance_confirm_message)) },
+            confirmButton = {
+                TextButton(onClick = done) {
+                    Text(stringResource(R.string.maintenance_confirm_ok))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingReboot = RebootKind.None }) {
+                    Text(stringResource(R.string.maintenance_confirm_cancel))
+                }
+            },
         )
     }
 
@@ -325,6 +383,9 @@ private fun OtherFeaturesMaterial(
     calculatorInstalled: Boolean,
     onCalculatorChange: (Boolean) -> Unit,
     onOpenShizuku: () -> Unit = {},
+    onReloadModules: () -> Unit = {},
+    onSoftReboot: () -> Unit = {},
+    onSoftRebootHidden: () -> Unit = {},
 ) {
     Scaffold(
         topBar = {
@@ -439,6 +500,33 @@ private fun OtherFeaturesMaterial(
                             leadingContent = { Icon(Icons.Filled.WaterDrop, null) },
                         )
                     }
+                    add {
+                        SegmentedListItem(
+                            onClick = onReloadModules,
+                            headlineContent = { Text(stringResource(R.string.maintenance_reload_modules)) },
+                            supportingContent = {
+                                Text(stringResource(R.string.maintenance_reload_modules_summary))
+                            },
+                        )
+                    }
+                    add {
+                        SegmentedListItem(
+                            onClick = onSoftReboot,
+                            headlineContent = { Text(stringResource(R.string.maintenance_soft_reboot)) },
+                            supportingContent = {
+                                Text(stringResource(R.string.maintenance_soft_reboot_summary))
+                            },
+                        )
+                    }
+                    add {
+                        SegmentedListItem(
+                            onClick = onSoftRebootHidden,
+                            headlineContent = { Text(stringResource(R.string.maintenance_soft_reboot_hidden)) },
+                            supportingContent = {
+                                Text(stringResource(R.string.maintenance_soft_reboot_hidden_summary))
+                            },
+                        )
+                    }
                 },
             )
         }
@@ -461,6 +549,9 @@ private fun OtherFeaturesMiuix(
     calculatorInstalled: Boolean,
     onCalculatorChange: (Boolean) -> Unit,
     onOpenShizuku: () -> Unit = {},
+    onReloadModules: () -> Unit = {},
+    onSoftReboot: () -> Unit = {},
+    onSoftRebootHidden: () -> Unit = {},
 ) {
     MiuixScaffold(
         topBar = {
@@ -594,8 +685,30 @@ private fun OtherFeaturesMiuix(
                         },
                         onClick = onOpenShizuku,
                     )
+                    ArrowPreference(
+                        title = stringResource(R.string.maintenance_reload_modules),
+                        summary = stringResource(R.string.maintenance_reload_modules_summary),
+                        onClick = onReloadModules,
+                    )
+                    ArrowPreference(
+                        title = stringResource(R.string.maintenance_soft_reboot),
+                        summary = stringResource(R.string.maintenance_soft_reboot_summary),
+                        onClick = onSoftReboot,
+                    )
+                    ArrowPreference(
+                        title = stringResource(R.string.maintenance_soft_reboot_hidden),
+                        summary = if (stealthSupported) {
+                            stringResource(R.string.maintenance_soft_reboot_hidden_summary)
+                        } else {
+                            stringResource(R.string.maintenance_soft_reboot_hidden_summary_unsupported)
+                        },
+                        onClick = onSoftRebootHidden,
+                    )
                 }
             }
         }
     }
 }
+
+/** 两个软重启之间只差一件事：重启前先把隐藏模式打开。 */
+private enum class RebootKind { None, Plain, Hidden }
