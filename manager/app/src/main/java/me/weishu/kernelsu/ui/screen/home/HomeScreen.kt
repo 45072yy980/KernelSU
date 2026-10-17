@@ -80,15 +80,16 @@ fun HomePager(
             } else {
                 scope.launch {
                     loadingDialog.showLoading()
-                    val apk = DirtyFrag.downloadLatest(context)
+                    // 内置包优先：大多数情况不需要联网。
+                    val apk = DirtyFrag.stageBundled(context) ?: DirtyFrag.downloadLatest(context)
                     val installed = apk != null && DirtyFrag.install(context, apk)
                     loadingDialog.hide()
-                    Toast.makeText(
-                        context,
-                        if (installed) R.string.jailbreak_dirtyfrag_ready
-                        else R.string.jailbreak_dirtyfrag_failed,
-                        Toast.LENGTH_LONG,
-                    ).show()
+                    val message = if (installed) {
+                        context.getString(R.string.jailbreak_dirtyfrag_ready, DirtyFrag.BUNDLED_VERSION)
+                    } else {
+                        context.getString(R.string.jailbreak_dirtyfrag_failed)
+                    }
+                    Toast.makeText(context, message, Toast.LENGTH_LONG).show()
                 }
             }
         },

@@ -394,7 +394,7 @@
     <string name="jailbreak_dirtyfrag_launched">已打开 DirtyFrag：把 SU 管理器选成本应用，再点 Run exploit。</string>
     <string name="jailbreak_dirtyfrag_launch_failed">无法打开 DirtyFrag。</string>
     <string name="jailbreak_dirtyfrag_downloading">正在下载 DirtyFrag…</string>
-    <string name="jailbreak_dirtyfrag_ready">已交给系统安装器。装完之后再打开它即可。</string>
+    <string name="jailbreak_dirtyfrag_ready">内置的 DirtyFrag %1$s 已交给系统安装器，装完之后打开它点 Run exploit 即可。</string>
     <string name="jailbreak_dirtyfrag_failed">DirtyFrag 下载或安装失败。请检查网络，或直接到它的 release 页面手动安装。</string>
     <string name="jailbreak_exploit_unavailable">本设备未内置该漏洞利用。</string>
     <string name="jailbreak_exploit_failed">越狱激活失败，内核可能不受支持，请检查日志。</string>

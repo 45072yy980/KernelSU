@@ -27,7 +27,30 @@ object DirtyFrag {
     /** DirtyFrag 的包名（`df.root`），也是它申请 root 时的身份。 */
     const val PACKAGE = "df.root"
 
+    /** 打进本应用 APK 的版本号；升级安装包时这里一起改。 */
+    const val BUNDLED_VERSION = "1.16"
+
+    private const val BUNDLED_ASSET = "dirtyfrag/DirtyFrag-v$BUNDLED_VERSION.apk"
+
     private const val API_LATEST = "https://api.github.com/repos/mitschud/DirtyFrag/releases/latest"
+
+    /**
+     * 把内置的安装包解到缓存目录。
+     *
+     * 和 ghostlock 一样，安装包跟着本应用的 APK 走，用户不需要联网也不需要去 release 页；
+     * 只有内置资源缺失（比如换了打包方式）时才退回网络下载。
+     */
+    suspend fun stageBundled(context: Context): File? = withContext(Dispatchers.IO) {
+        runCatching {
+            val target = File(context.cacheDir, "DirtyFrag-v$BUNDLED_VERSION.apk")
+            if (!target.isFile || target.length() == 0L) {
+                context.assets.open(BUNDLED_ASSET).use { input ->
+                    target.outputStream().use { output -> input.copyTo(output) }
+                }
+            }
+            target.takeIf { it.isFile && it.length() > 0L }
+        }.getOrNull()
+    }
 
     fun isInstalled(context: Context): Boolean =
         runCatching { context.packageManager.getPackageInfo(PACKAGE, 0) }.isSuccess

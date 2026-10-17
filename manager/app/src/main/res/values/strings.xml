@@ -400,7 +400,7 @@
     <string name="jailbreak_dirtyfrag_launched">Opened DirtyFrag: pick this app as the SU manager, then press Run exploit.</string>
     <string name="jailbreak_dirtyfrag_launch_failed">Could not open DirtyFrag.</string>
     <string name="jailbreak_dirtyfrag_downloading">Downloading DirtyFrag…</string>
-    <string name="jailbreak_dirtyfrag_ready">Handed the installer to the system. When it finishes, open DirtyFrag and press Run exploit</string>
+    <string name="jailbreak_dirtyfrag_ready">Bundled DirtyFrag %1$s is ready. Handed the installer to the system; when it finishes, open it and press Run exploit.</string>
     <string name="jailbreak_dirtyfrag_failed">Could not download or install DirtyFrag. Check the network, or install it by hand from its releases page.</string>
     <string name="jailbreak_exploit_unavailable">The exploit is not bundled for this device.</string>
     <string name="jailbreak_exploit_failed">Jailbreak failed. The kernel may be unsupported; check the logs.</string>

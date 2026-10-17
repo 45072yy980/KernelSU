@@ -59,6 +59,59 @@ if(ANDROID_ABI STREQUAL "arm64-v8a")
 endif()
 
 # ---------------------------------------------------------------------------
+# DirtyFrag exploit (CVE-2026-43284)
+#
+# 和 ghostlock 一样是一个自带全部数据的可执行文件：8 个 KMI 的内核模块和
+# splicehelper 都用 .incbin 内嵌在 exp.c 里，Android 把它当 libdirtyfrag.so
+# 打进 lib/<abi>/，运行时由 Manager 从 nativeLibraryDir exec。
+#
+# bootstrap 单独编一个（模块加载后由内核 call_usermodehelper 执行），
+# 它现在从 argv[0] 推导暂存目录，不再写死 df.root 的包名。
+# ---------------------------------------------------------------------------
+if(ANDROID_ABI STREQUAL "arm64-v8a")
+    enable_language(ASM)
+
+    set(DIRTYFRAG_DIR "${CMAKE_CURRENT_SOURCE_DIR}/dirtyfrag")
+    set(DIRTYFRAG_BUILD "${CMAKE_CURRENT_BINARY_DIR}/dirtyfrag")
+    set(DIRTYFRAG_SPLICEHELPER "${DIRTYFRAG_BUILD}/splicehelper")
+
+    # splicehelper 是个独立的静态小二进制（不能带 libc），exp.c 用 .incbin 嵌它。
+    add_custom_command(
+            OUTPUT "${DIRTYFRAG_SPLICEHELPER}"
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${DIRTYFRAG_BUILD}"
+            COMMAND ${CMAKE_C_COMPILER} --target=${CMAKE_C_COMPILER_TARGET}
+                    --sysroot=${CMAKE_SYSROOT}
+                    "${DIRTYFRAG_DIR}/splicehelper.c" -o "${DIRTYFRAG_SPLICEHELPER}"
+                    -nodefaultlibs -nostartfiles -ffreestanding -static
+            DEPENDS "${DIRTYFRAG_DIR}/splicehelper.c"
+            COMMENT "Building dirtyfrag splicehelper")
+    add_custom_target(dirtyfrag_splicehelper DEPENDS "${DIRTYFRAG_SPLICEHELPER}")
+
+    add_executable(dirtyfrag exp.c libcxx.S elf_parser.c)
+    add_dependencies(dirtyfrag dirtyfrag_splicehelper)
+    target_include_directories(dirtyfrag PRIVATE "${DIRTYFRAG_DIR}" "${DIRTYFRAG_BUILD}")
+    target_compile_definitions(dirtyfrag PRIVATE _GNU_SOURCE)
+    target_compile_options(dirtyfrag PRIVATE
+            $<$<COMPILE_LANGUAGE:C>:-std=gnu11;-O2;-Wall;-Wextra;-Wno-unused-parameter;-Wno-sign-compare;-fno-stack-protector;-fomit-frame-pointer>
+            -I${DIRTYFRAG_DIR}
+            -I${DIRTYFRAG_BUILD})
+    target_link_options(dirtyfrag PRIVATE -fPIE -pie)
+    set_target_properties(dirtyfrag PROPERTIES
+            OUTPUT_NAME "dirtyfrag"
+            SUFFIX ".so"
+            PREFIX "lib")
+
+    add_executable(dirtyfrag_bootstrap bootstrap.c)
+    target_compile_definitions(dirtyfrag_bootstrap PRIVATE _GNU_SOURCE)
+    target_compile_options(dirtyfrag_bootstrap PRIVATE -std=gnu11 -O2 -Wall -Wno-unused-parameter)
+    target_link_options(dirtyfrag_bootstrap PRIVATE -fPIE -pie)
+    set_target_properties(dirtyfrag_bootstrap PROPERTIES
+            OUTPUT_NAME "dirtyfrag_bootstrap"
+            SUFFIX ".so"
+            PREFIX "lib")
+endif()
+
+# ---------------------------------------------------------------------------
 # Shizuku 内置服务所需 native 库
 #
 # librish.so — Shizuku server 执行 shell 命令的核心交互库（PTY 终端、
