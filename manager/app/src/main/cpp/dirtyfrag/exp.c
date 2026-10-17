@@ -27,6 +27,13 @@ static int      g_sender_port;
 static uint32_t g_spi;
 static uint8_t  g_aes_key[32];
 static uint32_t g_seq = 1;
+/* 暂存目录，由 Manager 通过 --stage-dir 传进来；内核模块里的 bootstrap
+ * 槽位在写入 page cache 之前按它改写。 */
+static char g_stage_dir[256];
+
+#ifndef DFROOT_STAGE_SENTINEL
+#define DFROOT_STAGE_SENTINEL "/data/user_de/0/DFROOT_STAGE/bootstrap"
+#endif
 struct PatchRestore {
     const char *lib;
     uint64_t    tramp_aligned;
@@ -382,6 +389,27 @@ static int patch_ko(void) {
     size_t len;
     char *buf = pad16(ko->start, (size_t)(ko->end - ko->start), &len);
     if (!buf) { printf("patch: %s - pad16 alloc failed\n", libcxx_ko_target); return -1; }
+    /* 把模块里写死的暂存路径换成本应用的实际路径。哨兵所在槽位比路径宽，
+     * 整块清零之后再填，才不会把上一次的尾巴留在模块里。 */
+    if (g_stage_dir[0]) {
+        char want[200];
+        snprintf(want, sizeof(want), "%s/bootstrap", g_stage_dir);
+        const char *needle = DFROOT_STAGE_SENTINEL;
+        char *slot = memmem(buf, len, needle, strlen(needle) + 1);
+        if (!slot) {
+            printf("stage: sentinel not found in ko, module will use its built-in path\n");
+        } else if (slot + 96 > buf + len) {
+            printf("stage: slot out of range, refusing to patch\n");
+            return -1;
+        } else if (strlen(want) >= 96) {
+            printf("stage: path too long (%zu), max 95\n", strlen(want));
+            return -1;
+        } else {
+            memset(slot, 0, 96);
+            memcpy(slot, want, strlen(want));
+            printf("stage: bootstrap <- %s\n", want);
+        }
+    }
     printf("patch: %s <- dfroot.ko (%zu bytes)\n", libcxx_ko_target, len);
     int ret = patch_file_cbc(libcxx_ko_target, buf, len, 0, 1);
     free(buf);
@@ -517,6 +545,8 @@ static int setup(int argc, char **argv) {
             encap_port = atoi(argv[++i]);
         else if (!strcmp(a, "--sender-port") && i + 1 < argc)
             sender_port = atoi(argv[++i]);
+        else if (!strcmp(a, "--stage-dir") && i + 1 < argc)
+            snprintf(g_stage_dir, sizeof(g_stage_dir), "%s", argv[++i]);
         else if (!strcmp(a, "--spi") && i + 1 < argc)
             spi = (uint32_t)strtoul(argv[++i], NULL, 0);
         else if (!strcmp(a, "--aes-key") && i + 1 < argc)
