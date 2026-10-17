@@ -117,6 +117,23 @@ jobs:
       expected_hash2: ${{ needs.generate-key.outputs.expected_hash || '' }}
     secrets: inherit
 
+  build-dfroot-lkm:
+    strategy:
+      fail-fast: false
+      matrix:
+        kmi:
+          - android12-5.10
+          - android13-5.10
+          - android13-5.15
+          - android14-5.15
+          - android14-6.1
+          - android15-6.6
+          - android16-6.12
+          - android17-6.18
+    uses: ./.github/workflows/ddk-dfroot.yml
+    with:
+      kmi: ${{ matrix.kmi }}
+
   build-ksuinit:
     uses: ./.github/workflows/ksuinit.yml
 
@@ -157,8 +174,8 @@ jobs:
       pack_ksuinit: true
 
   build-manager:
-    needs: [generate-key]
-    if: always() && needs.generate-key.result == 'success'
+    needs: [generate-key, build-dfroot-lkm]
+    if: always() && needs.generate-key.result == 'success' && needs.build-dfroot-lkm.result == 'success'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -169,6 +186,24 @@ jobs:
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
+
+      - name: Fetch dfroot.ko modules
+        uses: actions/download-artifact@v8
+        with:
+          pattern: dfroot-ko-*
+          path: ${{ github.workspace }}/dfroot-ko
+          merge-multiple: true
+
+      - name: Place dfroot.ko modules
+        run: |
+          ls -l ../dfroot-ko
+          cp ../dfroot-ko/dfroot-*.ko app/src/main/cpp/dirtyfrag/ko/
+          ls -l app/src/main/cpp/dirtyfrag/ko/
+          # 编出来的 ko 里必须带着那块可改写槽位的哨兵，否则 exp.c 改不了
+          # 暂存路径，链子会停在 bootstrap 那一步。
+          for ko in app/src/main/cpp/dirtyfrag/ko/dfroot-*.ko; do
+            grep -q "DFROOT_STAGE/bootstrap" "$ko" || { echo "$ko 缺少哨兵"; exit 1; }
+          done
 
       - name: Write key
         if: ${{ ( github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev' )) || github.ref_type == 'tag' }}
