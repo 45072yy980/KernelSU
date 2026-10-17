@@ -37,6 +37,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.material3.rememberTopAppBarState
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -94,6 +95,7 @@ fun SettingPagerMaterial(
                 .nestedScroll(scrollBehavior.nestedScrollConnection)
                 .verticalScroll(rememberScrollState())
         ) {
+            SectionTitle(stringResource(R.string.settings_section_general))
             KsuIsValid {
                 SegmentedColumn(
                     modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 13.dp),
@@ -120,6 +122,7 @@ fun SettingPagerMaterial(
                 )
             }
 
+            SectionTitle(stringResource(R.string.settings_section_appearance))
             SegmentedColumn(
                 modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 13.dp),
                 content = buildList {
@@ -150,6 +153,7 @@ fun SettingPagerMaterial(
                 }
             )
 
+            SectionTitle(stringResource(R.string.settings_section_features))
             val profileTemplate = stringResource(id = R.string.settings_profile_template)
             KsuIsValid {
                 SegmentedColumn(
@@ -383,23 +387,7 @@ fun SettingPagerMaterial(
                 )
             }
 
-            if (uiState.isLkmMode) {
-                SegmentedColumn(
-                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 13.dp),
-                    content = listOf(
-                        {
-                            val uninstall = stringResource(id = R.string.settings_uninstall)
-                            SegmentedListItem(
-                                onClick = { showUninstallDialog.value = true },
-                                enabled = !uiState.isLateLoadMode,
-                                headlineContent = { Text(uninstall) },
-                                leadingContent = { Icon(Icons.Filled.Delete, uninstall) }
-                            )
-                        }
-                    )
-                )
-            }
-
+            SectionTitle(stringResource(R.string.settings_section_about))
             SegmentedColumn(
                 modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 13.dp),
                 content = listOf(
@@ -438,6 +426,24 @@ fun SettingPagerMaterial(
                     snackbarHostState = snackBarHost,
                 )
             }
+            if (uiState.isLkmMode) {
+                SectionTitle(stringResource(R.string.settings_section_danger))
+                SegmentedColumn(
+                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 13.dp),
+                    content = listOf(
+                        {
+                            val uninstall = stringResource(id = R.string.settings_uninstall)
+                            SegmentedListItem(
+                                onClick = { showUninstallDialog.value = true },
+                                enabled = !uiState.isLateLoadMode,
+                                headlineContent = { Text(uninstall) },
+                                leadingContent = { Icon(Icons.Filled.Delete, uninstall) }
+                            )
+                        }
+                    )
+                )
+            }
+
             Spacer(modifier = Modifier.height(bottomInnerPadding))
         }
     }
@@ -452,5 +458,15 @@ private fun TopBar(
         colors = expressiveTopAppBarColors(),
         windowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal),
         scrollBehavior = scrollBehavior
+    )
+}
+
+@Composable
+private fun SectionTitle(text: String) {
+    Text(
+        text = text,
+        modifier = Modifier.padding(start = 24.dp, top = 16.dp, bottom = 6.dp),
+        style = MaterialTheme.typography.titleSmall,
+        color = MaterialTheme.colorScheme.primary,
     )
 }
