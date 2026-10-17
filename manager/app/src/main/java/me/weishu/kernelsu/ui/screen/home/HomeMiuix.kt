@@ -418,6 +418,55 @@ private fun StatusCard(
                                 shape = cardShape,
                             )
                     ) {
+                        // 磨砂面是卡片的静态底板，不跟着 Tilt 走。按压反馈是 3D 旋转，
+                        // 旋转后卡片投影会在一侧窄进去一条，磨砂面若跟着转，那条缝就
+                        // 露出底层背景，读起来正是白边/黑边。把它放在 Card 外面，
+                        // 卡绕着它转，缝里露出的仍是磨砂面；外层 Box 已按 cardShape 裁剪。
+                        if (glassBackdrop) {
+                            val panelSize = PanelMetrics.size.value
+                            val nudgeX = GlassNudge.x.floatValue
+                            val nudgeY = GlassNudge.y.floatValue
+                            val panelPos = PanelMetrics.pos.value
+                            // Read in composition so scrolling retriggers layout.
+                            val cardPos = cardWindowPos
+                            if (panelSize != IntSize.Zero) {
+                                val paneDensity = LocalDensity.current
+                                Box(
+                                    modifier = Modifier
+                                        .matchParentSize()
+                                        .clip(cardShape)
+                                ) {
+                                    Image(
+                                        bitmap = homeWallpaper,
+                                        contentDescription = null,
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier
+                                            .requiredSize(
+                                                with(paneDensity) { (panelSize.width + 96).toDp() },
+                                                with(paneDensity) { (panelSize.height + 96).toDp() },
+                                            )
+                                            .blur(16.dp)
+                                            .offset {
+                                                IntOffset(
+                                                    panelPos.x.roundToInt() - cardPos.x.roundToInt()
+                                                        - 48
+                                                        + with(paneDensity) { nudgeX.dp.toPx() }.roundToInt(),
+                                                    // 纵向同样留出 96px 余量并居中：模糊层边缘是渐隐的，
+                                                    // 没有余量时那条渐隐边正好落在卡片里，读起来是亮带。
+                                                    panelPos.y.roundToInt() - cardPos.y.roundToInt()
+                                                        - 48
+                                                        + with(paneDensity) { nudgeY.dp.toPx() }.roundToInt(),
+                                                )
+                                            },
+                                    )
+                                    Box(
+                                        modifier = Modifier
+                                            .matchParentSize()
+                                            .background(Color.Black.copy(alpha = 0.28f)),
+                                    )
+                                }
+                            }
+                        }
                         Card(
                             modifier = Modifier.fillMaxWidth(),
                             colors = CardDefaults.defaultColors(
@@ -432,64 +481,6 @@ private fun StatusCard(
                             pressFeedbackType = PressFeedbackType.Tilt
                         ) {
                         Box {
-                            // The frosted face has to move with the card, so it belongs inside the
-                            // Card, which is what the Tilt feedback transforms. Keeping it still
-                            // (as a sibling of the Card) was worse: the glass then stayed put while
-                            // the card tilted over it, and the two visibly disagreed.
-                            //
-                            // The reason it used to show the page colour at the edges is that a
-                            // tilt is a 3D rotation: the layer is turned about the card's centre,
-                            // so its projected rectangle is narrower than the card on one side and
-                            // pokes out on the other. The crop is therefore drawn larger than the
-                            // card and centred on it, so the parts that rotate into view are still
-                            // wallpaper rather than empty space. Overflow is clipped by cardShape.
-                            if (glassBackdrop) {
-                                val panelSize = PanelMetrics.size.value
-                                val nudgeX = GlassNudge.x.floatValue
-                                val nudgeY = GlassNudge.y.floatValue
-                                val panelPos = PanelMetrics.pos.value
-                                // Read in composition so scrolling retriggers layout.
-                                val cardPos = cardWindowPos
-                                if (panelSize != IntSize.Zero) {
-                                    val paneDensity = LocalDensity.current
-                                    Box(
-                                        modifier = Modifier
-                                            .matchParentSize()
-                                            .clip(cardShape)
-                                    ) {
-                                        Image(
-                                            bitmap = homeWallpaper,
-                                            contentDescription = null,
-                                            contentScale = ContentScale.Crop,
-                                            modifier = Modifier
-                                                .requiredSize(
-                                                    with(paneDensity) { (panelSize.width + 96).toDp() },
-                                                    with(paneDensity) { (panelSize.height + 96).toDp() },
-                                                )
-                                                .blur(16.dp)
-                                                .offset {
-                                                    IntOffset(
-                                                        panelPos.x.roundToInt() - cardPos.x.roundToInt()
-                                                            - 48
-                                                            + with(paneDensity) { nudgeX.dp.toPx() }.roundToInt(),
-                                                        // Centred the same way on Y: the crop is 96px taller
-                                                        // than the panel, so 48 of the slack goes above and
-                                                        // 48 below. Without it the blur's faded edge sat
-                                                        // inside the card and read as a bright band.
-                                                        panelPos.y.roundToInt() - cardPos.y.roundToInt()
-                                                            - 48
-                                                            + with(paneDensity) { nudgeY.dp.toPx() }.roundToInt(),
-                                                    )
-                                                },
-                                        )
-                                        Box(
-                                            modifier = Modifier
-                                                .matchParentSize()
-                                                .background(Color.Black.copy(alpha = 0.28f)),
-                                        )
-                                    }
-                                }
-                            }
                             if (statusImage != null) {
                                 Image(
                                     bitmap = statusImage,
