@@ -135,15 +135,9 @@ fun HomePagerMiuix(
         contentWindowInsets = WindowInsets.systemBars.add(WindowInsets.displayCutout).only(WindowInsetsSides.Horizontal)
     ) { innerPadding ->
         Box(modifier = if (backdrop != null) Modifier.layerBackdrop(backdrop) else Modifier) {
-            // DEBUG-DIAG: 定位“滑不动”，修完即删。
-            val diagState = rememberLazyListState()
-            var diagContentH by remember { mutableIntStateOf(0) }
-            var diagViewportH by remember { mutableIntStateOf(0) }
             LazyColumn(
-                state = diagState,
                 modifier = Modifier
                     .fillMaxHeight()
-                    .onGloballyPositioned { diagViewportH = it.size.height }
                     .scrollEndHaptic()
                     .overScrollVertical()
                     .padding(horizontal = 12.dp),
@@ -164,21 +158,10 @@ fun HomePagerMiuix(
                     val noticeBlur = LocalHomeCardBlur.current
                     val noticeGlassed = noticeBlur && noticeWallpaper != null
                     Column(
-                        modifier = Modifier
-                            .padding(top = 12.dp)
-                            .onGloballyPositioned { diagContentH = it.size.height },
+                        modifier = Modifier.padding(top = 12.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        // DEBUG-DIAG
-                        Text(
-                            text = "DIAG 内容=$diagContentH 视口=$diagViewportH " +
-                                "可前=${diagState.canScrollForward} 可后=${diagState.canScrollBackward} " +
-                                "idx=${diagState.firstVisibleItemIndex} off=${diagState.firstVisibleItemScrollOffset}",
-                            fontSize = 11.sp,
-                            color = Color.White,
-                            modifier = Modifier.background(Color.Red).padding(4.dp),
-                        )
                         CompositionLocalProvider(
                             LocalGlassNotice provides noticeGlassed,
                             LocalGlassWallpaper provides if (noticeGlassed) noticeWallpaper else null,
@@ -375,106 +358,67 @@ private fun StatusCard(
                     )
                 }
 
-                Row(
+                val cardShape = RoundedCornerShape(16.dp)
+                var cardWindowPos by remember { mutableStateOf(Offset.Zero) }
+                // 卡片只有一层：阴影留在外层负责压边，内容全部排进 Card 里。
+                // 以前是一摞 fillMaxSize 的叠加层（标题、LKM、大图标各占满整张卡，
+                // 再靠 offset 挪位置），行高一变就互相压到，装饰图标还会被卡片裁掉。
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(IntrinsicSize.Min),
-                    verticalAlignment = Alignment.CenterVertically,
+                        .onGloballyPositioned { coords ->
+                            val pos = coords.positionInWindow()
+                            if (pos != cardWindowPos) cardWindowPos = pos
+                        }
+                        .shadow(12.dp, cardShape, clip = true),
                 ) {
-                    // The shadow is what keeps the card's edge; the face is either the theme's
-                    // gradient or the page's own picture showing through.
-                    val cardShape = RoundedCornerShape(16.dp)
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .onGloballyPositioned { coords ->
-                                // 只有真的变了才写状态：滚动时这个回调逐帧触发，
-                                // 无条件写会拉着整张卡重组，白吃帧。
-                                val pos = coords.positionInWindow()
-                                if (pos != cardWindowPos) cardWindowPos = pos
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.defaultColors(color = Color.Transparent),
+                        onClick = {
+                            if (!state.isLateLoadMode) {
+                                actions.onInstallClick()
                             }
-                            .shadow(12.dp, cardShape, clip = true)
-                            .background(
-                                brush = if (glassBackdrop) {
-                                    SolidColor(Color.Transparent)
-                                } else cardBrush,
-                                shape = cardShape,
-                            )
+                        },
+                        showIndication = !state.isLateLoadMode,
+                        pressFeedbackType = PressFeedbackType.Tilt,
                     ) {
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.defaultColors(
-                                color = Color.Transparent
-                            ),
-                            onClick = {
-                                if (!state.isLateLoadMode) {
-                                    actions.onInstallClick()
-                                }
-                            },
-                            showIndication = !state.isLateLoadMode,
-                            pressFeedbackType = PressFeedbackType.Tilt
-                        ) {
-                        Box {
-                            // 磨砂面画在 Card 里面，跟着 Tilt 一起转；怎么和页面对齐
-                            // 由 FrostedCardBackground 统一负责，卡片这里只把自己在
-                            // 窗口里的位置交出去。
-                            if (glassBackdrop) {
-                                FrostedCardBackground(
+                        Box(modifier = Modifier.fillMaxWidth()) {
+                            when {
+                                // 页面有壁纸就磨砂：卡片是页面的一块玻璃，跟着卡片一起转。
+                                glassBackdrop -> FrostedCardBackground(
                                     shape = cardShape,
                                     cardPos = cardWindowPos,
                                     wallpaper = homeWallpaper,
                                 )
-                            }
-                            if (statusImage != null) {
-                                Image(
+                                // 卡片自带图片时，图片本身就是底。
+                                statusImage != null -> Image(
                                     bitmap = statusImage,
                                     contentDescription = null,
                                     contentScale = ContentScale.Crop,
                                     modifier = Modifier.matchParentSize(),
                                 )
-                            }
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .offset(27.dp, 31.dp),
-                                contentAlignment = Alignment.BottomEnd
-                            ) {
-                                Icon(
-                                    modifier = Modifier.size(110.dp),
-                                    imageVector = Icons.Rounded.CheckCircleOutline,
-                                    tint = colorScheme.primary.copy(alpha = 0.8f),
-                                    contentDescription = null
+                                // 都没有就是主题渐变；视频背景沿用同一块烟熏板。
+                                else -> Box(
+                                    modifier = Modifier
+                                        .matchParentSize()
+                                        .background(brush = cardBrush, shape = cardShape),
                                 )
                             }
-                            if (workingMode != null) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .padding(16.dp, 10.dp),
-                                    contentAlignment = Alignment.BottomStart,
-                                ) {
-                                    Text(
-                                        text = workingMode,
-                                        fontSize = 16.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        color = statusSubColor,
-                                    )
-                                }
-                            }
-                            Box(
+                            Row(
                                 modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(16.dp, 14.dp),
-                                contentAlignment = Alignment.TopStart,
+                                    .fillMaxWidth()
+                                    .padding(start = 16.dp, top = 14.dp, end = 12.dp, bottom = 14.dp),
+                                verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                Column {
+                                Column(modifier = Modifier.weight(1f)) {
                                     Text(
                                         text = workingText,
                                         fontSize = 22.sp,
                                         fontWeight = FontWeight.SemiBold,
                                         color = statusTitleColor,
                                     )
-                                    Spacer(Modifier.height(1.dp))
+                                    Spacer(Modifier.height(2.dp))
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Text(
                                             text = stringResource(
@@ -494,10 +438,26 @@ private fun StatusCard(
                                             )
                                         }
                                     }
+                                    if (workingMode != null) {
+                                        Spacer(Modifier.height(6.dp))
+                                        Text(
+                                            text = workingMode,
+                                            fontSize = 16.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            color = statusSubColor,
+                                        )
+                                    }
                                 }
+                                Icon(
+                                    imageVector = Icons.Rounded.CheckCircleOutline,
+                                    contentDescription = null,
+                                    modifier = Modifier
+                                        .padding(start = 8.dp)
+                                        .size(64.dp),
+                                    tint = colorScheme.primary.copy(alpha = 0.75f),
+                                )
                             }
                         }
-                    }
                     }
                 }
             }
