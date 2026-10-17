@@ -300,3 +300,59 @@ kotlin {
         )
     }
 }
+
+// ── 构建期自检：ManagerHider 后缀覆盖检查 ────────────────────────────────────
+// 隐藏管理器（随机包名）时，ManagerHider 按 PACKAGE_NAME_SUFFIXES 清单原位改写
+// APK 中的包名字符串。若 Manifest 新增 ${applicationId} 注入点但后缀未加入清单，
+// 隐藏管理器下该组件会失效（如 Shizuku provider 找不到、授权弹窗解析不到）。
+// 本 task 在构建早期扫描 Manifest，发现未覆盖的后缀即失败，防止问题流入发布版。
+tasks.register("checkManagerHiderSuffixes") {
+    group = "verification"
+    description = "检查 AndroidManifest 中所有 \${applicationId} 后缀是否都在 ManagerHider 清单中"
+
+    val manifestFile = layout.projectDirectory.file("src/main/AndroidManifest.xml")
+    inputs.file(manifestFile)
+
+    doLast {
+        val manifest = manifestFile.asFile.readText()
+        val regex = Regex("""\$\{applicationId\}([\w.]*)""")
+        val foundSuffixes = regex.findAll(manifest)
+            .map { it.groupValues[1] }
+            .toSet()
+
+        // ⚠️ 必须与 ManagerHider.kt 中的 PACKAGE_NAME_SUFFIXES 保持同步。
+        // 新增后缀时两处都要改。
+        val expectedSuffixes = setOf(
+            "",
+            ".DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION",
+            ".androidx-startup",
+            ".fileprovider",
+            ".webui",
+            ".shizuku",
+            ".intent.action.REQUEST_PERMISSION",
+        )
+
+        val missing = foundSuffixes - expectedSuffixes
+        if (missing.isNotEmpty()) {
+            throw GradleException(
+                """
+                |AndroidManifest.xml 中发现未在 ManagerHider.PACKAGE_NAME_SUFFIXES 中登记的 ${'$'}{applicationId} 后缀：
+                |  ${missing.joinToString("\n  ")}
+                |
+                |隐藏管理器（随机包名）时，这些后缀对应的包名字符串不会被改写，
+                |导致相关组件在隐藏管理器下失效。
+                |
+                |修复：将上述后缀同时添加到
+                |  1. ManagerHider.kt 的 PACKAGE_NAME_SUFFIXES 清单
+                |  2. 本 task (build.gradle.kts) 的 expectedSuffixes
+                """.trimMargin()
+            )
+        }
+        logger.lifecycle("ManagerHider suffix check passed: ${foundSuffixes.size} suffix(es) found, all covered.")
+    }
+}
+
+// 构建早期执行，避免编译大半才发现
+tasks.named("preBuild") {
+    dependsOn("checkManagerHiderSuffixes")
+}
