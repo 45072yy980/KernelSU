@@ -376,10 +376,7 @@ private fun StatusCard(
                                 actions.onInstallClick()
                             }
                         },
-                        // 不要水波纹：卡片底面是半透明磨砂，波纹画在内容下层，
-                        // 按压时会从底面透出来，看起来是卡片下方的一块亮斑。
-                        // 反馈交给 Tilt 本身就够了。
-                        showIndication = false,
+                        showIndication = !state.isLateLoadMode,
                         pressFeedbackType = PressFeedbackType.Tilt,
                     ) {
                         Box(modifier = Modifier.fillMaxWidth()) {

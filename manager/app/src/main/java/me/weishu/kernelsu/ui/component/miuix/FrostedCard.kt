@@ -1,5 +1,6 @@
 package me.weishu.kernelsu.ui.component.miuix
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.runtime.Composable
@@ -21,6 +22,9 @@ private const val PaneBlurRadius = 20f
  * 背景里浮出来——否则把背景暗度调到 0 时，卡片会和壁纸同亮度，只剩文字浮着。
  */
 private const val CardTint = 0.20f
+
+/** 磨砂层下面的暗底，防止模糊结果的半透明区域露出更亮的背景。 */
+private const val ScrimAlpha = 0.18f
 
 /**
  * 页面壁纸那一层被记录成的 backdrop。
@@ -45,20 +49,28 @@ fun BoxScope.FrostedCardBackground(
     modifier: Modifier = Modifier,
 ) {
     val backdrop = PageBackdrop.layer.value ?: return
-    Box(
-        modifier = modifier
-            .matchParentSize()
-            .clip(shape)
-            .textureBlur(
-                backdrop = backdrop,
-                shape = shape,
-                blurRadius = PaneBlurRadius,
-                colors = BlurColors(
-                    blendColors = listOf(
-                        BlendColorEntry(color = Color.Black.copy(alpha = CardTint)),
+    Box(modifier = modifier.matchParentSize().clip(shape)) {
+        // 垫一层暗底：模糊结果如果存在半透明区域（边缘、变换过程中），
+        // 透出来的就是这层暗色，而不是卡片背后那块更亮的壁纸。
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .background(Color.Black.copy(alpha = ScrimAlpha)),
+        )
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .textureBlur(
+                    backdrop = backdrop,
+                    shape = shape,
+                    blurRadius = PaneBlurRadius,
+                    colors = BlurColors(
+                        blendColors = listOf(
+                            BlendColorEntry(color = Color.Black.copy(alpha = CardTint)),
+                        ),
                     ),
+                    enabled = true,
                 ),
-                enabled = true,
-            ),
-    )
+        )
+    }
 }
