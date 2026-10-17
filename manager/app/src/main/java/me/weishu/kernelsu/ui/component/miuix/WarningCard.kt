@@ -80,7 +80,10 @@ fun WarningCard(
         Box(
             modifier = modifier
                 .fillMaxWidth()
-                .onGloballyPositioned { coords -> cardWindowPos = coords.positionInWindow() }
+                .onGloballyPositioned { coords ->
+                    val pos = coords.positionInWindow()
+                    if (pos != cardWindowPos) cardWindowPos = pos
+                }
                 .shadow(8.dp, cardShape, clip = true)
                 .background(color = Color.Transparent, shape = cardShape),
         ) {
@@ -122,14 +125,13 @@ fun WarningCard(
                                     contentScale = ContentScale.Crop,
                                     modifier = Modifier
                                         .requiredSize(
-                                            with(paneDensity) { (panelSize.width + 96).toDp() },
+                                            with(paneDensity) { panelSize.width.toDp() },
                                             with(paneDensity) { panelSize.height.toDp() },
                                         )
                                         .blur(16.dp)
                                         .offset {
                                             IntOffset(
                                                 panelPos.x.roundToInt() - cardPos.x.roundToInt()
-                                                    - 48
                                                     + with(paneDensity) { GlassNudge.x.floatValue.dp.toPx() }.roundToInt(),
                                                 panelPos.y.roundToInt() - cardPos.y.roundToInt()
                                                     + with(paneDensity) { GlassNudge.y.floatValue.dp.toPx() }.roundToInt(),

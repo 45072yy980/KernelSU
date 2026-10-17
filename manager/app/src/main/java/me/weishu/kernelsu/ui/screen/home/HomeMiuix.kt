@@ -107,7 +107,6 @@ import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.CardDefaults
 import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.ScrollBehavior
 import top.yukonga.miuix.kmp.basic.Text
@@ -125,15 +124,28 @@ import top.yukonga.miuix.kmp.utils.scrollEndHaptic
  */
 object GlassNudge {
     private const val PREF = "glass_nudge"
-    val x = mutableFloatStateOf(15f)
-    val y = mutableFloatStateOf(375f)
+    val x = mutableFloatStateOf(0f)
+    val y = mutableFloatStateOf(0f)
 
     /** What the values fall back to when nothing has been saved yet. */
-    const val DEFAULT_X = 15f
-    const val DEFAULT_Y = 375f
+    const val DEFAULT_X = 0f
+    const val DEFAULT_Y = 0f
+
+    // 磨砂层改成按面板原尺寸 1:1 对位之后，以前为了补缩放误差而调出来的数值
+    // 全部作废（它们是给“放大 9% 再偏移”的旧画法调出来的，留着反而会把面板推歪）。
+    // 和 pager 手势那次一样，只迁移一次，之后用户自己调的值照旧保留。
+    private const val KEY_VERSION = "nudge_version"
+    private const val VERSION = 2
 
     fun load(context: Context) {
         val sp = context.getSharedPreferences(PREF, Context.MODE_PRIVATE)
+        if (sp.getInt(KEY_VERSION, 0) < VERSION) {
+            x.floatValue = DEFAULT_X
+            y.floatValue = DEFAULT_Y
+            sp.edit().putFloat("x", DEFAULT_X).putFloat("y", DEFAULT_Y)
+                .putInt(KEY_VERSION, VERSION).apply()
+            return
+        }
         x.floatValue = sp.getFloat("x", DEFAULT_X)
         y.floatValue = sp.getFloat("y", DEFAULT_Y)
     }
@@ -144,6 +156,7 @@ object GlassNudge {
             .edit()
             .putFloat("x", x.floatValue)
             .putFloat("y", y.floatValue)
+            .putInt(KEY_VERSION, VERSION)
             .apply()
     }
 
@@ -161,7 +174,6 @@ fun HomePagerMiuix(
     actions: HomeActions,
     bottomInnerPadding: Dp,
 ) {
-    val scrollBehavior = MiuixScrollBehavior()
     val enableBlur = LocalEnableBlur.current
     val backdrop = rememberBlurBackdrop(enableBlur)
     Scaffold(
@@ -177,7 +189,9 @@ fun HomePagerMiuix(
                     // 时刷新滚动范围，列表被 remeasure（配置变化、首帧）后会保留旧范围并
                     // 拒绝拖拽，表现为"有时完全滑不动"。代价只是失去下拉回弹，
                     // scrollEndHaptic 照旧。详见提交 ca087c71 的诊断。
-                    .nestedScroll(scrollBehavior.nestedScrollConnection)
+                    //
+                    // nestedScroll 接线也一并去掉：美化版主页没有顶栏，没有可折叠的东西，
+                    // 这条连接只会平白参与竖直手势的分发。
                     .padding(horizontal = 12.dp),
                 contentPadding = innerPadding,
                 overscrollEffect = null,
@@ -409,7 +423,10 @@ private fun StatusCard(
                         modifier = Modifier
                             .fillMaxWidth()
                             .onGloballyPositioned { coords ->
-                                cardWindowPos = coords.positionInWindow()
+                                // 只有真的变了才写状态：滚动时这个回调逐帧触发，
+                                // 无条件写会拉着整张卡重组，白吃帧。
+                                val pos = coords.positionInWindow()
+                                if (pos != cardWindowPos) cardWindowPos = pos
                             }
                             .shadow(12.dp, cardShape, clip = true)
                             .background(
@@ -460,15 +477,20 @@ private fun StatusCard(
                                             contentDescription = null,
                                             contentScale = ContentScale.Crop,
                                             modifier = Modifier
+                                                // 按面板原尺寸 1:1 铺，不做缩放：页面上的壁纸
+                                                // 就是按面板尺寸 Crop 画的，只要尺寸一致，
+                                                // 采样点就逐像素对得上。以前这里 +96 宽再 -48
+                                                // 偏移，等于把图放大约 9% 再用经验值补回来，
+                                                // 永远补不齐，卡片边沿就会露出未压暗的底。
                                                 .requiredSize(
-                                                    with(paneDensity) { (panelSize.width + 96).toDp() },
+                                                    with(paneDensity) { panelSize.width.toDp() },
                                                     with(paneDensity) { panelSize.height.toDp() },
                                                 )
                                                 .blur(16.dp)
                                                 .offset {
+                                                    // 只做坐标差，剩下的微调仅用于用户手动校准。
                                                     IntOffset(
                                                         panelPos.x.roundToInt() - cardPos.x.roundToInt()
-                                                            - 48
                                                             + with(paneDensity) { nudgeX.dp.toPx() }.roundToInt(),
                                                         panelPos.y.roundToInt() - cardPos.y.roundToInt()
                                                             + with(paneDensity) { nudgeY.dp.toPx() }.roundToInt(),
@@ -999,7 +1021,10 @@ private fun JailbreakGuardCard(modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .onGloballyPositioned { coords -> guardWindowPos = coords.positionInWindow() }
+            .onGloballyPositioned { coords ->
+                val pos = coords.positionInWindow()
+                if (pos != guardWindowPos) guardWindowPos = pos
+            }
             .shadow(8.dp, guardShape, clip = true)
             .background(
                 color = if (onGlass) Color.Transparent else colorScheme.tertiaryContainer,
@@ -1023,14 +1048,13 @@ private fun JailbreakGuardCard(modifier: Modifier = Modifier) {
                         contentScale = ContentScale.Crop,
                         modifier = Modifier
                             .requiredSize(
-                                with(guardDensity) { (panelSize.width + 96).toDp() },
+                                with(guardDensity) { panelSize.width.toDp() },
                                 with(guardDensity) { panelSize.height.toDp() },
                             )
                             .blur(16.dp)
                             .offset {
                                 IntOffset(
                                     panelPos.x.roundToInt() - cardPos.x.roundToInt()
-                                        - 48
                                         + with(guardDensity) { GlassNudge.x.floatValue.dp.toPx() }.roundToInt(),
                                     panelPos.y.roundToInt() - cardPos.y.roundToInt()
                                         + with(guardDensity) { GlassNudge.y.floatValue.dp.toPx() }.roundToInt(),
