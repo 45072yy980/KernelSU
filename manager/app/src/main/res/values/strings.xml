@@ -394,6 +394,14 @@
     <string name="jailbreak_choose_message">The kernel is not loaded yet. You can have this app gain root through the bundled exploit and immediately enter jailbreak (late-load) mode, without touching any partition. Or install the kernel manually.</string>
     <string name="jailbreak_manual_action">Manual install</string>
     <string name="jailbreak_exploit_action">Jailbreak (exploit)</string>
+    <string name="jailbreak_engine_ghostlock">ghostlock (built in)</string>
+    <string name="jailbreak_engine_dirtyfrag">DirtyFrag (external app)</string>
+    <string name="jailbreak_dirtyfrag_installed">DirtyFrag is installed. In its SU Manager card pick this app, then press Run exploit; root comes back here through ksud late-load.</string>
+    <string name="jailbreak_dirtyfrag_launched">Opened DirtyFrag: pick this app as the SU manager, then press Run exploit.</string>
+    <string name="jailbreak_dirtyfrag_launch_failed">Could not open DirtyFrag.</string>
+    <string name="jailbreak_dirtyfrag_downloading">Downloading DirtyFrag…</string>
+    <string name="jailbreak_dirtyfrag_ready">Handed the installer to the system. When it finishes, open DirtyFrag and press Run exploit</string>
+    <string name="jailbreak_dirtyfrag_failed">Could not download or install DirtyFrag. Check the network, or install it by hand from its releases page.</string>
     <string name="jailbreak_exploit_unavailable">The exploit is not bundled for this device.</string>
     <string name="jailbreak_exploit_failed">Jailbreak failed. The kernel may be unsupported; check the logs.</string>
     <string name="jailbreaking">Jailbreaking</string>

@@ -25,6 +25,7 @@ data class ColorPaletteScreenActions(
     val onSetColorStyle: (String) -> Unit,
     val onSetColorSpec: (String) -> Unit,
     val onSetEnableBlur: (Boolean) -> Unit,
+    val onSetHomeCardBlur: (Boolean) -> Unit,
     val onSetEnableFloatingBottomBar: (Boolean) -> Unit,
     val onSetEnableFloatingBottomBarBlur: (Boolean) -> Unit,
     val onSetEnableNavigationBadge: (Boolean) -> Unit,

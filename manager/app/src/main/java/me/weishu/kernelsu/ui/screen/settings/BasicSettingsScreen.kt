@@ -167,14 +167,6 @@ private fun basicRows(uiState: SettingsUiState, viewModel: SettingsViewModel): L
         onCheckedChange = viewModel::setAutoJailbreak,
     ),
     BasicRow(
-        icon = Icons.Filled.BlurOn,
-        title = R.string.settings_home_card_blur,
-        summary = stringResource(R.string.settings_home_card_blur_summary),
-        enabled = true,
-        checked = uiState.homeCardBlur,
-        onCheckedChange = viewModel::setHomeCardBlur,
-    ),
-    BasicRow(
         icon = Icons.AutoMirrored.Filled.CompareArrows,
         title = R.string.settings_disable_pager_swipe,
         summary = stringResource(R.string.settings_disable_pager_swipe_summary),

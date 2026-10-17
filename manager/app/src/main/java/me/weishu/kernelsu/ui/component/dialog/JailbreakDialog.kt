@@ -33,13 +33,14 @@ import top.yukonga.miuix.kmp.window.WindowDialog
 fun JailbreakDialog(
     show: Boolean,
     onExploit: () -> Unit,
+    onDirtyFrag: () -> Unit,
     onManualInstall: () -> Unit,
     onCancel: () -> Unit,
 ) {
     when (LocalUiMode.current) {
         UiMode.Miuix, UiMode.MiuixStock ->
-            JailbreakDialogMiuix(show, onExploit, onManualInstall, onCancel)
-        UiMode.Material -> JailbreakDialogMaterial(show, onExploit, onManualInstall, onCancel)
+            JailbreakDialogMiuix(show, onExploit, onDirtyFrag, onManualInstall, onCancel)
+        UiMode.Material -> JailbreakDialogMaterial(show, onExploit, onDirtyFrag, onManualInstall, onCancel)
     }
 }
 
@@ -47,6 +48,7 @@ fun JailbreakDialog(
 private fun JailbreakDialogMiuix(
     show: Boolean,
     onExploit: () -> Unit,
+    onDirtyFrag: () -> Unit,
     onManualInstall: () -> Unit,
     onCancel: () -> Unit,
 ) {
@@ -57,21 +59,27 @@ private fun JailbreakDialogMiuix(
         content = {
             Column(modifier = Modifier.fillMaxWidth()) {
                 MiuixText(text = stringResource(R.string.jailbreak_choose_message))
-                Row(
-                    horizontalArrangement = Arrangement.SpaceBetween,
+                // 两条独立的提权路径，最终都落到 ksud late-load：
+                // ghostlock 是本应用内置的二进制，DirtyFrag 是另装的一个应用。
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.padding(top = 12.dp)
                 ) {
                     MiuixTextButton(
+                        text = stringResource(R.string.jailbreak_engine_ghostlock),
+                        onClick = onExploit,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.textButtonColorsPrimary()
+                    )
+                    MiuixTextButton(
+                        text = stringResource(R.string.jailbreak_engine_dirtyfrag),
+                        onClick = onDirtyFrag,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    MiuixTextButton(
                         text = stringResource(R.string.jailbreak_manual_action),
                         onClick = onManualInstall,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Spacer(Modifier.width(20.dp))
-                    MiuixTextButton(
-                        text = stringResource(R.string.jailbreak_exploit_action),
-                        onClick = onExploit,
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.textButtonColorsPrimary()
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
             }
@@ -83,6 +91,7 @@ private fun JailbreakDialogMiuix(
 private fun JailbreakDialogMaterial(
     show: Boolean,
     onExploit: () -> Unit,
+    onDirtyFrag: () -> Unit,
     onManualInstall: () -> Unit,
     onCancel: () -> Unit,
 ) {
@@ -90,10 +99,17 @@ private fun JailbreakDialogMaterial(
     AlertDialog(
         onDismissRequest = onCancel,
         title = { Text(stringResource(R.string.jailbreak_choose_title)) },
-        text = { Text(stringResource(R.string.jailbreak_choose_message)) },
+        text = {
+            Column {
+                Text(stringResource(R.string.jailbreak_choose_message))
+                TextButton(onClick = onDirtyFrag) {
+                    Text(stringResource(R.string.jailbreak_engine_dirtyfrag))
+                }
+            }
+        },
         confirmButton = {
             TextButton(onClick = onExploit) {
-                Text(stringResource(R.string.jailbreak_exploit_action))
+                Text(stringResource(R.string.jailbreak_engine_ghostlock))
             }
         },
         dismissButton = {

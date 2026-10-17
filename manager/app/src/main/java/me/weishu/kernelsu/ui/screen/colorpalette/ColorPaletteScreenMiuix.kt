@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.BlurOn
 import androidx.compose.material.icons.automirrored.rounded.MenuOpen
 import androidx.compose.material.icons.rounded.AspectRatio
 import androidx.compose.material.icons.rounded.Colorize
@@ -212,6 +213,28 @@ fun ColorPaletteScreenMiuix(
                                     hapticEffect = SliderDefaults.SliderHapticEffect.Step,
                                 )
                             },
+                        )
+                    }
+
+                    Card(
+                        modifier = Modifier
+                            .padding(top = 12.dp)
+                            .fillMaxWidth(),
+                    ) {
+                        // 卡片磨砂是跟着背景暗度一起看的，所以和它挨着放。
+                        SwitchPreference(
+                            title = stringResource(id = R.string.settings_home_card_blur),
+                            summary = stringResource(id = R.string.settings_home_card_blur_summary),
+                            startAction = {
+                                Icon(
+                                    Icons.Rounded.BlurOn,
+                                    modifier = Modifier.padding(end = 6.dp),
+                                    contentDescription = stringResource(id = R.string.settings_home_card_blur),
+                                    tint = colorScheme.onBackground
+                                )
+                            },
+                            checked = uiState.homeCardBlur,
+                            onCheckedChange = actions.onSetHomeCardBlur,
                         )
                     }
 

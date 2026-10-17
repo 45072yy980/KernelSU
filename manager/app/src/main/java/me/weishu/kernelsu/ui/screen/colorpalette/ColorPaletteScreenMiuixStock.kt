@@ -309,6 +309,20 @@ fun ColorPaletteScreenMiuixStock(
                             )
                         }
                         SwitchPreference(
+                            title = stringResource(id = R.string.settings_home_card_blur),
+                            summary = stringResource(id = R.string.settings_home_card_blur_summary),
+                            startAction = {
+                                Icon(
+                                    Icons.Rounded.BlurOn,
+                                    modifier = Modifier.padding(end = 6.dp),
+                                    contentDescription = stringResource(id = R.string.settings_home_card_blur),
+                                    tint = colorScheme.onBackground
+                                )
+                            },
+                            checked = uiState.homeCardBlur,
+                            onCheckedChange = actions.onSetHomeCardBlur,
+                        )
+                        SwitchPreference(
                             title = stringResource(id = R.string.settings_floating_bottom_bar),
                             summary = stringResource(id = R.string.settings_floating_bottom_bar_summary),
                             startAction = {

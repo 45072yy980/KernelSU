@@ -27,6 +27,7 @@ import me.weishu.kernelsu.ui.UiMode
 import me.weishu.kernelsu.ui.component.dialog.JailbreakDialog
 import me.weishu.kernelsu.ui.component.dialog.rememberLoadingDialog
 import me.weishu.kernelsu.ui.screen.flash.FlashIt
+import me.weishu.kernelsu.ui.util.DirtyFrag
 import me.weishu.kernelsu.ui.util.JailbreakExploit
 import me.weishu.kernelsu.ui.navigation3.Navigator
 import me.weishu.kernelsu.ui.navigation3.Route
@@ -61,6 +62,34 @@ fun HomePager(
                 Toast.makeText(context, R.string.jailbreak_exploit_unavailable, Toast.LENGTH_LONG).show()
             } else {
                 navigator.push(Route.Flash(FlashIt.JailbreakExploit))
+            }
+        },
+        onDirtyFrag = {
+            jailbreakChooserShown = false
+            // 第二条路：DirtyFrag 是个独立应用，没有对外接口，只能装好再拉起来。
+            // 它的 SU 管理器卡片里能选中本应用（APK 自带 libksud.so），
+            // 选中后 root 会通过 ksud late-load 回到这里。
+            if (DirtyFrag.isInstalled(context)) {
+                val opened = DirtyFrag.launch(context)
+                Toast.makeText(
+                    context,
+                    if (opened) R.string.jailbreak_dirtyfrag_launched
+                    else R.string.jailbreak_dirtyfrag_launch_failed,
+                    Toast.LENGTH_LONG,
+                ).show()
+            } else {
+                scope.launch {
+                    loadingDialog.showLoading()
+                    val apk = DirtyFrag.downloadLatest(context)
+                    val installed = apk != null && DirtyFrag.install(context, apk)
+                    loadingDialog.hide()
+                    Toast.makeText(
+                        context,
+                        if (installed) R.string.jailbreak_dirtyfrag_ready
+                        else R.string.jailbreak_dirtyfrag_failed,
+                        Toast.LENGTH_LONG,
+                    ).show()
+                }
             }
         },
         onManualInstall = {

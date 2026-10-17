@@ -42,6 +42,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.BlurOn
 import androidx.compose.material.icons.automirrored.rounded.MenuOpen
 import androidx.compose.material.icons.filled.Brightness1
 import androidx.compose.material.icons.filled.Brightness3
@@ -281,6 +282,23 @@ fun ColorPaletteScreenMaterial(
                                 summary = stringResource(id = R.string.settings_navigation_badge_summary),
                                 checked = uiState.enableNavigationBadge,
                                 onCheckedChange = actions.onSetEnableNavigationBadge
+                            )
+                        }
+                    )
+                )
+            }
+
+            item {
+                SegmentedColumn(
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                    content = listOf(
+                        {
+                            SegmentedSwitchItem(
+                                icon = Icons.Rounded.BlurOn,
+                                title = stringResource(id = R.string.settings_home_card_blur),
+                                summary = stringResource(id = R.string.settings_home_card_blur_summary),
+                                checked = uiState.homeCardBlur,
+                                onCheckedChange = actions.onSetHomeCardBlur,
                             )
                         }
                     )
