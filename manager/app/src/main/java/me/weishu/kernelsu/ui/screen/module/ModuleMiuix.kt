@@ -47,6 +47,7 @@ import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
@@ -60,6 +61,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Code
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Storage
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -879,6 +881,7 @@ fun ModuleItem(
                         fontWeight = FontWeight(550),
                         color = colorScheme.error
                     )
+                }
                 // Extra rows, off by default: the id and the update manifest the module fetches.
                 if (LocalShowMoreModuleInfo.current) {
                     val moreTint = colorScheme.onSurfaceVariantSummary.copy(alpha = 0.75f)
@@ -899,17 +902,31 @@ fun ModuleItem(
                         )
                     }
                 }
-                // 大小由 ksud 在 root 侧算好、随模块列表一起返回；管理器进程自己读不了
-                // /data/adb，之前直接遍历目录只会拿到 null，所以一直不显示。
+                // 大小：ksud 在 root 侧算好随列表返回，做成一个低调的信息胶囊。
                 if (module.size > 0) {
-                    Text(
-                        text = "Size: ${formatByteSize(module.size)}",
-                        fontSize = 11.sp,
-                        modifier = Modifier.padding(top = 1.dp),
-                        color = colorScheme.onSurfaceVariantSummary.copy(alpha = 0.75f),
-                        textDecoration = textDecoration
-                    )
-                }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .padding(top = 4.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(colorScheme.secondaryContainer.copy(alpha = 0.55f))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Storage,
+                            contentDescription = null,
+                            modifier = Modifier.size(11.dp),
+                            tint = colorScheme.onSecondaryContainer.copy(alpha = 0.75f)
+                        )
+                        Spacer(Modifier.width(3.dp))
+                        Text(
+                            text = formatByteSize(module.size),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight(550),
+                            color = colorScheme.onSecondaryContainer.copy(alpha = 0.85f),
+                            textDecoration = textDecoration
+                        )
+                    }
                 }
             }
             Switch(

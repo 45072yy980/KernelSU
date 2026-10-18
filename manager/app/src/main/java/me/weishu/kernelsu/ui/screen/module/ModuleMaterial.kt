@@ -59,6 +59,7 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.Storage
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonColors
 import androidx.compose.material3.ButtonDefaults
@@ -123,6 +124,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
@@ -780,14 +782,32 @@ private fun ModuleItem(
                             )
                         }
                     }
-                    // 大小由 ksud 在 root 侧算好（管理器进程读不了 /data/adb）。
+                    // 大小：ksud 在 root 侧算好随列表返回，和 Miuix 皮肤用同样的小胶囊。
                     if (module.size > 0) {
-                        Text(
-                            text = "Size: ${formatByteSize(module.size)}",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
-                            style = MaterialTheme.typography.labelSmall,
-                            textDecoration = textDecoration
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .padding(top = 4.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.55f))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Storage,
+                                contentDescription = null,
+                                modifier = Modifier.size(11.dp),
+                                tint = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.75f)
+                            )
+                            Spacer(Modifier.width(3.dp))
+                            Text(
+                                text = formatByteSize(module.size),
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.85f),
+                                style = MaterialTheme.typography.labelSmall,
+                                textDecoration = textDecoration
+                            )
+                        }
                     }
                 }
 
