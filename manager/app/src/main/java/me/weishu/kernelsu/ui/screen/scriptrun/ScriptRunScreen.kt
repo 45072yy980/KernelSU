@@ -116,7 +116,7 @@ fun ScriptRunScreen(arg: ScriptRunArg, onBackEnabledChange: (Boolean) -> Unit) {
             onClose = { navigator.pop() },
         )
         when (uiMode) {
-            UiMode.Miuix -> ExecuteModuleActionScreenMiuix(outputState, outputActions)
+            UiMode.Miuix, UiMode.MiuixStock -> ExecuteModuleActionScreenMiuix(outputState, outputActions)
             UiMode.Material -> ExecuteModuleActionScreenMaterial(outputState, outputActions, snackbarHost)
         }
         return
@@ -140,7 +140,7 @@ fun ScriptRunScreen(arg: ScriptRunArg, onBackEnabledChange: (Boolean) -> Unit) {
     )
 
     when (uiMode) {
-        UiMode.Miuix -> ScriptRunScreenMiuix(state, actions)
+        UiMode.Miuix, UiMode.MiuixStock -> ScriptRunScreenMiuix(state, actions)
         UiMode.Material -> ScriptRunScreenMaterial(state, actions)
     }
 }

@@ -353,7 +353,9 @@ pub fn set_feature(feature_id: u32, value: u64) -> Result<()> {
             if err_str.contains("Try again") || err_str.contains("os error 11") {
                 // Verify the value was actually set
                 match get_feature(feature_id) {
-                    Ok((actual_value, supported)) => {
+                    Ok(state) => {
+                        let actual_value = state.value;
+                        let supported = state.supported;
                         if actual_value == value {
                             log::info!(
                                 "set_feature: id={feature_id} value={value} ioctl returned EAGAIN but value verified, treating as success (supported={supported})"

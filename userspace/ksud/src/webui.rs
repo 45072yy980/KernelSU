@@ -830,13 +830,13 @@ fn get_features() -> Result<Vec<FeatureState>> {
             continue;
         }
         match ksucalls::get_feature(*id) {
-            Ok((value, enabled)) => {
+            Ok(state) => {
                 result.push(FeatureState {
                     id: *id,
                     name: name.to_string(),
                     description: desc.to_string(),
-                    value,
-                    enabled,
+                    value: state.value,
+                    enabled: state.supported,
                 });
             }
             Err(_) => {
