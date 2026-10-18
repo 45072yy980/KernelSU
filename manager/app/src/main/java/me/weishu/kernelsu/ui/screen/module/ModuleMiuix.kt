@@ -218,6 +218,7 @@ fun ModulePagerMiuix(
                 html = it.html,
                 confirm = it.confirm,
                 dismiss = it.dismiss,
+                restricted = it.restricted,
             )
         }
     }
@@ -871,6 +872,14 @@ fun ModuleItem(
                     color = colorScheme.onSurfaceVariantSummary,
                     textDecoration = textDecoration
                 )
+                module.preinitWarning()?.let {
+                    Text(
+                        text = stringResource(it),
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(bottom = 1.dp),
+                        fontWeight = FontWeight(550),
+                        color = colorScheme.error
+                    )
                 // Extra rows, off by default: the id, the update manifest the module
                 // fetches and the folder's size on disk. The size is walked lazily
                 // because a module tree can be large and most rows are never inspected.
@@ -904,6 +913,7 @@ fun ModuleItem(
                             textDecoration = textDecoration
                         )
                     }
+                }
                 }
             }
             Switch(

@@ -9,7 +9,9 @@
 // 2: allowlist v4 root profile flags
 // 3: scoped su-session driver fd
 // 4: add KSU_GET_INFO_FLAG_BUNDLED
-static const __u32 KERNEL_SU_UAPI_VERSION = 4;
+// 5: add EVENT_SERVICES with a start/skip result
+// 6: add KSU_IOCTL_LOOKUP_SYMBOLS and KSU_GET_INFO_FLAG_PREINIT; modules.rc and preinit may live under /metadata/vold/ksu
+static const __u32 KERNEL_SU_UAPI_VERSION = 6;
 
 /* Magic numbers for reboot hook to install fd */
 static const __u32 KSU_INSTALL_MAGIC1 = 0xDEADBEEF;
@@ -22,12 +24,15 @@ struct ksu_become_daemon_cmd {
 static const __u32 EVENT_POST_FS_DATA = 1;
 static const __u32 EVENT_BOOT_COMPLETED = 2;
 static const __u32 EVENT_MODULE_MOUNTED = 3;
+static const __u32 EVENT_SERVICES = 4;
 
 static const __u32 KSU_GET_INFO_FLAG_LKM = (1U << 0);
 static const __u32 KSU_GET_INFO_FLAG_MANAGER = (1U << 1);
 static const __u32 KSU_GET_INFO_FLAG_LATE_LOAD = (1U << 2);
 static const __u32 KSU_GET_INFO_FLAG_PR_BUILD = (1U << 3);
 static const __u32 KSU_GET_INFO_FLAG_BUNDLED = (1U << 4);
+/* The preinit runner will run module preinit actions on boot */
+static const __u32 KSU_GET_INFO_FLAG_PREINIT = (1U << 5);
 
 struct ksu_get_info_cmd {
     __u32 version; /* Output: KERNEL_SU_VERSION */
@@ -109,8 +114,12 @@ struct ksu_set_app_profile_cmd {
 struct ksu_get_feature_cmd {
     __u32 feature_id; /* Input: feature ID (enum ksu_feature_id) */
     __u64 value; /* Output: feature value/state */
-    __u8 supported; /* Output: true if feature is supported, false otherwise */
+    __u8 supported; /* Output: KSU_FEATURE_FLAG_* bits, 0 if feature is not supported */
 };
+
+#define KSU_FEATURE_FLAG_SUPPORTED (1 << 0)
+/* Value is forced by boot config (force_feature param), SET_FEATURE is refused */
+#define KSU_FEATURE_FLAG_FORCED (1 << 1)
 
 struct ksu_set_feature_cmd {
     __u32 feature_id; /* Input: feature ID (enum ksu_feature_id) */
@@ -148,6 +157,21 @@ struct ksu_get_sulog_fd_cmd {
 };
 
 /*
+ * Batch kernel image symbol lookup. Returns the number of symbols found; the
+ * address of a symbol that does not exist in the running kernel is set to 0.
+ * Matches like ksuinit's /proc/kallsyms walk: a kernel symbol name is cut at
+ * its first '$', else at ".llvm.", and the first match in kallsyms order wins.
+ * Module symbols are never returned.
+ */
+struct ksu_lookup_symbols_cmd {
+    __aligned_u64 names; /* Input: user pointer to `count` user pointers to null-terminated names */
+    __aligned_u64 addrs; /* Output: user pointer to `count` __u64 symbol addresses */
+    __u32 count; /* Input: number of symbols, at most KSU_LOOKUP_SYMBOLS_MAX */
+    __u32 flags; /* Input: reserved for future use, must be 0 */
+};
+
+static const __u32 KSU_LOOKUP_SYMBOLS_MAX = 1024;
+
  * Stealth mode. `enabled` is 1 when on, 0 when off; GET reports the current
  * value, SET stores it to /data/adb/ksu/stealth so it survives a reboot.
  */
@@ -200,7 +224,10 @@ static const __u32 KSU_IOCTL_ADD_TRY_UMOUNT = _IOC(_IOC_WRITE, 'K', 18, 0);
 static const __u32 KSU_IOCTL_SET_INIT_PGRP = _IO('K', 19);
 static const __u32 KSU_IOCTL_GET_SULOG_FD = _IOW('K', 20, struct ksu_get_sulog_fd_cmd);
 static const __u32 KSU_IOCTL_DISABLE_ESCAPE_TO_ROOT = _IO('K', 21);
-static const __u32 KSU_IOCTL_GET_STEALTH = _IOR('K', 22, struct ksu_get_stealth_cmd);
-static const __u32 KSU_IOCTL_SET_STEALTH = _IOW('K', 23, struct ksu_set_stealth_cmd);
-static const __u32 KSU_IOCTL_GET_INTERNAL_FLAGS = _IOR('K', 24, struct ksu_get_internal_flags_cmd);
+static const __u32 KSU_IOCTL_LOOKUP_SYMBOLS = _IOW('K', 22, struct ksu_lookup_symbols_cmd);
+// DikSU: 隐身模式命令。22 已被上游 lookup_symbols 占用，这里顺延到 25-27。
+static const __u32 KSU_IOCTL_GET_STEALTH = _IOR('K', 25, struct ksu_get_stealth_cmd);
+static const __u32 KSU_IOCTL_SET_STEALTH = _IOW('K', 26, struct ksu_set_stealth_cmd);
+static const __u32 KSU_IOCTL_GET_INTERNAL_FLAGS = _IOR('K', 27, struct ksu_get_internal_flags_cmd);
+
 #endif

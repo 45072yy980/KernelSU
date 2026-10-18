@@ -279,6 +279,7 @@ dependencies {
     implementation(libs.dev.rikka.refine.runtime)
 
     implementation(libs.kotlinx.coroutines.core)
+    implementation(libs.kotlinx.serialization.json)
 
     implementation(libs.commonmark)
     implementation(libs.commonmark.ext.gfm.tables)
@@ -317,6 +318,8 @@ dependencies {
     // Generates the licence manifest the open-source screen reads, and the screen itself.
     implementation(libs.aboutlibraries.core)
     implementation(libs.aboutlibraries.compose.m3)
+
+    testImplementation(libs.junit)
 }
 
 aboutLibraries {
