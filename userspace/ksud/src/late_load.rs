@@ -71,7 +71,8 @@ pub fn run(package_name: &String, kmi: Option<String>, allow_shell: bool) -> Res
                 if !params.is_empty() {
                     params.push(' ');
                 }
-                params.push_str(&format!("block_modules={list}"));
+                params.push_str("block_modules=");
+                params.push_str(&list);
             }
         }
         let params = std::ffi::CString::new(params).context("invalid module params")?;
