@@ -66,6 +66,7 @@ import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Icon as MiuixIcon
 import top.yukonga.miuix.kmp.basic.IconButton as MiuixIconButton
 import top.yukonga.miuix.kmp.basic.Scaffold as MiuixScaffold
+import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.TopAppBar as MiuixTopAppBar
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
@@ -405,7 +406,8 @@ private fun OtherFeaturesMaterial(
                 .verticalScroll(rememberScrollState()),
         ) {
             SegmentedColumn(
-                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 13.dp, bottom = 13.dp),
+                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 13.dp),
+                title = stringResource(R.string.settings_group_disguise),
                 content = buildList<@Composable () -> Unit> {
                     add {
                         val hide = stringResource(R.string.settings_hide_applist)
@@ -441,6 +443,36 @@ private fun OtherFeaturesMaterial(
                             },
                         )
                     }
+                    // Only offered when the kernel knows the command; an older
+                    // kernel would take the switch and do nothing with it.
+                    if (stealthSupported) add {
+                        SegmentedSwitchItem(
+                            icon = Icons.Filled.VisibilityOff,
+                            title = stringResource(R.string.settings_stealth),
+                            summary = stringResource(R.string.settings_stealth_summary),
+                            checked = stealthEnabled,
+                            onCheckedChange = onStealthChange,
+                        )
+                    }
+                    add {
+                        SegmentedSwitchItem(
+                            icon = Icons.Filled.Calculate,
+                            title = stringResource(R.string.calculator_title),
+                            summary = stringResource(
+                                if (calculatorInstalled) R.string.calculator_installed_summary
+                                else R.string.calculator_not_installed_summary
+                            ),
+                            checked = calculatorInstalled,
+                            onCheckedChange = onCalculatorChange,
+                        )
+                    }
+                },
+            )
+
+            SegmentedColumn(
+                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 13.dp),
+                title = stringResource(R.string.settings_group_guard),
+                content = buildList<@Composable () -> Unit> {
                     add {
                         val guardTitle = stringResource(R.string.settings_partition_guard)
                         val guardSummary = stringResource(
@@ -467,36 +499,18 @@ private fun OtherFeaturesMaterial(
                             onCheckedChange = onRuntimeGuardChange,
                         )
                     }
-                    // Only offered when the kernel knows the command; an older
-                    // kernel would take the switch and do nothing with it.
-                    if (stealthSupported) add {
-                        SegmentedSwitchItem(
-                            icon = Icons.Filled.VisibilityOff,
-                            title = stringResource(R.string.settings_stealth),
-                            summary = stringResource(R.string.settings_stealth_summary),
-                            checked = stealthEnabled,
-                            onCheckedChange = onStealthChange,
-                        )
-                    }
-                    add {
-                        SegmentedSwitchItem(
-                            icon = Icons.Filled.Calculate,
-                            title = stringResource(R.string.calculator_title),
-                            summary = stringResource(
-                                if (calculatorInstalled) R.string.calculator_installed_summary
-                                else R.string.calculator_not_installed_summary
-                            ),
-                            checked = calculatorInstalled,
-                            onCheckedChange = onCalculatorChange,
-                        )
-                    }
+                },
+            )
+
+            SegmentedColumn(
+                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 13.dp, bottom = 13.dp),
+                title = stringResource(R.string.settings_group_tools),
+                content = buildList<@Composable () -> Unit> {
                     add {
                         SegmentedListItem(
                             onClick = onOpenShizuku,
                             headlineContent = { Text("Shizuku") },
-                            supportingContent = {
-                                Text("内置 Shizuku 服务管理")
-                            },
+                            supportingContent = { Text("内置 Shizuku 服务管理") },
                             leadingContent = { Icon(Icons.Filled.WaterDrop, null) },
                         )
                     }
@@ -532,6 +546,7 @@ private fun OtherFeaturesMaterial(
         }
     }
 }
+
 
 @Composable
 private fun OtherFeaturesMiuix(
@@ -574,6 +589,10 @@ private fun OtherFeaturesMiuix(
             contentPadding = innerPadding,
         ) {
             item {
+                SmallTitle(
+                    text = stringResource(R.string.settings_group_disguise),
+                    modifier = Modifier.padding(top = 12.dp),
+                )
                 Card(modifier = Modifier.padding(top = 12.dp)) {
                     ArrowPreference(
                         title = stringResource(R.string.settings_hide_applist),
@@ -601,44 +620,6 @@ private fun OtherFeaturesMiuix(
                         },
                         onClick = onOpenKeymint,
                     )
-                    SwitchPreference(
-                        title = stringResource(R.string.settings_partition_guard),
-                        summary = stringResource(
-                            if (guardLocked) R.string.settings_partition_guard_summary_jailbreak
-                            else R.string.settings_partition_guard_summary
-                        ),
-                        startAction = {
-                            MiuixIcon(
-                                imageVector = Icons.Filled.Security,
-                                contentDescription = null,
-                                tint = colorScheme.onBackground,
-                                modifier = Modifier.padding(end = 6.dp),
-                            )
-                        },
-                        enabled = !guardLocked,
-                        checked = guardEnabled,
-                        onCheckedChange = onGuardChange,
-                    )
-                    // Runtime child: only surfaced (and only meaningful) while the
-                    // parent guard is on. Off by default in every mode.
-                    if (guardEnabled) {
-                        SwitchPreference(
-                            title = stringResource(R.string.settings_runtime_guard),
-                            summary = stringResource(R.string.settings_runtime_guard_summary),
-                            startAction = {
-                                MiuixIcon(
-                                    imageVector = Icons.Filled.Lock,
-                                    contentDescription = null,
-                                    tint = colorScheme.onBackground,
-                                    modifier = Modifier.padding(end = 6.dp),
-                                )
-                            },
-                            checked = runtimeGuardEnabled,
-                            onCheckedChange = onRuntimeGuardChange,
-                        )
-                    }
-                    // Only offered when the kernel knows the command; an older
-                    // kernel would take the switch and do nothing with it.
                     if (stealthSupported) {
                         SwitchPreference(
                             title = stringResource(R.string.settings_stealth),
@@ -672,6 +653,56 @@ private fun OtherFeaturesMiuix(
                         checked = calculatorInstalled,
                         onCheckedChange = onCalculatorChange,
                     )
+                }
+            }
+            item {
+                SmallTitle(
+                    text = stringResource(R.string.settings_group_guard),
+                    modifier = Modifier.padding(top = 12.dp),
+                )
+                Card(modifier = Modifier.padding(top = 12.dp)) {
+                    SwitchPreference(
+                        title = stringResource(R.string.settings_partition_guard),
+                        summary = stringResource(
+                            if (guardLocked) R.string.settings_partition_guard_summary_jailbreak
+                            else R.string.settings_partition_guard_summary
+                        ),
+                        startAction = {
+                            MiuixIcon(
+                                imageVector = Icons.Filled.Security,
+                                contentDescription = null,
+                                tint = colorScheme.onBackground,
+                                modifier = Modifier.padding(end = 6.dp),
+                            )
+                        },
+                        enabled = !guardLocked,
+                        checked = guardEnabled,
+                        onCheckedChange = onGuardChange,
+                    )
+                    if (guardEnabled) {
+                        SwitchPreference(
+                            title = stringResource(R.string.settings_runtime_guard),
+                            summary = stringResource(R.string.settings_runtime_guard_summary),
+                            startAction = {
+                                MiuixIcon(
+                                    imageVector = Icons.Filled.Lock,
+                                    contentDescription = null,
+                                    tint = colorScheme.onBackground,
+                                    modifier = Modifier.padding(end = 6.dp),
+                                )
+                            },
+                            checked = runtimeGuardEnabled,
+                            onCheckedChange = onRuntimeGuardChange,
+                        )
+                    }
+                }
+            }
+            item {
+                SmallTitle(
+                    text = stringResource(R.string.settings_group_tools),
+                    modifier = Modifier.padding(top = 12.dp),
+                )
+                Card(modifier = Modifier.padding(top = 12.dp)) {
                     ArrowPreference(
                         title = "Shizuku",
                         summary = "内置 Shizuku 服务管理",

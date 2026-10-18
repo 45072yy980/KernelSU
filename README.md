@@ -232,6 +232,22 @@ versionCode = major × 10000 + minor × 1000 + patch × 100 + tag 之后的提�
 
 ## 5. 更新记录
 
+### v3.5.8-diksu
+
+自 v3.5.7 以来共 **15 个提交**（含一次上游同步），主要是把 3.5.7 之后的同步内容补齐、修掉模块页两个老问题，并把设置页重新归类。
+
+- **同步上游 tiann/KernelSU** —— 模块 preinit、模块热安装、`shell_su_adb_only`、模块黑名单、`lookup_symbols` ioctl、模块仓库接口等（40 个上游提交）。
+- **修复"提权后仍显示未安装"** —— 内核构建时把管理器包名固定为本分支的 `me.diksu.kernelsu`，内核侧按包名 + v2 签名兜底识别，不再只认上游包名。
+- **模块大小** —— 改由 ksud 在 root 侧算好、随 `module list` 返回（管理器进程读不了 `/data/adb`，之前永远算不出来），列表里常显为带图标的小胶囊；顺带修掉 Miuix 卡片 `preinitWarning()` 的 `let` 少一个收尾括号、把 ID / 更新地址 / 大小整块吞掉的 bug。
+- **模块热安装** —— 安装完成且已热生效时不再提示重启，改为提示"已热安装"；是否热安装仍由模块在 `customize.sh` 里 `MODULE_HOT_INSTALL_REQUEST=true` 决定。
+- **新增设置项** —— 模块黑名单（`/data/adb/ksu/block_modules`）、shell su 仅 adb。
+- **界面** ——
+  - 美化版（Miuix）隐藏系统状态栏，切到原版 / Material 自动恢复；
+  - 主题页新增「简洁模式 / 显示更多模块信息 / 禁用 Pager 滑动」；
+  - 基础功能页按 **Root 与 Shell、内核特性、模块与刷写、调试** 分组，模块更新检查也从「更新」区搬到这里；
+  - 其他功能页按 **隐蔽与伪装、系统守护、工具** 分组。
+- **构建** —— versionCode 的提交计数改用 `--first-parent`，合并上游后不会再跳进下一个小版本区间；自用包可只构建 arm64。
+
 ### v3.5.7-diksu
 
 自 v3.5.5 以来共 **77 个提交、150 个文件**（42 fix / 13 feat / 7 ci / 8 docs / 2 build / 2 refactor）。

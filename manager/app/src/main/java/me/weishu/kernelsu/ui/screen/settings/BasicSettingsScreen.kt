@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.LayersClear
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.SystemUpdateAlt
 import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -182,6 +183,14 @@ private fun basicGroups(uiState: SettingsUiState, viewModel: SettingsViewModel):
     BasicGroup(
         title = R.string.settings_group_modules,
         rows = listOf(
+            BasicRow(
+                icon = Icons.Filled.SystemUpdateAlt,
+                title = R.string.settings_module_check_update,
+                summary = stringResource(R.string.settings_check_update_summary),
+                enabled = true,
+                checked = uiState.checkModuleUpdate,
+                onCheckedChange = viewModel::setCheckModuleUpdate,
+            ),
             BasicRow(
                 icon = Icons.AutoMirrored.Filled.Rule,
                 title = R.string.settings_umount_modules_default,

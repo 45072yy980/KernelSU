@@ -29,7 +29,6 @@ import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.SystemUpdate
-import androidx.compose.material.icons.filled.SystemUpdateAlt
 import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LargeFlexibleTopAppBar
@@ -108,15 +107,6 @@ fun SettingPagerMaterial(
                                 summary = stringResource(id = R.string.settings_check_update_summary),
                                 checked = uiState.checkUpdate,
                                 onCheckedChange = actions.onSetCheckUpdate
-                            )
-                        },
-                        {
-                            SegmentedSwitchItem(
-                                icon = Icons.Filled.SystemUpdateAlt,
-                                title = stringResource(id = R.string.settings_module_check_update),
-                                summary = stringResource(id = R.string.settings_check_update_summary),
-                                checked = uiState.checkModuleUpdate,
-                                onCheckedChange = actions.onSetCheckModuleUpdate
                             )
                         }
                     )
