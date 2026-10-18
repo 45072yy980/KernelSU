@@ -37,6 +37,12 @@ on:
       - 'Cargo.toml'
   workflow_call:
   workflow_dispatch:
+    inputs:
+      abi:
+        description: "只构建指定 ABI（逗号分隔，留空 = 全部三个）"
+        required: false
+        type: string
+        default: ""
 
 jobs:
   generate-key:
@@ -234,11 +240,18 @@ jobs:
         uses: gradle/actions/setup-gradle@v6
 
       - name: Build with Gradle
+        env:
+          ABI_INPUT: ${{ inputs.abi }}
         run: |
+          ABI_ARG=""
+          if [ -n "$ABI_INPUT" ]; then
+            ABI_ARG="-PksuAbi=$ABI_INPUT"
+            echo "只构建 ABI: $ABI_INPUT"
+          fi
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            ./gradlew clean assembleRelease -PIS_PR_BUILD=true
+            ./gradlew clean assembleRelease -PIS_PR_BUILD=true $ABI_ARG
           else
-            ./gradlew clean assembleRelease
+            ./gradlew clean assembleRelease $ABI_ARG
           fi
 
       # fpdrop 是 CMake 产物，靠 merge*Assets → native 构建的依赖在打包前生成。

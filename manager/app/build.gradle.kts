@@ -179,7 +179,15 @@ android {
         }
 
         ndk {
-            abiFilters += listOf("arm64-v8a", "x86_64", "riscv64")
+            // 默认三架构。自用精简包可以只带 arm64：
+            //   ./gradlew :app:assembleRelease -PksuAbi=arm64-v8a
+            // 也支持逗号分隔的多个 ABI。
+            val abiOverride = (project.findProperty("ksuAbi") as String?)?.trim()
+            abiFilters += if (abiOverride.isNullOrEmpty()) {
+                listOf("arm64-v8a", "x86_64", "riscv64")
+            } else {
+                abiOverride.split(',').map { it.trim() }.filter { it.isNotEmpty() }
+            }
         }
     }
 
