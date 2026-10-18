@@ -3,11 +3,13 @@ package me.weishu.kernelsu.ui.screen.flash
 import android.widget.Toast
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
@@ -57,6 +59,18 @@ fun FlashScreen(flashIt: FlashIt, onBackEnabledChange: (Boolean) -> Unit) {
             } else {
                 Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
             }
+        }
+    }
+
+    // 热安装：ksud 安装完就把暂存目录换成正式目录（不留 update 标记），moduleNeedsReboot()
+    // 因此不会置 showRebootAction。这里补一句明确提示，免得用户以为还要重启。
+    val rebootPending by rememberUpdatedState(showRebootAction)
+    LaunchedEffect(flashingStatus) {
+        if (flashingStatus == FlashingStatus.SUCCESS &&
+            flashIt is FlashIt.FlashModules &&
+            !rebootPending
+        ) {
+            showMessage(context.getString(R.string.module_hot_install_done))
         }
     }
 

@@ -387,6 +387,7 @@
     <string name="download_cancel">取消</string>
     <string name="download_install">安装</string>
     <string name="settings_adb_root_summary">以 Root 权限运行 adbd 守护进程</string>
+    <string name="module_hot_install_done">模块已热安装生效，无需重启</string>
     <string name="settings_module_blacklist">模块黑名单</string>
     <string name="settings_module_blacklist_summary">阻止列出的内核模块加载，逗号分隔；下次越狱激活时生效</string>
     <string name="module_blacklist_dialog_title">模块黑名单</string>

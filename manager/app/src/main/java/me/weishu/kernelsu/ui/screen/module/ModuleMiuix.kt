@@ -64,6 +64,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -98,7 +99,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import me.weishu.kernelsu.R
 import me.weishu.kernelsu.data.model.Module
 import me.weishu.kernelsu.data.model.ModuleUpdateInfo
@@ -880,9 +883,7 @@ fun ModuleItem(
                         fontWeight = FontWeight(550),
                         color = colorScheme.error
                     )
-                // Extra rows, off by default: the id, the update manifest the module
-                // fetches and the folder's size on disk. The size is walked lazily
-                // because a module tree can be large and most rows are never inspected.
+                // Extra rows, off by default: the id and the update manifest the module fetches.
                 if (LocalShowMoreModuleInfo.current) {
                     val moreTint = colorScheme.onSurfaceVariantSummary.copy(alpha = 0.75f)
                     Text(
@@ -901,18 +902,22 @@ fun ModuleItem(
                             textDecoration = textDecoration
                         )
                     }
-                    val moduleSize = remember(module.id) {
+                }
+                // The folder's size on disk is always shown: walked off the main thread
+                // because a module tree can be large, and each card gets its own state.
+                val moduleSize by produceState<Long?>(null, module.id) {
+                    value = withContext(Dispatchers.IO) {
                         moduleDirectorySize("/data/adb/modules/${module.id}")
                     }
-                    if (moduleSize != null) {
-                        Text(
-                            text = "Size: ${formatByteSize(moduleSize)}",
-                            fontSize = 11.sp,
-                            modifier = Modifier.padding(top = 1.dp),
-                            color = moreTint,
-                            textDecoration = textDecoration
-                        )
-                    }
+                }
+                moduleSize?.let { size ->
+                    Text(
+                        text = "Size: ${formatByteSize(size)}",
+                        fontSize = 11.sp,
+                        modifier = Modifier.padding(top = 1.dp),
+                        color = colorScheme.onSurfaceVariantSummary.copy(alpha = 0.75f),
+                        textDecoration = textDecoration
+                    )
                 }
                 }
             }

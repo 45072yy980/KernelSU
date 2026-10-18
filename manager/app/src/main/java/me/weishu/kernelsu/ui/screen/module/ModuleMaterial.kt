@@ -93,6 +93,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -125,7 +126,9 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import me.weishu.kernelsu.R
 import me.weishu.kernelsu.data.model.Module
 import me.weishu.kernelsu.data.model.ModuleUpdateInfo
@@ -763,9 +766,7 @@ private fun ModuleItem(
                         style = MaterialTheme.typography.bodySmall,
                         textDecoration = textDecoration
                     )
-                    // Extra rows, off by default: the id, the update manifest and the
-                    // folder's size on disk, walked lazily for the same reason as on
-                    // the Miuix skin.
+                    // Extra rows, off by default: the id and the update manifest.
                     if (LocalShowMoreModuleInfo.current) {
                         val moreTint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
                         Text(
@@ -782,17 +783,20 @@ private fun ModuleItem(
                                 textDecoration = textDecoration
                             )
                         }
-                        val moduleSize = remember(module.id) {
+                    }
+                    // 大小始终显示：在 IO 线程上算，避免遍历大模块时卡住列表。
+                    val moduleSize by produceState<Long?>(null, module.id) {
+                        value = withContext(Dispatchers.IO) {
                             moduleDirectorySize("/data/adb/modules/${module.id}")
                         }
-                        if (moduleSize != null) {
-                            Text(
-                                text = "Size: ${formatByteSize(moduleSize)}",
-                                color = moreTint,
-                                style = MaterialTheme.typography.labelSmall,
-                                textDecoration = textDecoration
-                            )
-                        }
+                    }
+                    moduleSize?.let { size ->
+                        Text(
+                            text = "Size: ${formatByteSize(size)}",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
+                            style = MaterialTheme.typography.labelSmall,
+                            textDecoration = textDecoration
+                        )
                     }
                 }
 

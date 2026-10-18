@@ -408,6 +408,7 @@
     <string name="download_install">Install</string>
     <string name="settings_adb_root" translatable="false">ADB Root</string>
     <string name="settings_adb_root_summary">Run adbd daemon with Root privileges</string>
+    <string name="module_hot_install_done">Module applied immediately, no reboot needed</string>
     <string name="settings_module_blacklist">Module blacklist</string>
     <string name="settings_module_blacklist_summary">Block the listed kernel modules from loading, comma separated; applies on the next jailbreak activation</string>
     <string name="module_blacklist_dialog_title">Module blacklist</string>
