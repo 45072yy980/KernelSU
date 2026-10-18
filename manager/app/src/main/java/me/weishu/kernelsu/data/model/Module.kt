@@ -21,4 +21,6 @@ data class Module(
     val webUiIconPath: String?,
     // preinit state for the next boot: "", "ok", "no_space", "error" or "bootloop"
     val preinit: String = "",
+    // Root-side directory size in bytes, 0 when ksud could not measure it.
+    val size: Long = 0L,
 )

@@ -64,7 +64,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -99,9 +98,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import me.weishu.kernelsu.R
 import me.weishu.kernelsu.data.model.Module
 import me.weishu.kernelsu.data.model.ModuleUpdateInfo
@@ -119,7 +116,6 @@ import me.weishu.kernelsu.ui.theme.LocalEnableBlur
 import me.weishu.kernelsu.ui.theme.LocalModuleDescriptionMaxLines
 import me.weishu.kernelsu.ui.theme.LocalShowMoreModuleInfo
 import me.weishu.kernelsu.ui.util.formatByteSize
-import me.weishu.kernelsu.ui.util.moduleDirectorySize
 import me.weishu.kernelsu.ui.util.BlurredBar
 import me.weishu.kernelsu.ui.util.getFileName
 import me.weishu.kernelsu.ui.util.reboot
@@ -903,16 +899,11 @@ fun ModuleItem(
                         )
                     }
                 }
-                // The folder's size on disk is always shown: walked off the main thread
-                // because a module tree can be large, and each card gets its own state.
-                val moduleSize by produceState<Long?>(null, module.id) {
-                    value = withContext(Dispatchers.IO) {
-                        moduleDirectorySize("/data/adb/modules/${module.id}")
-                    }
-                }
-                moduleSize?.let { size ->
+                // 大小由 ksud 在 root 侧算好、随模块列表一起返回；管理器进程自己读不了
+                // /data/adb，之前直接遍历目录只会拿到 null，所以一直不显示。
+                if (module.size > 0) {
                     Text(
-                        text = "Size: ${formatByteSize(size)}",
+                        text = "Size: ${formatByteSize(module.size)}",
                         fontSize = 11.sp,
                         modifier = Modifier.padding(top = 1.dp),
                         color = colorScheme.onSurfaceVariantSummary.copy(alpha = 0.75f),

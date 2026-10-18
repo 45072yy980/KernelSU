@@ -93,7 +93,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -126,9 +125,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import me.weishu.kernelsu.R
 import me.weishu.kernelsu.data.model.Module
 import me.weishu.kernelsu.data.model.ModuleUpdateInfo
@@ -146,7 +143,6 @@ import me.weishu.kernelsu.ui.component.statustag.StatusTag
 import me.weishu.kernelsu.ui.theme.LocalModuleDescriptionMaxLines
 import me.weishu.kernelsu.ui.theme.LocalShowMoreModuleInfo
 import me.weishu.kernelsu.ui.util.formatByteSize
-import me.weishu.kernelsu.ui.util.moduleDirectorySize
 import me.weishu.kernelsu.ui.util.reboot
 
 @SuppressLint("StringFormatInvalid")
@@ -784,15 +780,10 @@ private fun ModuleItem(
                             )
                         }
                     }
-                    // 大小始终显示：在 IO 线程上算，避免遍历大模块时卡住列表。
-                    val moduleSize by produceState<Long?>(null, module.id) {
-                        value = withContext(Dispatchers.IO) {
-                            moduleDirectorySize("/data/adb/modules/${module.id}")
-                        }
-                    }
-                    moduleSize?.let { size ->
+                    // 大小由 ksud 在 root 侧算好（管理器进程读不了 /data/adb）。
+                    if (module.size > 0) {
                         Text(
-                            text = "Size: ${formatByteSize(size)}",
+                            text = "Size: ${formatByteSize(module.size)}",
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
                             style = MaterialTheme.typography.labelSmall,
                             textDecoration = textDecoration

@@ -1177,6 +1177,30 @@ fn resolve_module_icon_path(
     }
 }
 
+/** 模块目录占用的字节数，走的是 root 视角（管理器自己读不了 /data/adb）。 */
+fn directory_size(root: &std::path::Path) -> u64 {
+    let mut total = 0u64;
+    let mut stack = vec![root.to_path_buf()];
+
+    while let Some(dir) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let Ok(file_type) = entry.file_type() else {
+                continue;
+            };
+            if file_type.is_dir() {
+                stack.push(entry.path());
+            } else if file_type.is_file() {
+                total += entry.metadata().map(|m| m.len()).unwrap_or(0);
+            }
+        }
+    }
+
+    total
+}
+
 fn list_module(path: &str) -> Vec<HashMap<String, String>> {
     // Load all module configs once to minimize I/O overhead
     let all_configs = match crate::module_config::get_all_module_configs() {
@@ -1212,6 +1236,9 @@ fn list_module(path: &str) -> Vec<HashMap<String, String>> {
                 continue;
             }
         };
+
+        // Root-side directory size: the manager process cannot read /data/adb itself.
+        module_prop_map.insert("size".to_owned(), directory_size(&path).to_string());
 
         // If id is missing or empty, use directory name as fallback
         if !module_prop_map.contains_key("id") || module_prop_map["id"].is_empty() {
