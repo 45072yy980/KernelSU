@@ -12,3 +12,6 @@ __pycache__
 
 # ddk build output (kernelsu-*.ko)
 /out
+
+# 自用构建产物（每版约 10MB，不进仓库）
+/DikSU_*.apk
