@@ -44,10 +44,14 @@ fun getGitCommitCount(): Int {
 }
 
 // How many commits sit on top of the nearest version tag.
+//
+// --first-parent：只数本分支自己的提交。合并上游时那条支线会带进来成百上千个
+// 上游提交，按全量计数会让 versionCode 直接跳进下一个小版本区间（例如 3.5.7 的
+// 构建算出 38399），以后发 3.5.8 反而装不上去。
 fun getCommitsSinceTag(): Int {
     val tag = getGitTag()
     if (tag.isEmpty()) return 0
-    return gitLines("rev-list", "--count", "$tag..HEAD").toInt()
+    return gitLines("rev-list", "--count", "--first-parent", "$tag..HEAD").toInt()
 }
 
 // The short hash of HEAD, for the version name only.
