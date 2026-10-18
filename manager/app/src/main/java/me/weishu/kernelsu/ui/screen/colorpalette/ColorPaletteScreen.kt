@@ -69,6 +69,9 @@ fun ColorPaletteScreen() {
         onSetPagerInterceptionMode = viewModel::setPagerInterceptionMode,
         onSetPageScale = viewModel::setPageScale,
         onSetModuleDescriptionMaxLines = viewModel::setModuleDescriptionMaxLines,
+        onSetSimpleMode = viewModel::setSimpleMode,
+        onSetShowMoreModuleInfo = viewModel::setShowMoreModuleInfo,
+        onSetDisablePagerSwipe = viewModel::setDisablePagerSwipe,
     )
 
     when (LocalUiMode.current) {

@@ -606,6 +606,10 @@
     <!-- 内置 Shizuku -->
     <string name="shizuku_permission_binder_timeout">Shizuku 服务未就绪，请稍后重试</string>
     <!-- 设置页分组标题 -->
+    <string name="settings_group_root">Root and shell</string>
+    <string name="settings_group_kernel">Kernel features</string>
+    <string name="settings_group_modules">Modules and flashing</string>
+    <string name="settings_group_debug">Debugging</string>
     <string name="settings_section_general">General</string>
     <string name="settings_section_appearance">Appearance</string>
     <string name="settings_section_features">Features</string>

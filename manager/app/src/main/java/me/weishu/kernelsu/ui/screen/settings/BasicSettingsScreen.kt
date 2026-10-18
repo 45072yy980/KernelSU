@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.automirrored.filled.CompareArrows
 import androidx.compose.material.icons.filled.BlurOn
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material3.AlertDialog
@@ -22,10 +21,8 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.Rule
 import androidx.compose.material.icons.filled.Adb
 import androidx.compose.material.icons.filled.AdminPanelSettings
-import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.DeveloperMode
 import androidx.compose.material.icons.filled.FlashOn
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LayersClear
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Security
@@ -57,6 +54,7 @@ import me.weishu.kernelsu.ui.navigation3.Route
 import me.weishu.kernelsu.ui.viewmodel.SettingsViewModel
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Scaffold as MiuixScaffold
+import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.TopAppBar as MiuixTopAppBar
 import top.yukonga.miuix.kmp.basic.Icon as MiuixIcon
 import top.yukonga.miuix.kmp.basic.IconButton as MiuixIconButton
@@ -103,112 +101,117 @@ private class BasicRow(
     val onCheckedChange: (Boolean) -> Unit,
 )
 
+/**
+ * 基础功能页按“这组开关到底管什么”分组：root 能力、内核特性、模块与刷写、调试。
+ * 界面偏好（简洁模式、模块信息、Pager 滑动）已经搬到主题页，不再和 root/内核开关混在一起。
+ */
+private class BasicGroup(
+    val title: Int,
+    val rows: List<BasicRow>,
+)
+
 @Composable
-private fun basicRows(uiState: SettingsUiState, viewModel: SettingsViewModel): List<BasicRow> = listOf(
-    BasicRow(
-        icon = Icons.Filled.LayersClear,
-        title = R.string.settings_kernel_umount,
-        summary = statusSummary(
-            uiState.kernelUmountStatus,
-            R.string.settings_kernel_umount_summary,
+private fun basicGroups(uiState: SettingsUiState, viewModel: SettingsViewModel): List<BasicGroup> = listOf(
+    BasicGroup(
+        title = R.string.settings_group_root,
+        rows = listOf(
+            BasicRow(
+                icon = Icons.AutoMirrored.Filled.Article,
+                title = R.string.settings_sulog,
+                summary = statusSummary(uiState.sulogStatus, R.string.settings_sulog_summary),
+                enabled = uiState.sulogStatus == "supported",
+                checked = uiState.isSulogEnabled,
+                onCheckedChange = viewModel::setSulogEnabled,
+            ),
+            BasicRow(
+                icon = Icons.Filled.Adb,
+                title = R.string.settings_adb_root,
+                summary = statusSummary(uiState.adbRootStatus, R.string.settings_adb_root_summary),
+                enabled = uiState.adbRootStatus == "supported",
+                checked = uiState.isAdbRootEnabled,
+                onCheckedChange = viewModel::setAdbRootEnabled,
+            ),
+            BasicRow(
+                icon = Icons.Filled.VerifiedUser,
+                title = R.string.settings_shell_su_adb_only,
+                summary = statusSummary(
+                    uiState.shellSuAdbOnlyStatus,
+                    R.string.settings_shell_su_adb_only_summary,
+                ),
+                enabled = uiState.shellSuAdbOnlyStatus == "supported",
+                checked = uiState.isShellSuAdbOnlyEnabled,
+                onCheckedChange = viewModel::setShellSuAdbOnlyEnabled,
+            ),
         ),
-        enabled = uiState.kernelUmountStatus == "supported",
-        checked = uiState.isKernelUmountEnabled,
-        onCheckedChange = viewModel::setKernelUmountEnabled,
     ),
-    BasicRow(
-        icon = Icons.Filled.Security,
-        title = R.string.settings_selinux_hide,
-        summary = statusSummary(
-            uiState.selinuxHideStatus,
-            R.string.settings_selinux_hide_summary,
+    BasicGroup(
+        title = R.string.settings_group_kernel,
+        rows = listOf(
+            BasicRow(
+                icon = Icons.Filled.LayersClear,
+                title = R.string.settings_kernel_umount,
+                summary = statusSummary(
+                    uiState.kernelUmountStatus,
+                    R.string.settings_kernel_umount_summary,
+                ),
+                enabled = uiState.kernelUmountStatus == "supported",
+                checked = uiState.isKernelUmountEnabled,
+                onCheckedChange = viewModel::setKernelUmountEnabled,
+            ),
+            BasicRow(
+                icon = Icons.Filled.Security,
+                title = R.string.settings_selinux_hide,
+                summary = statusSummary(
+                    uiState.selinuxHideStatus,
+                    R.string.settings_selinux_hide_summary,
+                ),
+                enabled = uiState.selinuxHideStatus == "supported",
+                checked = uiState.isSelinuxHideEnabled,
+                onCheckedChange = viewModel::setSelinuxHideEnabled,
+            ),
+            BasicRow(
+                icon = Icons.Filled.FlashOn,
+                title = R.string.settings_auto_jailbreak,
+                summary = stringResource(R.string.settings_auto_jailbreak_summary),
+                enabled = uiState.isLateLoadMode,
+                checked = uiState.autoJailbreak,
+                onCheckedChange = viewModel::setAutoJailbreak,
+            ),
         ),
-        enabled = uiState.selinuxHideStatus == "supported",
-        checked = uiState.isSelinuxHideEnabled,
-        onCheckedChange = viewModel::setSelinuxHideEnabled,
     ),
-    BasicRow(
-        icon = Icons.AutoMirrored.Filled.Article,
-        title = R.string.settings_sulog,
-        summary = statusSummary(uiState.sulogStatus, R.string.settings_sulog_summary),
-        enabled = uiState.sulogStatus == "supported",
-        checked = uiState.isSulogEnabled,
-        onCheckedChange = viewModel::setSulogEnabled,
-    ),
-    BasicRow(
-        icon = Icons.Filled.Adb,
-        title = R.string.settings_adb_root,
-        summary = statusSummary(uiState.adbRootStatus, R.string.settings_adb_root_summary),
-        enabled = uiState.adbRootStatus == "supported",
-        checked = uiState.isAdbRootEnabled,
-        onCheckedChange = viewModel::setAdbRootEnabled,
-    ),
-    BasicRow(
-        icon = Icons.Filled.VerifiedUser,
-        title = R.string.settings_shell_su_adb_only,
-        summary = statusSummary(
-            uiState.shellSuAdbOnlyStatus,
-            R.string.settings_shell_su_adb_only_summary,
+    BasicGroup(
+        title = R.string.settings_group_modules,
+        rows = listOf(
+            BasicRow(
+                icon = Icons.AutoMirrored.Filled.Rule,
+                title = R.string.settings_umount_modules_default,
+                summary = stringResource(R.string.settings_umount_modules_default_summary),
+                enabled = true,
+                checked = uiState.isDefaultUmountModules,
+                onCheckedChange = viewModel::setDefaultUmountModules,
+            ),
+            BasicRow(
+                icon = Icons.Filled.RestartAlt,
+                title = R.string.settings_soft_reboot,
+                summary = stringResource(R.string.settings_soft_reboot_summary),
+                enabled = !uiState.isLateLoadMode,
+                checked = uiState.isLateLoadMode || uiState.useSoftReboot,
+                onCheckedChange = viewModel::setUseSoftReboot,
+            ),
         ),
-        enabled = uiState.shellSuAdbOnlyStatus == "supported",
-        checked = uiState.isShellSuAdbOnlyEnabled,
-        onCheckedChange = viewModel::setShellSuAdbOnlyEnabled,
     ),
-    BasicRow(
-        icon = Icons.Filled.RestartAlt,
-        title = R.string.settings_soft_reboot,
-        summary = stringResource(R.string.settings_soft_reboot_summary),
-        enabled = !uiState.isLateLoadMode,
-        checked = uiState.isLateLoadMode || uiState.useSoftReboot,
-        onCheckedChange = viewModel::setUseSoftReboot,
-    ),
-    BasicRow(
-        icon = Icons.AutoMirrored.Filled.Rule,
-        title = R.string.settings_umount_modules_default,
-        summary = stringResource(R.string.settings_umount_modules_default_summary),
-        enabled = true,
-        checked = uiState.isDefaultUmountModules,
-        onCheckedChange = viewModel::setDefaultUmountModules,
-    ),
-    BasicRow(
-        icon = Icons.Filled.DeveloperMode,
-        title = R.string.enable_web_debugging,
-        summary = stringResource(R.string.enable_web_debugging_summary),
-        enabled = true,
-        checked = uiState.enableWebDebugging,
-        onCheckedChange = viewModel::setEnableWebDebugging,
-    ),
-    BasicRow(
-        icon = Icons.Filled.FlashOn,
-        title = R.string.settings_auto_jailbreak,
-        summary = stringResource(R.string.settings_auto_jailbreak_summary),
-        enabled = uiState.isLateLoadMode,
-        checked = uiState.autoJailbreak,
-        onCheckedChange = viewModel::setAutoJailbreak,
-    ),
-    BasicRow(
-        icon = Icons.AutoMirrored.Filled.CompareArrows,
-        title = R.string.settings_disable_pager_swipe,
-        summary = stringResource(R.string.settings_disable_pager_swipe_summary),
-        enabled = true,
-        checked = uiState.disablePagerSwipe,
-        onCheckedChange = viewModel::setDisablePagerSwipe,
-    ),
-    BasicRow(
-        icon = Icons.Filled.AutoAwesome,
-        title = R.string.settings_simple_mode,
-        summary = stringResource(R.string.settings_simple_mode_summary),
-        enabled = true,
-        checked = uiState.simpleMode,
-        onCheckedChange = viewModel::setSimpleMode,
-    ),
-    BasicRow(
-        icon = Icons.Filled.Info,
-        title = R.string.settings_show_more_module_info,
-        summary = stringResource(R.string.settings_show_more_module_info_summary),
-        enabled = true,
-        checked = uiState.showMoreModuleInfo,
-        onCheckedChange = viewModel::setShowMoreModuleInfo,
+    BasicGroup(
+        title = R.string.settings_group_debug,
+        rows = listOf(
+            BasicRow(
+                icon = Icons.Filled.DeveloperMode,
+                title = R.string.enable_web_debugging,
+                summary = stringResource(R.string.enable_web_debugging_summary),
+                enabled = true,
+                checked = uiState.enableWebDebugging,
+                onCheckedChange = viewModel::setEnableWebDebugging,
+            ),
+        ),
     ),
 )
 
@@ -228,7 +231,6 @@ private fun BasicSettingsMaterial(
     onBack: () -> Unit,
     onOpenProfileTemplate: () -> Unit,
 ) {
-    val rows = basicRows(uiState, viewModel)
     var showModuleBlacklist by remember { mutableStateOf(false) }
     if (showModuleBlacklist) {
         ModuleBlacklistDialog(
@@ -259,73 +261,81 @@ private fun BasicSettingsMaterial(
                 .padding(padding)
                 .verticalScroll(rememberScrollState()),
         ) {
-            SegmentedColumn(
-                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 13.dp),
-                content = buildList {
-                    add {
-                        val profileTemplate = stringResource(R.string.settings_profile_template)
-                        SegmentedListItem(
-                            onClick = onOpenProfileTemplate,
-                            headlineContent = { Text(profileTemplate) },
-                            supportingContent = {
-                                Text(stringResource(R.string.settings_profile_template_summary))
-                            },
-                            leadingContent = {
-                                Icon(Icons.AutoMirrored.Filled.Article, profileTemplate)
-                            },
-                            trailingContent = {
-                                Icon(
-                                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                    contentDescription = null
+            val groups = basicGroups(uiState, viewModel)
+            groups.forEachIndexed { index, group ->
+                SegmentedColumn(
+                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 13.dp),
+                    title = stringResource(group.title),
+                    content = buildList {
+                        if (index == 0) {
+                            add {
+                                SegmentedDropdownItem(
+                                    icon = Icons.Filled.AdminPanelSettings,
+                                    title = stringResource(R.string.settings_sucompat),
+                                    summary = statusSummary(
+                                        uiState.suCompatStatus,
+                                        R.string.settings_sucompat_summary,
+                                    ),
+                                    items = suCompatItems,
+                                    enabled = uiState.suCompatStatus == "supported",
+                                    selectedIndex = uiState.suCompatMode,
+                                    onItemSelected = viewModel::setSuCompatMode,
                                 )
-                            },
-                        )
-                    }
-                    add {
-                        val blacklist = stringResource(R.string.settings_module_blacklist)
-                        SegmentedListItem(
-                            onClick = { showModuleBlacklist = true },
-                            headlineContent = { Text(blacklist) },
-                            supportingContent = {
-                                Text(stringResource(R.string.settings_module_blacklist_summary))
-                            },
-                            leadingContent = { Icon(Icons.Filled.Block, blacklist) },
-                            trailingContent = {
-                                Icon(
-                                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                    contentDescription = null
-                                )
-                            },
-                        )
-                    }
-                    add {
-                        SegmentedDropdownItem(
-                            icon = Icons.Filled.AdminPanelSettings,
-                            title = stringResource(R.string.settings_sucompat),
-                            summary = statusSummary(
-                                uiState.suCompatStatus,
-                                R.string.settings_sucompat_summary,
-                            ),
-                            items = suCompatItems,
-                            enabled = uiState.suCompatStatus == "supported",
-                            selectedIndex = uiState.suCompatMode,
-                            onItemSelected = viewModel::setSuCompatMode,
-                        )
-                    }
-                    rows.forEach { row ->
-                        add {
-                            SegmentedSwitchItem(
-                                icon = row.icon,
-                                title = stringResource(row.title),
-                                summary = row.summary,
-                                enabled = row.enabled,
-                                checked = row.checked,
-                                onCheckedChange = row.onCheckedChange,
-                            )
+                            }
                         }
-                    }
-                },
-            )
+                        if (index == 2) {
+                            add {
+                                val profileTemplate = stringResource(R.string.settings_profile_template)
+                                SegmentedListItem(
+                                    onClick = onOpenProfileTemplate,
+                                    headlineContent = { Text(profileTemplate) },
+                                    supportingContent = {
+                                        Text(stringResource(R.string.settings_profile_template_summary))
+                                    },
+                                    leadingContent = {
+                                        Icon(Icons.AutoMirrored.Filled.Article, profileTemplate)
+                                    },
+                                    trailingContent = {
+                                        Icon(
+                                            Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                            contentDescription = null,
+                                        )
+                                    },
+                                )
+                            }
+                            add {
+                                val blacklist = stringResource(R.string.settings_module_blacklist)
+                                SegmentedListItem(
+                                    onClick = { showModuleBlacklist = true },
+                                    headlineContent = { Text(blacklist) },
+                                    supportingContent = {
+                                        Text(stringResource(R.string.settings_module_blacklist_summary))
+                                    },
+                                    leadingContent = { Icon(Icons.Filled.Block, blacklist) },
+                                    trailingContent = {
+                                        Icon(
+                                            Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                            contentDescription = null,
+                                        )
+                                    },
+                                )
+                            }
+                        }
+                        group.rows.forEach { row ->
+                            add {
+                                SegmentedSwitchItem(
+                                    icon = row.icon,
+                                    title = stringResource(row.title),
+                                    summary = row.summary,
+                                    enabled = row.enabled,
+                                    checked = row.checked,
+                                    onCheckedChange = row.onCheckedChange,
+                                )
+                            }
+                        }
+                    },
+                )
+            }
         }
     }
 }
@@ -337,7 +347,6 @@ private fun BasicSettingsMiuix(
     onBack: () -> Unit,
     onOpenProfileTemplate: () -> Unit,
 ) {
-    val rows = basicRows(uiState, viewModel)
     var showModuleBlacklist by remember { mutableStateOf(false) }
     if (showModuleBlacklist) {
         ModuleBlacklistDialog(
@@ -369,70 +378,76 @@ private fun BasicSettingsMiuix(
     ) { innerPadding ->
         // A LazyColumn, the same container the settings page itself uses, and it has to be told
         // about the top bar's height — otherwise the first rows sit behind the bar.
+        val groups = basicGroups(uiState, viewModel)
         LazyColumn(
             modifier = Modifier.padding(horizontal = 12.dp),
             contentPadding = innerPadding,
         ) {
             item {
-                Card(modifier = Modifier.padding(top = 12.dp)) {
-                    val profileTemplate = stringResource(R.string.settings_profile_template)
-                    ArrowPreference(
-                        title = profileTemplate,
-                        summary = stringResource(R.string.settings_profile_template_summary),
-                        startAction = {
-                            MiuixIcon(
-                                imageVector = Icons.AutoMirrored.Filled.Article,
-                                contentDescription = null,
-                                tint = colorScheme.onBackground,
-                                modifier = Modifier.padding(end = 6.dp),
-                            )
-                        },
-                        onClick = onOpenProfileTemplate,
+                groups.forEachIndexed { index, group ->
+                    SmallTitle(
+                        text = stringResource(group.title),
+                        modifier = Modifier.padding(top = 12.dp),
                     )
-                    val blacklist = stringResource(R.string.settings_module_blacklist)
-                    ArrowPreference(
-                        title = blacklist,
-                        summary = stringResource(R.string.settings_module_blacklist_summary),
-                        startAction = {
-                            MiuixIcon(
-                                imageVector = Icons.Filled.Block,
-                                contentDescription = null,
-                                tint = colorScheme.onBackground,
-                                modifier = Modifier.padding(end = 6.dp),
+                    Card(modifier = Modifier.padding(top = 12.dp)) {
+                        if (index == 0) {
+                            OverlayDropdownPreference(
+                                title = stringResource(R.string.settings_sucompat),
+                                summary = statusSummary(
+                                    uiState.suCompatStatus,
+                                    R.string.settings_sucompat_summary,
+                                ),
+                                items = suCompatItems,
+                                startAction = {
+                                    MiuixIcon(
+                                        imageVector = Icons.Filled.AdminPanelSettings,
+                                        contentDescription = null,
+                                        tint = colorScheme.onBackground,
+                                        modifier = Modifier.padding(end = 6.dp),
+                                    )
+                                },
+                                enabled = uiState.suCompatStatus == "supported",
+                                selectedIndex = uiState.suCompatMode,
+                                onSelectedIndexChange = viewModel::setSuCompatMode,
                             )
-                        },
-                        onClick = { showModuleBlacklist = true },
-                    )
-                }
-                Card(modifier = Modifier.padding(top = 12.dp)) {
-                    OverlayDropdownPreference(
-                        title = stringResource(R.string.settings_sucompat),
-                        summary = statusSummary(uiState.suCompatStatus, R.string.settings_sucompat_summary),
-                        items = suCompatItems,
-                        startAction = {
-                            MiuixIcon(
-                                imageVector = Icons.Filled.AdminPanelSettings,
-                                contentDescription = null,
-                                tint = colorScheme.onBackground,
-                                modifier = Modifier.padding(end = 6.dp),
+                        }
+                        if (index == 2) {
+                            val profileTemplate = stringResource(R.string.settings_profile_template)
+                            ArrowPreference(
+                                title = profileTemplate,
+                                summary = stringResource(R.string.settings_profile_template_summary),
+                                startAction = {
+                                    MiuixIcon(
+                                        imageVector = Icons.AutoMirrored.Filled.Article,
+                                        contentDescription = null,
+                                        tint = colorScheme.onBackground,
+                                        modifier = Modifier.padding(end = 6.dp),
+                                    )
+                                },
+                                onClick = onOpenProfileTemplate,
                             )
-                        },
-                        enabled = uiState.suCompatStatus == "supported",
-                        selectedIndex = uiState.suCompatMode,
-                        onSelectedIndexChange = viewModel::setSuCompatMode,
-                    )
-                    rows.take(ROWS_WITH_SU_COMPAT).forEach { MiuixSwitchRow(it) }
-                }
-                Card(modifier = Modifier.padding(top = 12.dp)) {
-                    rows.drop(ROWS_WITH_SU_COMPAT).forEach { MiuixSwitchRow(it) }
+                            val blacklist = stringResource(R.string.settings_module_blacklist)
+                            ArrowPreference(
+                                title = blacklist,
+                                summary = stringResource(R.string.settings_module_blacklist_summary),
+                                startAction = {
+                                    MiuixIcon(
+                                        imageVector = Icons.Filled.Block,
+                                        contentDescription = null,
+                                        tint = colorScheme.onBackground,
+                                        modifier = Modifier.padding(end = 6.dp),
+                                    )
+                                },
+                                onClick = { showModuleBlacklist = true },
+                            )
+                        }
+                        group.rows.forEach { MiuixSwitchRow(it) }
+                    }
                 }
             }
         }
     }
 }
-
-/** How many of the switches belong in the card with the su-compat choice; the rest get their own. */
-private const val ROWS_WITH_SU_COMPAT = 6
 
 @Composable
 private fun MiuixSwitchRow(row: BasicRow) {

@@ -569,6 +569,10 @@
     <string name="enable_log_feature_label">日志支持</string>
     <string name="hide_symbols_feature_label">隐藏 KSU / SUSFS 符号</string>
     <!-- 设置页分组标题 -->
+    <string name="settings_group_root">Root 与 Shell 权限</string>
+    <string name="settings_group_kernel">内核特性</string>
+    <string name="settings_group_modules">模块与刷写</string>
+    <string name="settings_group_debug">调试选项</string>
     <string name="settings_section_general">通用</string>
     <string name="settings_section_appearance">外观</string>
     <string name="settings_section_features">功能</string>

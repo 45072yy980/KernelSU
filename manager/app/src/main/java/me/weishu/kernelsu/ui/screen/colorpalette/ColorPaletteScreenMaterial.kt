@@ -42,6 +42,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.BlurOn
 import androidx.compose.material.icons.automirrored.rounded.MenuOpen
 import androidx.compose.material.icons.filled.Brightness1
@@ -53,6 +54,7 @@ import androidx.compose.material.icons.rounded.AspectRatio
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.DesignServices
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Pin
 import androidx.compose.material.icons.rounded.Style
 import androidx.compose.material.icons.rounded.Swipe
@@ -350,6 +352,41 @@ fun ColorPaletteScreenMaterial(
                                 onItemSelected = actions.onSetPagerInterceptionMode,
                             )
                         },
+                    ),
+                )
+            }
+
+            item {
+                SegmentedColumn(
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                    content = listOf(
+                        {
+                            SegmentedSwitchItem(
+                                icon = Icons.Rounded.AutoAwesome,
+                                title = stringResource(id = R.string.settings_simple_mode),
+                                summary = stringResource(id = R.string.settings_simple_mode_summary),
+                                checked = uiState.simpleMode,
+                                onCheckedChange = actions.onSetSimpleMode
+                            )
+                        },
+                        {
+                            SegmentedSwitchItem(
+                                icon = Icons.Rounded.Info,
+                                title = stringResource(id = R.string.settings_show_more_module_info),
+                                summary = stringResource(id = R.string.settings_show_more_module_info_summary),
+                                checked = uiState.showMoreModuleInfo,
+                                onCheckedChange = actions.onSetShowMoreModuleInfo
+                            )
+                        },
+                        {
+                            SegmentedSwitchItem(
+                                icon = Icons.AutoMirrored.Rounded.MenuOpen,
+                                title = stringResource(id = R.string.settings_disable_pager_swipe),
+                                summary = stringResource(id = R.string.settings_disable_pager_swipe_summary),
+                                checked = uiState.disablePagerSwipe,
+                                onCheckedChange = actions.onSetDisablePagerSwipe
+                            )
+                        }
                     ),
                 )
             }

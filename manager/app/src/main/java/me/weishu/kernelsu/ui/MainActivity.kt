@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.os.SystemClock
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
+import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -43,10 +44,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -238,6 +243,27 @@ open class MainActivity : ComponentActivity() {
                 )
                 window.isNavigationBarContrastEnforced = false
                 onDispose { }
+            }
+
+            // 美化版（Miuix）把系统状态栏收起来，顶部信息交给页面自己的顶栏；
+            // 切回原版/Material 时再放回来，别的应用不受影响。
+            val rootView = LocalView.current
+            val hostActivity = LocalActivity.current
+            DisposableEffect(uiMode, rootView) {
+                val window = hostActivity?.window
+                val controller = window?.let { WindowCompat.getInsetsController(it, rootView) }
+                if (controller != null) {
+                    if (uiMode == UiMode.Miuix) {
+                        controller.systemBarsBehavior =
+                            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                        controller.hide(WindowInsetsCompat.Type.statusBars())
+                    } else {
+                        controller.show(WindowInsetsCompat.Type.statusBars())
+                    }
+                }
+                onDispose {
+                    controller?.show(WindowInsetsCompat.Type.statusBars())
+                }
             }
 
             val navigator = rememberNavigator(Route.Main)

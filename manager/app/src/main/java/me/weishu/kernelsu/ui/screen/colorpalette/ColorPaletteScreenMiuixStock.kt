@@ -35,11 +35,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.MenuOpen
 import androidx.compose.material.icons.rounded.AspectRatio
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.BlurOn
 import androidx.compose.material.icons.rounded.CallToAction
 import androidx.compose.material.icons.rounded.Colorize
 import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.DesignServices
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Pin
 import androidx.compose.material.icons.rounded.Style
 import androidx.compose.material.icons.rounded.Wallpaper
@@ -474,6 +476,57 @@ fun ColorPaletteScreenMiuixStock(
                             onVolumeChange = {
                                 actions.onSetPageScale(it)
                             }
+                        )
+                    }
+
+                    Card(
+                        modifier = Modifier
+                            .padding(top = 12.dp)
+                            .fillMaxWidth(),
+                    ) {
+                        // 这些是“页面怎么显示”的偏好，跟着外观走；以前塞在基础功能里，
+                        // 和 root/内核开关混在一起，找起来很费劲。
+                        SwitchPreference(
+                            title = stringResource(id = R.string.settings_simple_mode),
+                            summary = stringResource(id = R.string.settings_simple_mode_summary),
+                            startAction = {
+                                Icon(
+                                    Icons.Rounded.AutoAwesome,
+                                    modifier = Modifier.padding(end = 6.dp),
+                                    contentDescription = stringResource(id = R.string.settings_simple_mode),
+                                    tint = colorScheme.onBackground
+                                )
+                            },
+                            checked = uiState.simpleMode,
+                            onCheckedChange = actions.onSetSimpleMode,
+                        )
+                        SwitchPreference(
+                            title = stringResource(id = R.string.settings_show_more_module_info),
+                            summary = stringResource(id = R.string.settings_show_more_module_info_summary),
+                            startAction = {
+                                Icon(
+                                    Icons.Rounded.Info,
+                                    modifier = Modifier.padding(end = 6.dp),
+                                    contentDescription = stringResource(id = R.string.settings_show_more_module_info),
+                                    tint = colorScheme.onBackground
+                                )
+                            },
+                            checked = uiState.showMoreModuleInfo,
+                            onCheckedChange = actions.onSetShowMoreModuleInfo,
+                        )
+                        SwitchPreference(
+                            title = stringResource(id = R.string.settings_disable_pager_swipe),
+                            summary = stringResource(id = R.string.settings_disable_pager_swipe_summary),
+                            startAction = {
+                                Icon(
+                                    Icons.AutoMirrored.Rounded.MenuOpen,
+                                    modifier = Modifier.padding(end = 6.dp),
+                                    contentDescription = stringResource(id = R.string.settings_disable_pager_swipe),
+                                    tint = colorScheme.onBackground
+                                )
+                            },
+                            checked = uiState.disablePagerSwipe,
+                            onCheckedChange = actions.onSetDisablePagerSwipe,
                         )
                     }
 
