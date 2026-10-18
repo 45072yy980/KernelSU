@@ -1,0 +1,2 @@
+# Android 的 /system/bin/sh 是 mksh：支持 local / [[ / ==，按 POSIX sh 检查是误报。
+disable=SC3043,SC3010,SC3014

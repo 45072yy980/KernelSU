@@ -172,6 +172,7 @@ struct ksu_lookup_symbols_cmd {
 
 static const __u32 KSU_LOOKUP_SYMBOLS_MAX = 1024;
 
+/*
  * Stealth mode. `enabled` is 1 when on, 0 when off; GET reports the current
  * value, SET stores it to /data/adb/ksu/stealth so it survives a reboot.
  */

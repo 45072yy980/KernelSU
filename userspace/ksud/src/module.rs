@@ -977,7 +977,8 @@ fn install_module_to_system(zip: &str, force: bool) -> Result<String> {
 pub fn install_module(zip: &str, force: bool) -> Result<()> {
     ksucalls::ensure_uapi_version_matched()?;
 
-    let module_id = install_module_to_system(zip, force).inspect_err(|e| println!("- Error: {e}"))?;
+    let module_id =
+        install_module_to_system(zip, force).inspect_err(|e| println!("- Error: {e}"))?;
     if let Err(e) = regenerate_preinit() {
         warn!("regenerate preinit failed: {e:#}");
     }
