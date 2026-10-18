@@ -1193,7 +1193,7 @@ fn directory_size(root: &std::path::Path) -> u64 {
             if file_type.is_dir() {
                 stack.push(entry.path());
             } else if file_type.is_file() {
-                total += entry.metadata().map(|m| m.len()).unwrap_or(0);
+                total += entry.metadata().map_or(0, |m| m.len());
             }
         }
     }
