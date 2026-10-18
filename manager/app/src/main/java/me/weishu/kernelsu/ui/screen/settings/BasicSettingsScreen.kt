@@ -7,6 +7,14 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.automirrored.filled.CompareArrows
 import androidx.compose.material.icons.filled.BlurOn
+import androidx.compose.material.icons.filled.Block
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Article
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -21,6 +29,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LayersClear
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -135,6 +144,17 @@ private fun basicRows(uiState: SettingsUiState, viewModel: SettingsViewModel): L
         onCheckedChange = viewModel::setAdbRootEnabled,
     ),
     BasicRow(
+        icon = Icons.Filled.VerifiedUser,
+        title = R.string.settings_shell_su_adb_only,
+        summary = statusSummary(
+            uiState.shellSuAdbOnlyStatus,
+            R.string.settings_shell_su_adb_only_summary,
+        ),
+        enabled = uiState.shellSuAdbOnlyStatus == "supported",
+        checked = uiState.isShellSuAdbOnlyEnabled,
+        onCheckedChange = viewModel::setShellSuAdbOnlyEnabled,
+    ),
+    BasicRow(
         icon = Icons.Filled.RestartAlt,
         title = R.string.settings_soft_reboot,
         summary = stringResource(R.string.settings_soft_reboot_summary),
@@ -209,6 +229,14 @@ private fun BasicSettingsMaterial(
     onOpenProfileTemplate: () -> Unit,
 ) {
     val rows = basicRows(uiState, viewModel)
+    var showModuleBlacklist by remember { mutableStateOf(false) }
+    if (showModuleBlacklist) {
+        ModuleBlacklistDialog(
+            onDismiss = { showModuleBlacklist = false },
+            load = { viewModel.readModuleBlacklist() },
+            onSave = { viewModel.setModuleBlacklist(it) },
+        )
+    }
     val suCompatItems = listOf(
         stringResource(R.string.settings_mode_enable_by_default),
         stringResource(R.string.settings_mode_disable_until_reboot),
@@ -245,6 +273,23 @@ private fun BasicSettingsMaterial(
                             leadingContent = {
                                 Icon(Icons.AutoMirrored.Filled.Article, profileTemplate)
                             },
+                            trailingContent = {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                    contentDescription = null
+                                )
+                            },
+                        )
+                    }
+                    add {
+                        val blacklist = stringResource(R.string.settings_module_blacklist)
+                        SegmentedListItem(
+                            onClick = { showModuleBlacklist = true },
+                            headlineContent = { Text(blacklist) },
+                            supportingContent = {
+                                Text(stringResource(R.string.settings_module_blacklist_summary))
+                            },
+                            leadingContent = { Icon(Icons.Filled.Block, blacklist) },
                             trailingContent = {
                                 Icon(
                                     Icons.AutoMirrored.Filled.KeyboardArrowRight,
@@ -293,6 +338,14 @@ private fun BasicSettingsMiuix(
     onOpenProfileTemplate: () -> Unit,
 ) {
     val rows = basicRows(uiState, viewModel)
+    var showModuleBlacklist by remember { mutableStateOf(false) }
+    if (showModuleBlacklist) {
+        ModuleBlacklistDialog(
+            onDismiss = { showModuleBlacklist = false },
+            load = { viewModel.readModuleBlacklist() },
+            onSave = { viewModel.setModuleBlacklist(it) },
+        )
+    }
     val suCompatItems = listOf(
         stringResource(R.string.settings_mode_enable_by_default),
         stringResource(R.string.settings_mode_disable_until_reboot),
@@ -336,6 +389,20 @@ private fun BasicSettingsMiuix(
                         },
                         onClick = onOpenProfileTemplate,
                     )
+                    val blacklist = stringResource(R.string.settings_module_blacklist)
+                    ArrowPreference(
+                        title = blacklist,
+                        summary = stringResource(R.string.settings_module_blacklist_summary),
+                        startAction = {
+                            MiuixIcon(
+                                imageVector = Icons.Filled.Block,
+                                contentDescription = null,
+                                tint = colorScheme.onBackground,
+                                modifier = Modifier.padding(end = 6.dp),
+                            )
+                        },
+                        onClick = { showModuleBlacklist = true },
+                    )
                 }
                 Card(modifier = Modifier.padding(top = 12.dp)) {
                     OverlayDropdownPreference(
@@ -365,7 +432,7 @@ private fun BasicSettingsMiuix(
 }
 
 /** How many of the switches belong in the card with the su-compat choice; the rest get their own. */
-private const val ROWS_WITH_SU_COMPAT = 5
+private const val ROWS_WITH_SU_COMPAT = 6
 
 @Composable
 private fun MiuixSwitchRow(row: BasicRow) {
@@ -383,5 +450,53 @@ private fun MiuixSwitchRow(row: BasicRow) {
         enabled = row.enabled,
         checked = row.checked,
         onCheckedChange = row.onCheckedChange,
+    )
+}
+
+/**
+ * 模块黑名单编辑器：写 /data/adb/ksu/block_modules，越狱激活时作为 block_modules= 参数
+ * 传给 kernelsu.ko；boot 补丁模式不走这里，所以文案只提越狱激活。
+ */
+@Composable
+private fun ModuleBlacklistDialog(
+    onDismiss: () -> Unit,
+    load: suspend () -> String,
+    onSave: (String) -> Unit,
+) {
+    var text by remember { mutableStateOf("") }
+    var loaded by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        if (!loaded) {
+            text = load()
+            loaded = true
+        }
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.module_blacklist_dialog_title)) },
+        text = {
+            Column {
+                Text(stringResource(R.string.module_blacklist_dialog_message))
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    modifier = Modifier.padding(top = 12.dp),
+                    singleLine = false,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                onSave(text)
+                onDismiss()
+            }) {
+                Text(stringResource(android.R.string.ok))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(android.R.string.cancel))
+            }
+        },
     )
 }

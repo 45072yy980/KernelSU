@@ -17,6 +17,9 @@ import me.weishu.kernelsu.ui.util.execKsud
 import me.weishu.kernelsu.ui.util.getFeaturePersistValue
 import me.weishu.kernelsu.ui.util.getFeatureValue
 import me.weishu.kernelsu.ui.util.getFeatureStatus
+import me.weishu.kernelsu.ui.util.getRootShell
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.security.SecureRandom
 
 private const val SETTINGS_PREFS = "settings"
@@ -392,6 +395,33 @@ class SettingsRepositoryImpl : SettingsRepository {
     override fun setDefaultUmountModules(enabled: Boolean): Boolean = Natives.setDefaultUmountModules(enabled)
 
     override fun isLkmMode(): Boolean = Natives.isLkmMode
+
+    override suspend fun getModuleBlacklist(): String = withContext(Dispatchers.IO) {
+        val out = getRootShell().newJob()
+            .add("cat /data/adb/ksu/block_modules 2>/dev/null")
+            .to(ArrayList<String>(), null)
+            .exec().out
+        out.joinToString(",").trim().trim(',')
+    }
+
+    override suspend fun setModuleBlacklist(list: String): Boolean = withContext(Dispatchers.IO) {
+        // 只接受合法模块名，避免用户输入被当成 root shell 语法执行
+        val names = list.split(',', ' ', '\n', '\t')
+            .map { it.trim() }
+            .filter { name -> name.isNotEmpty() && name.all { it.isLetterOrDigit() || it == '_' || it == '-' || it == '.' } }
+            .distinct()
+        val cmd = if (names.isEmpty()) {
+            "rm -f /data/adb/ksu/block_modules"
+        } else {
+            "mkdir -p /data/adb/ksu && printf '%s\\n' '${names.joinToString(",")}' > /data/adb/ksu/block_modules && chmod 644 /data/adb/ksu/block_modules"
+        }
+        try {
+            getRootShell().newJob().add(cmd).exec().isSuccess
+        } catch (e: Throwable) {
+            Log.w("Settings", "setModuleBlacklist failed", e)
+            false
+        }
+    }
 
     override fun execKsudFeatureSave() {
         execKsud("feature save", true)

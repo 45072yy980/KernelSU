@@ -25,6 +25,10 @@ mod non_android {
 #[cfg(not(target_os = "android"))]
 pub use non_android::*;
 
+/// 越狱模式下传给 kernelsu.ko 的模块黑名单（block_modules= 参数）。
+/// 逗号或空白分隔；boot 补丁模式走 ksu_config，不需要它。
+pub const BLACKLIST_PATH: &str = "/data/adb/ksu/block_modules";
+
 /// The panel's three own state files.
 pub const WEBUI_JUMPS_PATH: &str = "/data/adb/ksu/webui_jumps.json";
 pub const WEBUI_QUICK_RUN_PATH: &str = "/data/adb/ksu/webui_quickrun.json";

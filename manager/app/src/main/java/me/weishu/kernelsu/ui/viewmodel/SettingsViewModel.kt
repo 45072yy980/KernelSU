@@ -371,6 +371,13 @@ class SettingsViewModel(
         }
     }
 
+    /** 读/写越狱模式的模块黑名单（/data/adb/ksu/block_modules）。 */
+    suspend fun readModuleBlacklist(): String = repo.getModuleBlacklist()
+
+    fun setModuleBlacklist(list: String) {
+        viewModelScope.launch(Dispatchers.IO) { repo.setModuleBlacklist(list) }
+    }
+
     fun setAdbRootEnabled(enabled: Boolean) {
         viewModelScope.launch(Dispatchers.IO) {
             if (repo.setAdbRootEnabled(enabled)) {

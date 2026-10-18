@@ -24,6 +24,15 @@ uid_t ksu_manager_appid = KSU_INVALID_APPID;
 
 static char cached_manager_apk_path[DATA_PATH_LEN];
 
+// 真正被加冕的包名。正常情况就是 KSU_PACKAGE_NAME；“隐藏管理器”会把包名改掉，
+// 这时靠签名认领，并把改后的名字记在这里 —— 卸载检测要按这个名字找，不能用编译期常量。
+static char crowned_manager_package[KSU_MAX_PACKAGE_NAME];
+
+static const char *manager_package_name(void)
+{
+    return crowned_manager_package[0] ? crowned_manager_package : KSU_PACKAGE_NAME;
+}
+
 #define SYSTEM_PACKAGES_LIST_PATH "/data/system/packages.list"
 
 struct uid_data {
@@ -32,15 +41,38 @@ struct uid_data {
     char package[KSU_MAX_PACKAGE_NAME];
 };
 
+/** `/data/app/xxx/<pkg>-yyy/base.apk` → `<pkg>` */
+static bool package_from_apk_path(char *pkg, const char *apk)
+{
+    char dir[DATA_PATH_LEN];
+
+    if (strscpy(dir, apk, sizeof(dir)) < 0)
+        return false;
+
+    char *slash = strrchr(dir, '/');
+    if (!slash)
+        return false;
+    *slash = '\0';
+
+    return get_pkg_from_apk_dir_path(pkg, dir) == 0;
+}
+
 static void crown_manager(const char *apk, struct list_head *uid_data)
 {
     struct list_head *list = (struct list_head *)uid_data;
     struct uid_data *np;
+    char pkg[KSU_MAX_PACKAGE_NAME];
+
+    if (!package_from_apk_path(pkg, apk)) {
+        pr_err("cannot parse package from apk path: %s\n", apk);
+        return;
+    }
 
     list_for_each_entry (np, list, list) {
-        if (strncmp(np->package, KSU_PACKAGE_NAME, KSU_MAX_PACKAGE_NAME) == 0) {
-            pr_info("Crowning manager: uid=%d\n", np->uid);
+        if (strncmp(np->package, pkg, KSU_MAX_PACKAGE_NAME) == 0) {
+            pr_info("Crowning manager: uid=%d, package=%s\n", np->uid, pkg);
             ksu_set_manager_appid(np->uid);
+            strscpy(crowned_manager_package, pkg, sizeof(crowned_manager_package));
             break;
         }
     }
@@ -81,7 +113,22 @@ static bool maybe_manager_apk_dir(const char *path)
     }
 
     // pkg is `<real package>`
-    return strncmp(pkg, KSU_PACKAGE_NAME, sizeof(KSU_PACKAGE_NAME)) == 0;
+    if (strncmp(pkg, KSU_PACKAGE_NAME, sizeof(KSU_PACKAGE_NAME)) == 0)
+        return true;
+
+    // 兜底：管理器被“隐藏管理器”改过名，包名对不上，改按签名认领。
+    // 只在还没认领到管理器时做，否则每次扫描都要把每个已安装 APK 读一遍签名。
+    if (ksu_is_manager_appid_valid() || crowned_manager_package[0])
+        return false;
+
+    char apk[DATA_PATH_LEN];
+    if (snprintf(apk, sizeof(apk), "%s/base.apk", path) >= sizeof(apk))
+        return false;
+    if (!is_manager_apk(apk))
+        return false;
+
+    pr_info("manager package renamed to %s, matched by signature\n", pkg);
+    return true;
 }
 
 static FILLDIR_RETURN_TYPE my_actor(struct dir_context *ctx, const char *name, int namelen, loff_t off, u64 ino,
@@ -299,7 +346,7 @@ void track_throne(bool prune_only)
     uid_t manager_package_uid = KSU_INVALID_APPID;
     bool need_rescan = false;
     list_for_each_entry (np, &uid_list, list) {
-        if (strcmp(np->package, KSU_PACKAGE_NAME) == 0) {
+        if (strcmp(np->package, manager_package_name()) == 0) {
             manager_package_uid = np->uid;
             break;
         }
@@ -310,8 +357,11 @@ void track_throne(bool prune_only)
         if (ksu_is_manager_appid_valid()) {
             pr_info("manager is uninstalled, invalidate it!\n");
             ksu_invalidate_manager_uid();
+            crowned_manager_package[0] = 0;
             goto prune;
         }
+        // 固定包名没找到、又还没认领管理器：可能是隐藏管理器改过名，扫一遍按签名找。
+        need_rescan = true;
     } else {
         if (!ksu_is_manager_appid_valid()) {
             need_rescan = true;
@@ -320,6 +370,7 @@ void track_throne(bool prune_only)
             pr_info("manager uid changed, invalidate it!\n");
             cached_manager_apk_path[0] = 0;
             ksu_invalidate_manager_uid();
+            crowned_manager_package[0] = 0;
             need_rescan = true;
         } else {
             // uid unchanged, skip

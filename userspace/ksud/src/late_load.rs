@@ -1,6 +1,5 @@
 use anyhow::{Context, Result};
 use log::{info, warn};
-use rustix::cstr;
 use std::{process::Command, time::Instant};
 
 use crate::module::{ScriptWait, handle_updated_modules, prune_modules};
@@ -59,12 +58,24 @@ pub fn run(package_name: &String, kmi: Option<String>, allow_shell: bool) -> Res
         // 4. Load kernelsu.ko from memory with manual relocation
         info!("Loading kernelsu.ko for KMI {kmi}...");
         // bundled flag is meaningless in jailbreak mode since we can't flash boot to update it.
-        let params = if allow_shell {
-            cstr!("allow_shell=1")
+        let mut params = if allow_shell {
+            "allow_shell=1".to_string()
         } else {
-            cstr!("")
+            String::new()
         };
-        ksuinit::load_module(&ko_data, params).context("Failed to load kernelsu.ko")?;
+        // 模块黑名单是内核模块参数：boot 补丁模式从 ksu_config 里来，越狱模式没人喂它，
+        // 于是从 /data/adb/ksu/block_modules 读一份（逗号或空白分隔），否则这个功能静默失效。
+        if let Ok(list) = std::fs::read_to_string(defs::BLACKLIST_PATH) {
+            let list: String = list.split_whitespace().collect::<Vec<_>>().join(",");
+            if !list.is_empty() {
+                if !params.is_empty() {
+                    params.push(' ');
+                }
+                params.push_str(&format!("block_modules={list}"));
+            }
+        }
+        let params = std::ffi::CString::new(params).context("invalid module params")?;
+        ksuinit::load_module(&ko_data, params.as_c_str()).context("Failed to load kernelsu.ko")?;
         info!("kernelsu.ko loaded successfully!");
         dump_process_info("after load_module");
     }

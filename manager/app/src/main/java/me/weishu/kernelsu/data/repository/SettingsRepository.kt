@@ -70,5 +70,9 @@ interface SettingsRepository {
 
     fun isLkmMode(): Boolean
 
+    /** 越狱模式传给 kernelsu.ko 的 block_modules 列表（逗号分隔）。 */
+    suspend fun getModuleBlacklist(): String
+    suspend fun setModuleBlacklist(list: String): Boolean
+
     fun execKsudFeatureSave()
 }
