@@ -30,6 +30,11 @@ import kotlinx.coroutines.launch
  *    the next boot waits longer before retrying. After [MAX_BOOT_RETRIES]
  *    consecutive failures the counter is reset and replay is abandoned so a
  *    permanently-broken rule cannot loop forever.
+ *
+ * 注意：内置 Shizuku 的开机自启**不在这里**。它曾经挂在本接收器末尾，
+ * 但本接收器在 SUSFS 未加载 / 重试超限时会提前 return，把自启一起跳过，
+ * 于是表现为"开机自启时灵时不灵"。现在由
+ * [me.diksu.ultra.shizuku.ShizukuBootReceiver] 独立负责。
  */
 class SusfsBootReceiver : BroadcastReceiver() {
 
@@ -96,45 +101,12 @@ class SusfsBootReceiver : BroadcastReceiver() {
                             "redirects=$redirectFailures); retry count=$newCount"
                     )
                 }
-
-                // 内置 Shizuku：如果用户启用了，开机自动启动 server。
-                // 放在 SUSFS 重放之后，确保 root 权限和系统都已就绪。
-                startShizukuIfEnabled(context)
             } catch (t: Throwable) {
                 Log.e(TAG, "Boot replay crashed", t)
             } finally {
                 pending.finish()
             }
         }
-    }
-
-    /**
-     * 开机自动启动内置 Shizuku server（如果用户启用了）。
-     *
-     * 最多重试 2 次，每次间隔 10 秒。Shizuku server 启动需要 app_process
-     * 和 binder 就绪，开机早期可能需要多等一会儿。
-     */
-    private fun startShizukuIfEnabled(context: Context) {
-        if (!me.diksu.ultra.shizuku.ShizukuServiceManager.isEnabled()) {
-            return
-        }
-        Log.i(TAG, "Shizuku auto-start begin")
-        for (attempt in 1..2) {
-            if (attempt > 1) {
-                Thread.sleep(10_000L)
-            }
-            try {
-                if (me.diksu.ultra.shizuku.ShizukuServiceManager.isServerRunning() ||
-                    me.diksu.ultra.shizuku.ShizukuServiceManager.start(context)
-                ) {
-                    Log.i(TAG, "Shizuku server auto-start succeeded on attempt $attempt")
-                    return
-                }
-            } catch (t: Throwable) {
-                Log.w(TAG, "Shizuku auto-start attempt $attempt failed", t)
-            }
-        }
-        Log.w(TAG, "Shizuku server auto-start failed after all attempts")
     }
 
     // ── toggles + uname ───────────────────────────────────────────────────────

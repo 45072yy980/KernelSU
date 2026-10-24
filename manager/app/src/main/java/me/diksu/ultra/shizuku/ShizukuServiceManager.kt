@@ -95,6 +95,35 @@ object ShizukuServiceManager {
         }
     }
 
+    /**
+     * 读取 server 进程的 pid，读不到返回 null。
+     * 面板用它展示"进程还活着但 binder 没起来"这类半死状态。
+     */
+    fun serverPid(): Int? {
+        return try {
+            val out = ArrayList<String>()
+            getRootShell().newJob()
+                .add("/system/bin/pidof $SERVER_PROCESS_NAME")
+                .to(out, null)
+                .exec()
+            out.joinToString(" ").trim().split(" ")
+                .firstOrNull { it.isNotBlank() }
+                ?.toIntOrNull()
+        } catch (t: Throwable) {
+            Log.w(TAG, "serverPid failed", t)
+            null
+        }
+    }
+
+    /** server 的运行身份：0=root，2000=shell，null=未运行。 */
+    fun serverUid(): Int? {
+        return try {
+            if (!Shizuku.pingBinder()) null else Shizuku.getUid()
+        } catch (t: Throwable) {
+            null
+        }
+    }
+
     /** 通过 root 检查 shizuku_server 进程是否存活。 */
     private fun isServerProcessAlive(): Boolean {
         return try {

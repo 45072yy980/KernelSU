@@ -152,6 +152,16 @@
             </intent-filter>
         </receiver>
 
+        <!-- 内置 Shizuku 开机自启：独立于 SUSFS 重放，开关打开即执行 -->
+        <receiver
+            android:name="me.diksu.ultra.shizuku.ShizukuBootReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
         <!-- 内置 Shizuku：授权确认界面，由 Shizuku server 通过广播拉起 -->
         <activity
             android:name="me.diksu.ultra.shizuku.ShizukuPermissionActivity"
