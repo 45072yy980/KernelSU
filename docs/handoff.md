@@ -135,6 +135,10 @@ kernel/                     内核模块（C），Kbuild 里固定 KSU_PACKAGE_N
 
 ## 五、下一步该做什么（建议顺序）
 
+> **团队任务板已建好**：`task-1` 网页端 SuSFS 面板、`task-2` 导航置灰做细、
+> `task-3` Material 3 全量巡检、`task-4` 真机验证、`task-5` 网页端 Shizuku 管理、
+> `task-6` 网页端视觉重构。接手时先 `team_task_list` 看状态，认领后按任务描述里的验收标准做。
+
 ### 第 1 步：网页端 SuSFS 面板（性价比最高）
 
 - **后端**：`userspace/ksud/src/webui.rs` 新增
