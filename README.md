@@ -6,6 +6,8 @@
 > 基线（`wuhudiao/DikSU`）已确认停更，本分支不再对基线代码作兼容性保护，可以自由偏离。
 > 包名变了意味着这是一个**新的应用**：需要先卸载旧管理器再装 4.0（`/data/adb` 下的模块、授权记录、配置都不受影响）。
 
+> 接手开发先看 [`docs/handoff.md`](docs/handoff.md)：当前状态、已知问题、下一步排期、构建与发版流程、踩过的坑。
+
 - **GitHub**：https://github.com/45072yy980/KernelSU
 - **基线（原作者）**：https://github.com/wuhudiao/DikSU
 - **Telegram**：https://t.me/DIKSU66
@@ -225,6 +227,7 @@ versionCode = major × 10000 + minor × 1000 + patch × 100 + tag 之后的提�
 | `v3.5.1-diksu` | `35100` |
 | `v3.6.0-diksu` | `36000` |
 | `v4.0.0-ultra` | `40000` |
+| `v4.1.0-ultra` | `41000` |
 
 - 管理器：`manager/build.gradle.kts`
 - 内核：`kernel/Kbuild`（`KSU_VERSION`）
