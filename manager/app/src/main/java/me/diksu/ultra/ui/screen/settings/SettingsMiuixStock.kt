@@ -47,10 +47,12 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.withContext
+import me.diksu.ultra.BuildConfig
 import me.diksu.ultra.R
 import me.diksu.ultra.ui.UiMode
 import me.diksu.ultra.ui.component.KsuIsValid
 import me.diksu.ultra.ui.component.dialog.rememberLoadingDialog
+import me.diksu.ultra.ui.component.miuix.VersionBadge
 import me.diksu.ultra.ui.component.miuix.SendLogDialog
 import me.diksu.ultra.ui.component.uninstalldialog.UninstallDialog
 import me.diksu.ultra.ui.theme.LocalEnableBlur
@@ -486,6 +488,9 @@ fun SettingPagerMiuixStock(
                                     contentDescription = about,
                                     tint = colorScheme.onBackground
                                 )
+                            },
+                            endActions = {
+                                VersionBadge(version = BuildConfig.VERSION_NAME)
                             },
                             onClick = actions.onOpenAbout,
                         )

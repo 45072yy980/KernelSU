@@ -49,6 +49,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import me.diksu.ultra.BuildConfig
 import me.diksu.ultra.R
 import me.diksu.ultra.ui.UiMode
 import me.diksu.ultra.ui.component.KsuIsValid
@@ -408,6 +409,13 @@ fun SettingPagerMaterial(
                                 Icon(
                                     Icons.Filled.Info,
                                     stringResource(id = R.string.about)
+                                )
+                            },
+                            trailingContent = {
+                                Text(
+                                    text = BuildConfig.VERSION_NAME,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.primary,
                                 )
                             },
                         )

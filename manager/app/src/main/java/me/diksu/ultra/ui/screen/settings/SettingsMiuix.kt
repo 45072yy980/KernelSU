@@ -33,11 +33,13 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import me.diksu.ultra.BuildConfig
 import me.diksu.ultra.R
 import me.diksu.ultra.ui.UiMode
 import me.diksu.ultra.ui.component.KsuIsValid
 import me.diksu.ultra.ui.component.dialog.rememberLoadingDialog
 import me.diksu.ultra.ui.component.miuix.SendLogDialog
+import me.diksu.ultra.ui.component.miuix.VersionBadge
 import me.diksu.ultra.ui.component.uninstalldialog.UninstallDialog
 import me.diksu.ultra.ui.theme.LocalEnableBlur
 import me.diksu.ultra.ui.util.BlurredBar
@@ -282,6 +284,10 @@ fun SettingPagerMiuix(
                                     contentDescription = about,
                                     tint = colorScheme.onBackground
                                 )
+                            },
+                            // 行尾直接给出当前版本：设置页不该要求用户点进"关于"才知道自己装的是哪一版。
+                            endActions = {
+                                VersionBadge(version = BuildConfig.VERSION_NAME)
                             },
                             onClick = actions.onOpenAbout,
                         )
