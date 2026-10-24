@@ -1,0 +1,482 @@
+package me.diksu.ultra.shizuku
+
+import android.content.pm.ApplicationInfo
+import android.graphics.drawable.Drawable
+import android.os.Build
+import android.os.Bundle
+import android.util.Log
+import android.widget.Toast
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.WaterDrop
+import androidx.compose.material.icons.outlined.Timelapse
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.painter.BitmapPainter
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.core.graphics.drawable.toBitmap
+import me.diksu.ultra.R
+import me.diksu.ultra.ui.LocalUiMode
+import me.diksu.ultra.ui.isMiuixFamily
+import me.diksu.ultra.ui.theme.KernelSUTheme
+import rikka.shizuku.Shizuku
+import rikka.shizuku.ShizukuApiConstants
+import top.yukonga.miuix.kmp.basic.Icon as MiuixIcon
+import top.yukonga.miuix.kmp.basic.Text as MiuixText
+import top.yukonga.miuix.kmp.basic.TextButton as MiuixTextButton
+import top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+
+/**
+ * Shizuku 授权确认界面。
+ *
+ * 注意：不使用 AlertDialog / OverlayDialog，因为它们基于 Popup 实现，
+ * 在半透明浮动窗口（windowIsFloating=true）下根视图大小为 0，
+ * Popup 无法正确定位渲染。直接用 Compose 布局渲染居中卡片。
+ */
+class ShizukuPermissionActivity : ComponentActivity() {
+
+    companion object {
+        private const val TAG = "ShizukuPerm"
+    }
+
+    private var uid = -1
+    private var pid = -1
+    private var requestCode = -1
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+        val ai = if (Build.VERSION.SDK_INT >= 33) {
+            intent.getParcelableExtra("applicationInfo", ApplicationInfo::class.java)
+        } else {
+            @Suppress("DEPRECATION")
+            intent.getParcelableExtra("applicationInfo")
+        }
+        uid = intent.getIntExtra("uid", -1)
+        pid = intent.getIntExtra("pid", -1)
+        requestCode = intent.getIntExtra("requestCode", -1)
+        Log.i(TAG, "onCreate: action=${intent.action} uid=$uid pid=$pid requestCode=$requestCode pkg=${ai?.packageName}")
+        if (uid == -1 || pid == -1 || ai == null) {
+            Log.w(TAG, "invalid request intent, finishing")
+            finish()
+            return
+        }
+
+        val label = try {
+            ai.loadLabel(packageManager).toString()
+        } catch (e: Exception) {
+            ai.packageName
+        }
+        val icon = try {
+            ai.loadIcon(packageManager)
+        } catch (e: Exception) {
+            null
+        }
+
+        setContent {
+            KernelSUTheme {
+                val uiMode = LocalUiMode.current
+                // 半透明遮罩 + 居中卡片，不依赖 Popup/Dialog
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.5f))
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                            onClick = { reply(allowed = false, onetime = true) },
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    // 卡片本身不响应外部点击
+                    Box(
+                        modifier = Modifier
+                            .padding(horizontal = 32.dp)
+                            .clip(RoundedCornerShape(20.dp))
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                                onClick = {},
+                            ),
+                    ) {
+                        if (uiMode.isMiuixFamily) {
+                            PermissionCardMiuix(
+                                label = label,
+                                icon = icon,
+                                onAllow = { reply(allowed = true, onetime = false) },
+                                onAllowOnce = { reply(allowed = true, onetime = true) },
+                                onDeny = { reply(allowed = false, onetime = true) },
+                            )
+                        } else {
+                            PermissionCardMaterial(
+                                label = label,
+                                icon = icon,
+                                onAllow = { reply(allowed = true, onetime = false) },
+                                onAllowOnce = { reply(allowed = true, onetime = true) },
+                                onDeny = { reply(allowed = false, onetime = true) },
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private fun reply(allowed: Boolean, onetime: Boolean) {
+        val data = Bundle()
+        data.putBoolean(ShizukuApiConstants.REQUEST_PERMISSION_REPLY_ALLOWED, allowed)
+        data.putBoolean(ShizukuApiConstants.REQUEST_PERMISSION_REPLY_IS_ONETIME, onetime)
+        try {
+            if (!waitForBinder()) {
+                Log.e(TAG, "binder not available, cannot dispatch result")
+                Toast.makeText(this, R.string.shizuku_permission_binder_timeout, Toast.LENGTH_LONG).show()
+                finish()
+                return
+            }
+            Shizuku.dispatchPermissionConfirmationResult(uid, pid, requestCode, data)
+        } catch (t: Throwable) {
+            Log.e(TAG, "dispatchPermissionConfirmationResult failed", t)
+        }
+        finish()
+    }
+
+    /** Server 可能在拉起弹窗后才完成 binder 投递，这里等待它就绪（最多 5 秒）。 */
+    private fun waitForBinder(): Boolean {
+        if (Shizuku.pingBinder()) return true
+        val latch = CountDownLatch(1)
+        val listener = object : Shizuku.OnBinderReceivedListener {
+            override fun onBinderReceived() {
+                Shizuku.removeBinderReceivedListener(this)
+                latch.countDown()
+            }
+        }
+        Shizuku.addBinderReceivedListenerSticky(listener)
+        if (Shizuku.pingBinder()) {
+            latch.countDown()
+        }
+        return try {
+            latch.await(5, TimeUnit.SECONDS)
+        } catch (e: InterruptedException) {
+            Thread.currentThread().interrupt()
+            false
+        }
+    }
+}
+
+// ── Miuix 版本（直接渲染卡片，不使用 OverlayDialog） ─────────────────────────
+
+@Composable
+private fun PermissionCardMiuix(
+    label: String,
+    icon: Drawable?,
+    onAllow: () -> Unit,
+    onAllowOnce: () -> Unit,
+    onDeny: () -> Unit,
+) {
+    Surface(
+        color = colorScheme.surface,
+        contentColor = colorScheme.onSurface,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(
+            modifier = Modifier
+                .padding(horizontal = 20.dp, vertical = 20.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            // 标题行
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (icon != null) {
+                    Image(
+                        painter = BitmapPainter(icon.toBitmap().asImageBitmap()),
+                        contentDescription = null,
+                        modifier = Modifier.size(48.dp),
+                    )
+                } else {
+                    MiuixIcon(
+                        imageVector = Icons.Filled.WaterDrop,
+                        contentDescription = null,
+                        modifier = Modifier.size(48.dp),
+                        tint = colorScheme.primary,
+                    )
+                }
+                Spacer(Modifier.width(16.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    MiuixText(
+                        text = "Shizuku 权限请求",
+                        fontSize = 14.sp,
+                        color = colorScheme.onSurfaceVariantSummary,
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    MiuixText(
+                        text = label,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(4.dp))
+
+            PermissionOptionMiuix(
+                icon = Icons.Filled.Check,
+                title = "允许",
+                subtitle = "永久允许该应用使用 Shizuku",
+                container = colorScheme.primaryContainer,
+                content = colorScheme.onPrimaryContainer,
+                onClick = onAllow,
+            )
+            PermissionOptionMiuix(
+                icon = Icons.Outlined.Timelapse,
+                title = "仅一次",
+                subtitle = "本次允许，下次重新询问",
+                container = colorScheme.surfaceVariant,
+                content = colorScheme.onSurface,
+                onClick = onAllowOnce,
+            )
+            PermissionOptionMiuix(
+                icon = Icons.Filled.Block,
+                title = "拒绝",
+                subtitle = "拒绝该应用使用 Shizuku",
+                container = colorScheme.surfaceVariant,
+                content = colorScheme.onSurface,
+                onClick = onDeny,
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                MiuixTextButton(
+                    text = "取消",
+                    onClick = onDeny,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PermissionOptionMiuix(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    container: Color,
+    content: Color,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(container)
+            .clickable(onClick = onClick),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            MiuixIcon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = content,
+                modifier = Modifier.size(24.dp),
+            )
+            Spacer(Modifier.width(16.dp))
+            Column {
+                MiuixText(
+                    text = title,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = content,
+                )
+                Spacer(Modifier.height(2.dp))
+                MiuixText(
+                    text = subtitle,
+                    fontSize = 12.sp,
+                    color = content.copy(alpha = 0.8f),
+                )
+            }
+        }
+    }
+}
+
+// ── Material 版本（直接渲染卡片，不使用 AlertDialog） ────────────────────────
+
+@Composable
+private fun PermissionCardMaterial(
+    label: String,
+    icon: Drawable?,
+    onAllow: () -> Unit,
+    onAllowOnce: () -> Unit,
+    onDeny: () -> Unit,
+) {
+    Surface(
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surface,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(
+            modifier = Modifier
+                .padding(horizontal = 20.dp, vertical = 20.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            // 标题行
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (icon != null) {
+                    Image(
+                        painter = BitmapPainter(icon.toBitmap().asImageBitmap()),
+                        contentDescription = null,
+                        modifier = Modifier.size(48.dp),
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Filled.WaterDrop,
+                        contentDescription = null,
+                        modifier = Modifier.size(48.dp),
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                }
+                Spacer(Modifier.width(16.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Shizuku 权限请求",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(4.dp))
+
+            PermissionOptionMaterial(
+                icon = Icons.Filled.Check,
+                title = "允许",
+                subtitle = "永久允许该应用使用 Shizuku",
+                container = MaterialTheme.colorScheme.primaryContainer,
+                content = MaterialTheme.colorScheme.onPrimaryContainer,
+                onClick = onAllow,
+            )
+            PermissionOptionMaterial(
+                icon = Icons.Outlined.Timelapse,
+                title = "仅一次",
+                subtitle = "本次允许，下次重新询问",
+                container = MaterialTheme.colorScheme.surfaceContainer,
+                content = MaterialTheme.colorScheme.onSurface,
+                onClick = onAllowOnce,
+            )
+            PermissionOptionMaterial(
+                icon = Icons.Filled.Block,
+                title = "拒绝",
+                subtitle = "拒绝该应用使用 Shizuku",
+                container = MaterialTheme.colorScheme.surfaceContainer,
+                content = MaterialTheme.colorScheme.onSurface,
+                onClick = onDeny,
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                TextButton(onClick = onDeny) {
+                    Text("取消")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PermissionOptionMaterial(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    container: Color,
+    content: Color,
+    onClick: () -> Unit,
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(16.dp),
+        color = container,
+        contentColor = content,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = content,
+                modifier = Modifier.size(24.dp),
+            )
+            Spacer(Modifier.width(16.dp))
+            Column {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = content.copy(alpha = 0.8f),
+                )
+            }
+        }
+    }
+}

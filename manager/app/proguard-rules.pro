@@ -21,6 +21,6 @@
 
 # Manager-side Shizuku bridge (provider/receiver/permission activity are
 # referenced by the manifest and by the server via hardcoded class names)
--keep class me.weishu.kernelsu.shizuku.ShizukuManagerProvider { *; }
--keep class me.weishu.kernelsu.shizuku.ShizukuReceiver { *; }
--keep class me.weishu.kernelsu.shizuku.ShizukuPermissionActivity { *; }
+-keep class me.diksu.ultra.shizuku.ShizukuManagerProvider { *; }
+-keep class me.diksu.ultra.shizuku.ShizukuReceiver { *; }
+-keep class me.diksu.ultra.shizuku.ShizukuPermissionActivity { *; }

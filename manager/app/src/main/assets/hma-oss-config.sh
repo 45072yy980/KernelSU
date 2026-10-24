@@ -74,9 +74,9 @@ if [ -n "$HMA_NO_ACCESSIBILITY" ]; then
     APPLY_SETTINGS_PRESETS='"dev_options"'
 fi
 
-EXCLUDED_PACKAGES="eu.darken.sdmse me.weishu.kernelsu bin.mt.plus.canary bin.mt.plus org.telegram.messenger org.telegram.group me.bmax.apatch"
+EXCLUDED_PACKAGES="eu.darken.sdmse me.diksu.ultra bin.mt.plus.canary bin.mt.plus org.telegram.messenger org.telegram.group me.bmax.apatch"
 
-# 管理器的包名由管理器自己传进来（随机包名之后不是 me.weishu.kernelsu 了），Scene 版再多塞一个。
+# 管理器的包名由管理器自己传进来（随机包名之后不是 me.diksu.ultra 了），Scene 版再多塞一个。
 # 单独判断再拼，是因为空串也会拼出一个空元素，而下面把它整个当正则用（sed 's/ /|/g'）：空元素
 # 会让 grep -v 把所有包都排掉 —— 那是一个应用都写不进去，却还报成功。
 for EXTRA in "$HMA_MANAGER_PKG" "$HMA_EXTRA_EXCLUDE"; do

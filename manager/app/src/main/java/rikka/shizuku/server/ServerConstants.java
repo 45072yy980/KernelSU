@@ -19,7 +19,7 @@ public class ServerConstants {
      * <p>注意：此变量不再是 {@code final}，因为运行时可能被覆盖。所有引用方
      * 都应在需要时读取当前值，而不是缓存早期值。
      */
-    public static String MANAGER_APPLICATION_ID = me.weishu.kernelsu.BuildConfig.APPLICATION_ID;
+    public static String MANAGER_APPLICATION_ID = me.diksu.ultra.BuildConfig.APPLICATION_ID;
     public static String REQUEST_PERMISSION_ACTION = MANAGER_APPLICATION_ID + ".intent.action.REQUEST_PERMISSION";
 
     /**

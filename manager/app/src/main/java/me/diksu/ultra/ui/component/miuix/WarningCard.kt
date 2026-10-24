@@ -1,0 +1,231 @@
+package me.diksu.ultra.ui.component.miuix
+
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import me.diksu.ultra.ui.BackgroundDim
+import me.diksu.ultra.ui.PanelMetrics
+import me.diksu.ultra.ui.component.WarningLevel
+import me.diksu.ultra.ui.theme.LocalGlassNotice
+import me.diksu.ultra.ui.theme.LocalGlassWallpaper
+import me.diksu.ultra.ui.theme.isInDarkTheme
+import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.CardDefaults
+import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.theme.MiuixTheme
+import top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme
+import top.yukonga.miuix.kmp.theme.MiuixTheme.isDynamicColor
+import top.yukonga.miuix.kmp.utils.PressFeedbackType
+import kotlin.math.roundToInt
+
+@Composable
+fun WarningCard(
+    message: String,
+    modifier: Modifier = Modifier,
+    level: WarningLevel = WarningLevel.Error,
+    onClick: (() -> Unit)? = null,
+    action: (@Composable () -> Unit)? = null,
+) {
+    // Inside a frosted pane the card must not paint its own tinted container:
+    // the pane is the background, and a container on top of it would hide the
+    // glass entirely.
+    //
+    // The text colour has to change with it. "onErrorContainer" and
+    // "onTertiaryContainer" are near-black browns and reds, chosen to sit on
+    // their own pale containers; over a blurred photo they disappear. Over the
+    // glass the page uses the same bright tint every other card on the home
+    // screen uses, so this one matches instead of inventing its own.
+    // Inside the home notice pane the card draws no container of its own: the
+    // pane is the background. It has to paint that background itself though --
+    // the notice cards live in a plain Column, not in a shared glass surface --
+    // so it samples the same wallpaper the status card uses, blurs it and lays
+    // a dimming layer over it. `LocalGlassWallpaper` carries the picture down;
+    // when it is null there is nothing to blur and we fall through to the
+    // tinted variants below.
+    val glassWallpaper = LocalGlassWallpaper.current
+    if (LocalGlassNotice.current) {
+        val textColor = lerp(colorScheme.primary, Color.White, 0.75f)
+        val cardShape = RoundedCornerShape(16.dp)
+        Box(
+            modifier = modifier
+                .fillMaxWidth()
+                // 不在原尺寸上裁剪，否则按压反馈放大/倾斜时边缘会被切掉。
+                .shadow(8.dp, cardShape, clip = false)
+                .background(color = Color.Transparent, shape = cardShape),
+        ) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.defaultColors(
+                    color = Color.Transparent,
+                    contentColor = textColor,
+                ),
+                onClick = { onClick?.invoke() },
+                showIndication = onClick != null,
+                // Tilt, like the status card. The frosted face lives *inside* the Card
+                // (see the Box below) so it is what the feedback transforms; as a
+                // sibling of the Card it stayed still while the card moved, and the two
+                // visibly disagreed -- which read as the card having a second layer
+                // under it. Same fix the status card already carries.
+                pressFeedbackType = PressFeedbackType.Tilt,
+            ) {
+                Box {
+                    // 磨砂面统一走 FrostedCardBackground：按面板原尺寸 1:1 对位，
+                    // 画在 Card 里面所以跟着按压反馈一起动。
+                    if (glassWallpaper != null) {
+                        FrostedCardBackground(shape = cardShape)
+                    }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = message,
+                            // The page's body size. Miuix's body2 is what every other home
+                            // card uses for running text, so this matches instead of sitting
+                            // at a one-off 14.sp that read smaller than everything around it.
+                            fontSize = MiuixTheme.textStyles.body2.fontSize,
+                            color = textColor,
+                        )
+                        action?.invoke()
+                    }
+                }
+            }
+        }
+        return
+    }
+    if (me.diksu.ultra.ui.LocalUiMode.current != me.diksu.ultra.ui.UiMode.Miuix) {
+        // Stock miuix (and any shared surface): the plain card the official app ships.
+        Card(
+            modifier = modifier,
+            onClick = { onClick?.invoke() },
+            colors = CardDefaults.defaultColors(
+                color = level.containerColor(),
+                contentColor = level.contentColor(),
+            ),
+            showIndication = onClick != null,
+            pressFeedbackType = PressFeedbackType.Sink
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = message,
+                    fontSize = 14.sp
+                )
+                action?.invoke()
+            }
+        }
+        return
+    }
+    // The banner rides the page's gradient the way the status card does: the container
+    // colour starts it and the page's own background colour fades into it, so a notice
+    // sits on the picture instead of beside it. The shadow is what keeps the edge.
+    val cardShape = RoundedCornerShape(16.dp)
+    val container = level.containerColor()
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .shadow(8.dp, cardShape, clip = true)
+            .background(
+                brush = Brush.verticalGradient(
+                    listOf(container, lerp(container, colorScheme.background, 0.35f))
+                ),
+                shape = cardShape,
+            )
+    ) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.defaultColors(
+                color = Color.Transparent,
+                contentColor = level.contentColor(),
+            ),
+            onClick = { onClick?.invoke() },
+            showIndication = onClick != null,
+            // Tilt matches the status card and the frosted pane above; the gradient
+            // behind this Card is a sibling of it, so a Sink would shrink the Card
+            // out of its own background.
+            pressFeedbackType = PressFeedbackType.Tilt
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = message,
+                    fontSize = 14.sp
+                )
+                action?.invoke()
+            }
+        }
+    }
+}
+
+@Composable
+private fun WarningLevel.containerColor(): Color = when {
+    isDynamicColor -> when (this) {
+        WarningLevel.Error -> colorScheme.errorContainer
+        WarningLevel.Notice -> colorScheme.tertiaryContainer
+    }
+
+    isInDarkTheme() -> when (this) {
+        WarningLevel.Error -> Color(0xFF310808)
+        WarningLevel.Notice -> Color(0xFF3E2F1B)
+    }
+
+    else -> when (this) {
+        WarningLevel.Error -> Color(0xFFF8E2E2)
+        WarningLevel.Notice -> Color(0xFFFFF0DB)
+    }
+}
+
+@Composable
+private fun WarningLevel.contentColor(): Color = when {
+    isDynamicColor -> when (this) {
+        WarningLevel.Error -> colorScheme.onErrorContainer
+        WarningLevel.Notice -> colorScheme.onTertiaryContainer
+    }
+
+    else -> when (this) {
+        WarningLevel.Error -> Color(0xFFF72727)
+        WarningLevel.Notice -> Color(0xFFF5A623)
+    }
+}

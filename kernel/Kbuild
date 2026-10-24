@@ -197,12 +197,12 @@ $(info -- KSU_NEW_DCACHE_FLUSH: $(KSU_NEW_DCACHE_FLUSH))
 
 KSU_IS_PR_BUILD ?= 0
 # 管理器包名：内核靠它认领自身（throne_tracker 按包名找 APK 并核对签名）。
-# 本分支的管理器 applicationId 是 me.diksu.kernelsu（见 manager/app/build.gradle.kts），
+# 本分支的管理器 applicationId 是 me.diksu.ultra（见 manager/app/build.gradle.kts），
 # 必须与之一致，否则模块能加载、su 能用，但管理器拿不到 MANAGER 标志，首页会显示“未安装”。
 ifeq ($(KSU_IS_PR_BUILD),0)
-KSU_PACKAGE_NAME ?= me.diksu.kernelsu
+KSU_PACKAGE_NAME ?= me.diksu.ultra
 else
-KSU_PACKAGE_NAME ?= me.diksu.kernelsu.pr
+KSU_PACKAGE_NAME ?= me.diksu.ultra.pr
 endif
 KSU_EXPECTED_SIZE ?= 0x033b
 KSU_EXPECTED_HASH ?= c371061b19d8c7d7d6133c6a9bafe198fa944e50c1b31c9d8daa8d7f1fc2d2d6

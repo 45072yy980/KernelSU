@@ -26,8 +26,9 @@ val managerVersionCode = rootProject.extra["managerVersionCode"] as Int
 val managerVersionName = rootProject.extra["managerVersionName"] as String
 
 val isPrBuild = project.findProperty("IS_PR_BUILD")?.toString()?.toBoolean() ?: false
-val defaultManagerPackageName = if (isPrBuild) "me.diksu.kernelsu.pr" else "me.diksu.kernelsu"
-val defaultManagerName = if (isPrBuild) "KernelSU PR" else "KernelSU"
+val defaultManagerPackageName = if (isPrBuild) "me.diksu.ultra.pr" else "me.diksu.ultra"
+// 4.0 起本项目更名为 Diksu Ultra（基线已停更，本分支独立演进）。
+val defaultManagerName = if (isPrBuild) "Diksu Ultra PR" else "Diksu Ultra"
 val managerPackageName = project.findProperty("KSU_PACKAGE_NAME")?.toString() ?: defaultManagerPackageName
 val managerName = project.findProperty("KSU_NAME")?.toString() ?: defaultManagerName
 val keystoreFileName = project.findProperty("KEYSTORE_FILE")?.toString() ?: "key.jks"
@@ -72,7 +73,7 @@ val baseCFlags = listOf(
 val baseCppFlags = baseCFlags + "-fno-rtti"
 
 android {
-    namespace = "me.weishu.kernelsu"
+    namespace = "me.diksu.ultra"
 
     sourceSets.getByName("main").assets.srcDir(generatedKeystoreAssets)
     sourceSets.getByName("main").assets.srcDir(generatedFpdropAssets)
@@ -350,7 +351,7 @@ tasks.register("checkManagerHiderSuffixes") {
 
     val manifestFile = layout.projectDirectory.file("src/main/AndroidManifest.xml")
     val hiderFile = layout.projectDirectory.file(
-        "src/main/java/me/weishu/kernelsu/ui/util/ManagerHider.kt"
+        "src/main/java/me/diksu/ultra/ui/util/ManagerHider.kt"
     )
     inputs.file(manifestFile)
     inputs.file(hiderFile)

@@ -69,9 +69,9 @@
 
 ### 2.3 管理器 App `manager/`
 
-- 包名策略：`namespace = "me.weishu.kernelsu"`，`applicationId` 由 `KSU_PACKAGE_NAME` 决定（默认 `me.diksu.kernelsu`，PR 构建 `me.weishu.kernelsu.pr`）；
+- 包名策略：`namespace = "me.diksu.ultra"`，`applicationId` 由 `KSU_PACKAGE_NAME` 决定（默认 `me.diksu.ultra`，PR 构建 `me.diksu.ultra.pr`）；
   Manifest 里所有组件都指向 `com.mngr.app.*` 的**转发类**（`Entry`、`ui/MainActivity`、`ui/WebUIActivity`、
-  `magica/*`、`service/DownloadService`），真正的实现在 `me.weishu.kernelsu.*` 里被继承。
+  `magica/*`、`service/DownloadService`），真正的实现在 `me.diksu.ultra.*` 里被继承。
 - 三套 UI 并存：`Miuix`（美化）/ `MiuixStock`（原版）/ `Material`，同一屏常见三个文件。
 - 入口与基础设施：`KernelSUApplication.kt`、`Natives.kt`（JNI 声明）、`ui/MainActivity.kt`、`ui/navigation3/`（Routes/Navigator/IntentDispatcher）。
 
@@ -250,7 +250,7 @@ CVE-2026-43284 是另一条完全独立的提权路，和 ghostlock 不共用任
 ### 4.3 组件转发类容易漏
 
 Manifest 里写的是 `com.mngr.app.magica.MagicaService` / `BootCompletedReceiver` / `AppZygotePreload`，
-实际逻辑在 `me.weishu.kernelsu.magica.*`。**新增任何被 Manifest / ZygotePreload 直接点名的组件，都必须同时加转发类**，
+实际逻辑在 `me.diksu.ultra.magica.*`。**新增任何被 Manifest / ZygotePreload 直接点名的组件，都必须同时加转发类**，
 否则越狱触发链路会静默失效（`BootCompletedReceiver` 里已经有 `rootAvailable()` 短路）。
 
 ### 4.4 版本号公式：两份实现 + 一层构建期校验

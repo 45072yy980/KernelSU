@@ -1,0 +1,121 @@
+package me.diksu.ultra.ui.navigation3
+
+import android.os.Parcelable
+import kotlinx.parcelize.Parcelize
+import kotlinx.serialization.Serializable
+import me.diksu.ultra.ui.screen.flash.FlashIt
+import me.diksu.ultra.ui.screen.modulerepo.RepoModuleArg
+import me.diksu.ultra.ui.screen.scriptrun.ScriptRunArg
+import me.diksu.ultra.ui.util.FlashItSerializer
+import me.diksu.ultra.ui.util.RepoModuleArgSerializer
+import me.diksu.ultra.ui.util.ScriptRunArgSerializer
+import me.diksu.ultra.ui.util.TemplateInfoSerializer
+import me.diksu.ultra.ui.viewmodel.TemplateViewModel
+import top.yukonga.miuix.kmp.nav.core.NavKey
+
+/**
+ * Type-safe navigation keys for miuix-nav.
+ * Each destination is a NavKey (data object/data class) and can be saved/restored in the back stack.
+ */
+@Serializable
+sealed interface Route : NavKey, Parcelable {
+    @Parcelize
+    @Serializable
+    data object Main : Route
+
+    @Parcelize
+    @Serializable
+    data object Home : Route
+
+    @Parcelize
+    @Serializable
+    data object SuperUser : Route
+
+    @Parcelize
+    @Serializable
+    data object Module : Route
+
+    @Parcelize
+    @Serializable
+    data object Settings : Route
+
+    @Parcelize
+    @Serializable
+    data object BasicSettings : Route
+
+    @Parcelize
+    @Serializable
+    data object About : Route
+
+    /** The third-party library list the AboutLibraries plugin generates at build time. */
+    @Parcelize
+    @Serializable
+    data object OpenSourceLicense : Route
+
+    @Parcelize
+    @Serializable
+    data object Sulog : Route
+
+    @Parcelize
+    @Serializable
+    data object ColorPalette : Route
+
+    @Parcelize
+    @Serializable
+    data object AppProfileTemplate : Route
+
+    @Parcelize
+    @Serializable
+    data object OtherFeatures : Route
+
+    @Parcelize
+    @Serializable
+    data object Keymint : Route
+
+    @Parcelize
+    @Serializable
+    data object Susfs : Route
+
+    @Parcelize
+    @Serializable
+    data object Shizuku : Route
+
+    @Parcelize
+    @Serializable
+    data object ShizukuLog : Route
+
+    @Parcelize
+    @Serializable
+    data class TemplateEditor(
+        @Serializable(with = TemplateInfoSerializer::class) val template: TemplateViewModel.TemplateInfo,
+        val readOnly: Boolean
+    ) : Route
+
+    @Parcelize
+    @Serializable
+    data class AppProfile(val uid: Int) : Route
+
+    @Parcelize
+    @Serializable
+    data object Install : Route
+
+    @Parcelize
+    @Serializable
+    data class ModuleRepoDetail(@Serializable(with = RepoModuleArgSerializer::class) val module: RepoModuleArg) : Route
+
+    @Parcelize
+    @Serializable
+    data object ModuleRepo : Route
+
+    @Parcelize
+    @Serializable
+    data class Flash(@Serializable(with = FlashItSerializer::class) val flashIt: FlashIt) : Route
+
+    @Parcelize
+    @Serializable
+    data class ExecuteModuleAction(val moduleId: String, val fromShortcut: Boolean = false) : Route
+
+    @Parcelize
+    @Serializable
+    data class ScriptRun(@Serializable(with = ScriptRunArgSerializer::class) val arg: ScriptRunArg) : Route
+}

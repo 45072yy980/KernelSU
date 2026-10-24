@@ -109,7 +109,7 @@
              自定义实现补充 sendUserService，UserService 进程依赖它完成初始化。
              authority 必须是 ${applicationId}.shizuku，Server 端以此为入口投递 Binder -->
         <provider
-            android:name="me.weishu.kernelsu.shizuku.ShizukuManagerProvider"
+            android:name="me.diksu.ultra.shizuku.ShizukuManagerProvider"
             android:authorities="${applicationId}.shizuku"
             android:multiprocess="false"
             android:enabled="true"
@@ -145,7 +145,7 @@
         </receiver>
 
         <receiver
-            android:name="me.weishu.kernelsu.susfs.SusfsBootReceiver"
+            android:name="me.diksu.ultra.susfs.SusfsBootReceiver"
             android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
@@ -154,7 +154,7 @@
 
         <!-- 内置 Shizuku：授权确认界面，由 Shizuku server 通过广播拉起 -->
         <activity
-            android:name="me.weishu.kernelsu.shizuku.ShizukuPermissionActivity"
+            android:name="me.diksu.ultra.shizuku.ShizukuPermissionActivity"
             android:directBootAware="true"
             android:excludeFromRecents="true"
             android:exported="true"
@@ -168,7 +168,7 @@
 
         <!-- 内置 Shizuku：响应旧版客户端的 Binder 请求广播 -->
         <receiver
-            android:name="me.weishu.kernelsu.shizuku.ShizukuReceiver"
+            android:name="me.diksu.ultra.shizuku.ShizukuReceiver"
             android:enabled="true"
             android:exported="true"
             android:directBootAware="true">

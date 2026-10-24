@@ -1,0 +1,526 @@
+package me.diksu.ultra.ui.screen.settings
+
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.filled.BlurOn
+import androidx.compose.material.icons.filled.Block
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Article
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.Rule
+import androidx.compose.material.icons.filled.Adb
+import androidx.compose.material.icons.filled.AdminPanelSettings
+import androidx.compose.material.icons.filled.DeveloperMode
+import androidx.compose.material.icons.filled.FlashOn
+import androidx.compose.material.icons.filled.LayersClear
+import androidx.compose.material.icons.filled.RestartAlt
+import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.SystemUpdateAlt
+import androidx.compose.material.icons.filled.VerifiedUser
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.compose.dropUnlessResumed
+import androidx.lifecycle.viewmodel.compose.viewModel
+import me.diksu.ultra.R
+import me.diksu.ultra.ui.LocalUiMode
+import me.diksu.ultra.ui.UiMode
+import me.diksu.ultra.ui.component.material.SegmentedColumn
+import me.diksu.ultra.ui.component.material.SegmentedDropdownItem
+import me.diksu.ultra.ui.component.material.SegmentedListItem
+import me.diksu.ultra.ui.component.material.SegmentedSwitchItem
+import me.diksu.ultra.ui.navigation3.LocalNavigator
+import me.diksu.ultra.ui.navigation3.Route
+import me.diksu.ultra.ui.viewmodel.SettingsViewModel
+import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.Scaffold as MiuixScaffold
+import top.yukonga.miuix.kmp.basic.SmallTitle
+import top.yukonga.miuix.kmp.basic.TopAppBar as MiuixTopAppBar
+import top.yukonga.miuix.kmp.basic.Icon as MiuixIcon
+import top.yukonga.miuix.kmp.basic.IconButton as MiuixIconButton
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.Back
+import top.yukonga.miuix.kmp.preference.ArrowPreference
+import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
+import top.yukonga.miuix.kmp.preference.SwitchPreference
+import top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme
+
+/**
+ * The switches that used to sit in the middle of Settings, moved to a page of their own so the main
+ * page is about the Manager as a whole.
+ *
+ * `su` compatibility stays a three-way choice (on by default / off until reboot / off), everything
+ * else is on or off, and every row keeps the state check it had before: a feature the running
+ * kernel does not support stays disabled.
+ */
+@Composable
+fun BasicSettingsScreen() {
+    val navigator = LocalNavigator.current
+    val viewModel = viewModel<SettingsViewModel>()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val onBack = dropUnlessResumed { navigator.pop() }
+    val onOpenProfileTemplate = dropUnlessResumed { navigator.push(Route.AppProfileTemplate) }
+
+    when (LocalUiMode.current) {
+        UiMode.Miuix, UiMode.MiuixStock -> BasicSettingsMiuix(
+            uiState, viewModel, onBack, onOpenProfileTemplate,
+        )
+        UiMode.Material -> BasicSettingsMaterial(
+            uiState, viewModel, onBack, onOpenProfileTemplate,
+        )
+    }
+}
+
+/** One row's worth of what both styles need. */
+private class BasicRow(
+    val icon: ImageVector,
+    val title: Int,
+    val summary: String,
+    val enabled: Boolean,
+    val checked: Boolean,
+    val onCheckedChange: (Boolean) -> Unit,
+)
+
+/**
+ * 基础功能页按“这组开关到底管什么”分组：root 能力、内核特性、模块与刷写、调试。
+ * 界面偏好（简洁模式、模块信息、Pager 滑动）已经搬到主题页，不再和 root/内核开关混在一起。
+ */
+private class BasicGroup(
+    val title: Int,
+    val rows: List<BasicRow>,
+)
+
+@Composable
+private fun basicGroups(uiState: SettingsUiState, viewModel: SettingsViewModel): List<BasicGroup> = listOf(
+    BasicGroup(
+        title = R.string.settings_group_root,
+        rows = listOf(
+            BasicRow(
+                icon = Icons.AutoMirrored.Filled.Article,
+                title = R.string.settings_sulog,
+                summary = statusSummary(uiState.sulogStatus, R.string.settings_sulog_summary),
+                enabled = uiState.sulogStatus == "supported",
+                checked = uiState.isSulogEnabled,
+                onCheckedChange = viewModel::setSulogEnabled,
+            ),
+            BasicRow(
+                icon = Icons.Filled.Adb,
+                title = R.string.settings_adb_root,
+                summary = statusSummary(uiState.adbRootStatus, R.string.settings_adb_root_summary),
+                enabled = uiState.adbRootStatus == "supported",
+                checked = uiState.isAdbRootEnabled,
+                onCheckedChange = viewModel::setAdbRootEnabled,
+            ),
+            BasicRow(
+                icon = Icons.Filled.VerifiedUser,
+                title = R.string.settings_shell_su_adb_only,
+                summary = statusSummary(
+                    uiState.shellSuAdbOnlyStatus,
+                    R.string.settings_shell_su_adb_only_summary,
+                ),
+                enabled = uiState.shellSuAdbOnlyStatus == "supported",
+                checked = uiState.isShellSuAdbOnlyEnabled,
+                onCheckedChange = viewModel::setShellSuAdbOnlyEnabled,
+            ),
+        ),
+    ),
+    BasicGroup(
+        title = R.string.settings_group_kernel,
+        rows = listOf(
+            BasicRow(
+                icon = Icons.Filled.LayersClear,
+                title = R.string.settings_kernel_umount,
+                summary = statusSummary(
+                    uiState.kernelUmountStatus,
+                    R.string.settings_kernel_umount_summary,
+                ),
+                enabled = uiState.kernelUmountStatus == "supported",
+                checked = uiState.isKernelUmountEnabled,
+                onCheckedChange = viewModel::setKernelUmountEnabled,
+            ),
+            BasicRow(
+                icon = Icons.Filled.Security,
+                title = R.string.settings_selinux_hide,
+                summary = statusSummary(
+                    uiState.selinuxHideStatus,
+                    R.string.settings_selinux_hide_summary,
+                ),
+                enabled = uiState.selinuxHideStatus == "supported",
+                checked = uiState.isSelinuxHideEnabled,
+                onCheckedChange = viewModel::setSelinuxHideEnabled,
+            ),
+            BasicRow(
+                icon = Icons.Filled.FlashOn,
+                title = R.string.settings_auto_jailbreak,
+                summary = stringResource(R.string.settings_auto_jailbreak_summary),
+                enabled = uiState.isLateLoadMode,
+                checked = uiState.autoJailbreak,
+                onCheckedChange = viewModel::setAutoJailbreak,
+            ),
+        ),
+    ),
+    BasicGroup(
+        title = R.string.settings_group_modules,
+        rows = listOf(
+            BasicRow(
+                icon = Icons.Filled.SystemUpdateAlt,
+                title = R.string.settings_module_check_update,
+                summary = stringResource(R.string.settings_check_update_summary),
+                enabled = true,
+                checked = uiState.checkModuleUpdate,
+                onCheckedChange = viewModel::setCheckModuleUpdate,
+            ),
+            BasicRow(
+                icon = Icons.AutoMirrored.Filled.Rule,
+                title = R.string.settings_umount_modules_default,
+                summary = stringResource(R.string.settings_umount_modules_default_summary),
+                enabled = true,
+                checked = uiState.isDefaultUmountModules,
+                onCheckedChange = viewModel::setDefaultUmountModules,
+            ),
+            BasicRow(
+                icon = Icons.Filled.RestartAlt,
+                title = R.string.settings_soft_reboot,
+                summary = stringResource(R.string.settings_soft_reboot_summary),
+                enabled = !uiState.isLateLoadMode,
+                checked = uiState.isLateLoadMode || uiState.useSoftReboot,
+                onCheckedChange = viewModel::setUseSoftReboot,
+            ),
+        ),
+    ),
+    BasicGroup(
+        title = R.string.settings_group_debug,
+        rows = listOf(
+            BasicRow(
+                icon = Icons.Filled.DeveloperMode,
+                title = R.string.enable_web_debugging,
+                summary = stringResource(R.string.enable_web_debugging_summary),
+                enabled = true,
+                checked = uiState.enableWebDebugging,
+                onCheckedChange = viewModel::setEnableWebDebugging,
+            ),
+        ),
+    ),
+)
+
+/** A feature the kernel reports as unsupported or managed says so instead of its own summary. */
+@Composable
+private fun statusSummary(status: String, fallback: Int): String = when (status) {
+    "unsupported" -> stringResource(R.string.feature_status_unsupported_summary)
+    "managed" -> stringResource(R.string.feature_status_managed_summary)
+    else -> stringResource(fallback)
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun BasicSettingsMaterial(
+    uiState: SettingsUiState,
+    viewModel: SettingsViewModel,
+    onBack: () -> Unit,
+    onOpenProfileTemplate: () -> Unit,
+) {
+    var showModuleBlacklist by remember { mutableStateOf(false) }
+    if (showModuleBlacklist) {
+        ModuleBlacklistDialog(
+            onDismiss = { showModuleBlacklist = false },
+            load = { viewModel.readModuleBlacklist() },
+            onSave = { viewModel.setModuleBlacklist(it) },
+        )
+    }
+    val suCompatItems = listOf(
+        stringResource(R.string.settings_mode_enable_by_default),
+        stringResource(R.string.settings_mode_disable_until_reboot),
+        stringResource(R.string.settings_mode_disable_always),
+    )
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(stringResource(R.string.settings_basic)) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
+                    }
+                },
+            )
+        },
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .padding(padding)
+                .verticalScroll(rememberScrollState()),
+        ) {
+            val groups = basicGroups(uiState, viewModel)
+            groups.forEachIndexed { index, group ->
+                SegmentedColumn(
+                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 13.dp),
+                    title = stringResource(group.title),
+                    content = buildList {
+                        if (index == 0) {
+                            add {
+                                SegmentedDropdownItem(
+                                    icon = Icons.Filled.AdminPanelSettings,
+                                    title = stringResource(R.string.settings_sucompat),
+                                    summary = statusSummary(
+                                        uiState.suCompatStatus,
+                                        R.string.settings_sucompat_summary,
+                                    ),
+                                    items = suCompatItems,
+                                    enabled = uiState.suCompatStatus == "supported",
+                                    selectedIndex = uiState.suCompatMode,
+                                    onItemSelected = viewModel::setSuCompatMode,
+                                )
+                            }
+                        }
+                        if (index == 2) {
+                            add {
+                                val profileTemplate = stringResource(R.string.settings_profile_template)
+                                SegmentedListItem(
+                                    onClick = onOpenProfileTemplate,
+                                    headlineContent = { Text(profileTemplate) },
+                                    supportingContent = {
+                                        Text(stringResource(R.string.settings_profile_template_summary))
+                                    },
+                                    leadingContent = {
+                                        Icon(Icons.AutoMirrored.Filled.Article, profileTemplate)
+                                    },
+                                    trailingContent = {
+                                        Icon(
+                                            Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                            contentDescription = null,
+                                        )
+                                    },
+                                )
+                            }
+                            add {
+                                val blacklist = stringResource(R.string.settings_module_blacklist)
+                                SegmentedListItem(
+                                    onClick = { showModuleBlacklist = true },
+                                    headlineContent = { Text(blacklist) },
+                                    supportingContent = {
+                                        Text(stringResource(R.string.settings_module_blacklist_summary))
+                                    },
+                                    leadingContent = { Icon(Icons.Filled.Block, blacklist) },
+                                    trailingContent = {
+                                        Icon(
+                                            Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                            contentDescription = null,
+                                        )
+                                    },
+                                )
+                            }
+                        }
+                        group.rows.forEach { row ->
+                            add {
+                                SegmentedSwitchItem(
+                                    icon = row.icon,
+                                    title = stringResource(row.title),
+                                    summary = row.summary,
+                                    enabled = row.enabled,
+                                    checked = row.checked,
+                                    onCheckedChange = row.onCheckedChange,
+                                )
+                            }
+                        }
+                    },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun BasicSettingsMiuix(
+    uiState: SettingsUiState,
+    viewModel: SettingsViewModel,
+    onBack: () -> Unit,
+    onOpenProfileTemplate: () -> Unit,
+) {
+    var showModuleBlacklist by remember { mutableStateOf(false) }
+    if (showModuleBlacklist) {
+        ModuleBlacklistDialog(
+            onDismiss = { showModuleBlacklist = false },
+            load = { viewModel.readModuleBlacklist() },
+            onSave = { viewModel.setModuleBlacklist(it) },
+        )
+    }
+    val suCompatItems = listOf(
+        stringResource(R.string.settings_mode_enable_by_default),
+        stringResource(R.string.settings_mode_disable_until_reboot),
+        stringResource(R.string.settings_mode_disable_always),
+    )
+    MiuixScaffold(
+        topBar = {
+            MiuixTopAppBar(
+                title = stringResource(R.string.settings_basic),
+                navigationIcon = {
+                    MiuixIconButton(onClick = onBack) {
+                        MiuixIcon(
+                            imageVector = MiuixIcons.Back,
+                            contentDescription = null,
+                            tint = colorScheme.onSurface,
+                        )
+                    }
+                },
+            )
+        },
+    ) { innerPadding ->
+        // A LazyColumn, the same container the settings page itself uses, and it has to be told
+        // about the top bar's height — otherwise the first rows sit behind the bar.
+        val groups = basicGroups(uiState, viewModel)
+        LazyColumn(
+            modifier = Modifier.padding(horizontal = 12.dp),
+            contentPadding = innerPadding,
+        ) {
+            item {
+                groups.forEachIndexed { index, group ->
+                    SmallTitle(
+                        text = stringResource(group.title),
+                        modifier = Modifier.padding(top = 12.dp),
+                    )
+                    Card(modifier = Modifier.padding(top = 12.dp)) {
+                        if (index == 0) {
+                            OverlayDropdownPreference(
+                                title = stringResource(R.string.settings_sucompat),
+                                summary = statusSummary(
+                                    uiState.suCompatStatus,
+                                    R.string.settings_sucompat_summary,
+                                ),
+                                items = suCompatItems,
+                                startAction = {
+                                    MiuixIcon(
+                                        imageVector = Icons.Filled.AdminPanelSettings,
+                                        contentDescription = null,
+                                        tint = colorScheme.onBackground,
+                                        modifier = Modifier.padding(end = 6.dp),
+                                    )
+                                },
+                                enabled = uiState.suCompatStatus == "supported",
+                                selectedIndex = uiState.suCompatMode,
+                                onSelectedIndexChange = viewModel::setSuCompatMode,
+                            )
+                        }
+                        if (index == 2) {
+                            val profileTemplate = stringResource(R.string.settings_profile_template)
+                            ArrowPreference(
+                                title = profileTemplate,
+                                summary = stringResource(R.string.settings_profile_template_summary),
+                                startAction = {
+                                    MiuixIcon(
+                                        imageVector = Icons.AutoMirrored.Filled.Article,
+                                        contentDescription = null,
+                                        tint = colorScheme.onBackground,
+                                        modifier = Modifier.padding(end = 6.dp),
+                                    )
+                                },
+                                onClick = onOpenProfileTemplate,
+                            )
+                            val blacklist = stringResource(R.string.settings_module_blacklist)
+                            ArrowPreference(
+                                title = blacklist,
+                                summary = stringResource(R.string.settings_module_blacklist_summary),
+                                startAction = {
+                                    MiuixIcon(
+                                        imageVector = Icons.Filled.Block,
+                                        contentDescription = null,
+                                        tint = colorScheme.onBackground,
+                                        modifier = Modifier.padding(end = 6.dp),
+                                    )
+                                },
+                                onClick = { showModuleBlacklist = true },
+                            )
+                        }
+                        group.rows.forEach { MiuixSwitchRow(it) }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MiuixSwitchRow(row: BasicRow) {
+    SwitchPreference(
+        title = stringResource(row.title),
+        summary = row.summary,
+        startAction = {
+            MiuixIcon(
+                imageVector = row.icon,
+                contentDescription = null,
+                tint = colorScheme.onBackground,
+                modifier = Modifier.padding(end = 6.dp),
+            )
+        },
+        enabled = row.enabled,
+        checked = row.checked,
+        onCheckedChange = row.onCheckedChange,
+    )
+}
+
+/**
+ * 模块黑名单编辑器：写 /data/adb/ksu/block_modules，越狱激活时作为 block_modules= 参数
+ * 传给 kernelsu.ko；boot 补丁模式不走这里，所以文案只提越狱激活。
+ */
+@Composable
+private fun ModuleBlacklistDialog(
+    onDismiss: () -> Unit,
+    load: suspend () -> String,
+    onSave: (String) -> Unit,
+) {
+    var text by remember { mutableStateOf("") }
+    var loaded by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        if (!loaded) {
+            text = load()
+            loaded = true
+        }
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.module_blacklist_dialog_title)) },
+        text = {
+            Column {
+                Text(stringResource(R.string.module_blacklist_dialog_message))
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    modifier = Modifier.padding(top = 12.dp),
+                    singleLine = false,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                onSave(text)
+                onDismiss()
+            }) {
+                Text(stringResource(android.R.string.ok))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(android.R.string.cancel))
+            }
+        },
+    )
+}
