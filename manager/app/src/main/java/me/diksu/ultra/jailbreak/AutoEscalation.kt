@@ -40,6 +40,8 @@ object AutoEscalation {
     private const val KEY_LAST_OK = "auto_escalation_last_ok"
     private const val KEY_LAST_METHOD = "auto_escalation_last_method"
     private const val KEY_LAST_DETAIL = "auto_escalation_last_detail"
+    private const val KEY_LAST_BOOT_ID = "auto_escalation_last_boot_id"
+    private const val KEY_FAIL_STREAK = "auto_escalation_fail_streak"
 
     /** 全部已知方式，顺序即默认优先级。 */
     val ALL_METHODS: List<String> = listOf(METHOD_GHOSTLOCK, METHOD_DIRTYFRAG)
@@ -106,6 +108,51 @@ object AutoEscalation {
             .apply()
     }
 
+    /** 连续失败到这个次数就不再自动尝试，避免每次开机都去捅内核。 */
+    private const val MAX_FAIL_STREAK = 3
+
+    /** 当前这次开机的标识（重启后会变）。读不到时返回空串。 */
+    fun bootId(): String = runCatching {
+        java.io.File("/proc/sys/kernel/random/boot_id").readText().trim()
+    }.getOrDefault("")
+
+    /**
+     * 开机时是否应该跳过自动提权；返回非 null 表示"跳过"并给出原因。
+     *
+     * 三个理由：
+     * - 本次开机已经尝试过（避免开机广播重复派发时反复提权）；
+     * - 连续失败次数到上限（说明这台设备当前链路不通，继续捅只会更不稳定）；
+     * - 设备处于安全模式（此时用户明确要最小化启动，不该再注入内核模块）。
+     */
+    fun bootSkipReason(context: Context): String? {
+        val bootId = bootId()
+        val lastBoot = prefs().getString(KEY_LAST_BOOT_ID, "").orEmpty()
+        if (bootId.isNotEmpty() && bootId == lastBoot) {
+            return "本次开机已经尝试过"
+        }
+        val streak = prefs().getInt(KEY_FAIL_STREAK, 0)
+        if (streak >= MAX_FAIL_STREAK) {
+            return "连续失败 $streak 次，已暂停自动尝试（可在面板里手动重试）"
+        }
+        if (runCatching { me.diksu.ultra.Natives.isSafeMode }.getOrDefault(false)) {
+            return "设备处于安全模式"
+        }
+        return null
+    }
+
+    /** 记下"这次开机已经尝试过"。 */
+    fun markBootAttempt() {
+        val id = bootId()
+        if (id.isNotEmpty()) {
+            prefs().edit().putString(KEY_LAST_BOOT_ID, id).apply()
+        }
+    }
+
+    /** 手动重试时把失败计数清零，让下一次开机重新有机会自动尝试。 */
+    fun resetFailStreak() {
+        prefs().edit().putInt(KEY_FAIL_STREAK, 0).apply()
+    }
+
     /** 某个方式在这台设备上是否可用（二进制是否随包内置）。 */
     fun isAvailable(context: Context, method: String): Boolean = when (method) {
         METHOD_GHOSTLOCK -> JailbreakExploit.isAvailable(context)
@@ -162,6 +209,7 @@ object AutoEscalation {
             }
             if (ok) {
                 val message = "${label(method)} 成功"
+                prefs().edit().putInt(KEY_FAIL_STREAK, 0).apply()
                 record(true, method, message)
                 onLog(message)
                 return Outcome(true, method, message)
@@ -170,6 +218,8 @@ object AutoEscalation {
             onLog("== ${label(method)} 失败，继续下一种 ==")
         }
         val message = "全部方式都失败：${methods.joinToString("、") { label(it) }}"
+        val streak = prefs().getInt(KEY_FAIL_STREAK, 0) + 1
+        prefs().edit().putInt(KEY_FAIL_STREAK, streak).apply()
         record(false, methods.last(), message)
         onLog(message)
         return Outcome(false, methods.lastOrNull().orEmpty(), message.ifBlank { lastError })

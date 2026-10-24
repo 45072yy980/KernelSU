@@ -1,8 +1,6 @@
 package me.diksu.ultra.data.repository
 
-import android.content.ComponentName
 import android.content.Context
-import android.content.pm.PackageManager
 import android.util.Log
 import androidx.core.content.edit
 import com.materialkolor.PaletteStyle
@@ -292,18 +290,21 @@ class SettingsRepositoryImpl : SettingsRepository {
         get() = prefs.getStringSet("sulog_filters", null)?.toSet()
         set(filters) = prefs.edit { putStringSet("sulog_filters", filters) }
 
+    /**
+     * 开机自动提权并越狱的总开关。
+     *
+     * 4.1 起这里**只写偏好**，不再顺带打开 `com.mngr.app.magica.BootCompletedReceiver`：
+     * 那个接收器会在开机时拉起一个空的 MagicaService，并由 app zygote 的 preload
+     * 直接 exec `ksud late-load` —— 完整重启后越狱用户根本没有 root，这条路径
+     * 只会在没有权限的情况下试图往内核里注入模块，既不会成功，还可能留下痕迹。
+     *
+     * 真正的自动提权由 [me.diksu.ultra.jailbreak.AutoEscalationBootReceiver] 用
+     * 普通应用的开机自启权限（BOOT_COMPLETED）触发，在应用进程里跑提权链，
+     * 不需要预先有 root，也不碰系统分区。
+     */
     override var autoJailbreak: Boolean
         get() = prefs.getBoolean("auto_jailbreak", false)
         set(value) {
-            runCatching {
-                ksuApp.packageManager.setComponentEnabledSetting(
-        ComponentName(ksuApp, com.mngr.app.magica.BootCompletedReceiver::class.java),
-                    if (value) PackageManager.COMPONENT_ENABLED_STATE_ENABLED else PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
-                    PackageManager.DONT_KILL_APP
-                )
-            }.onFailure {
-                Log.e("Settings", "failed to change boot receiver state to $value", it)
-            }
             prefs.edit {
                 putBoolean("auto_jailbreak", value)
             }

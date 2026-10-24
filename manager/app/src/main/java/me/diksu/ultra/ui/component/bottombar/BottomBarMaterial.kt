@@ -27,15 +27,22 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import me.diksu.ultra.Natives
+import me.diksu.ultra.ui.capability.rememberNavGate
 import me.diksu.ultra.R
 import me.diksu.ultra.ui.LocalMainPagerState
 
 @Composable
 fun BottomBarMaterial(navigationBadge: NavigationBadgeState) {
-    val fullFeatured = Natives.isFullFeatured()
-    if (!fullFeatured) return
-
     val mainPagerState = LocalMainPagerState.current
+    // 内核模块没加载时不再整条导航消失：入口常驻、置灰，点一下说明原因（4.1）。
+    if (!Natives.isFullFeatured()) {
+        DisabledNavigationBar(
+            gate = rememberNavGate(),
+            onGoHome = { mainPagerState.animateToPage(0) },
+        )
+        return
+    }
+
 
     val items = listOf(
         Triple(R.string.home, Icons.Filled.Home, Icons.Outlined.Home),

@@ -57,6 +57,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import me.diksu.ultra.Natives
+import me.diksu.ultra.ui.capability.rememberNavGate
 import me.diksu.ultra.ui.component.rebootlistpopup.RebootListPopupMiuix
 import me.diksu.ultra.ui.LocalMainPagerState
 import me.diksu.ultra.ui.component.iosIndicatorSpecular
@@ -86,10 +87,17 @@ fun NavigationRailMiuix(
     backdrop: LayerBackdrop? = null,
     modifier: Modifier = Modifier,
 ) {
-    val fullFeatured = Natives.isFullFeatured()
-    if (!fullFeatured) return
-
     val mainState = LocalMainPagerState.current
+    // 内核模块没加载时不再整条导航消失：入口常驻、置灰，点一下说明原因（4.1）。
+    if (!Natives.isFullFeatured()) {
+        DisabledNavigationRail(
+            gate = rememberNavGate(),
+            onGoHome = { mainState.animateToPage(0) },
+            modifier = modifier,
+        )
+        return
+    }
+
 
     val icons = BottomBarDestination.entries.map { it.icon }
 

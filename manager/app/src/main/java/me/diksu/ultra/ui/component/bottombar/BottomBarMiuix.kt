@@ -22,6 +22,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import me.diksu.ultra.Natives
+import me.diksu.ultra.ui.capability.rememberNavGate
 import me.diksu.ultra.R
 import me.diksu.ultra.ui.LocalMainPagerState
 import me.diksu.ultra.ui.component.FloatingBottomBar
@@ -47,10 +48,17 @@ fun BottomBarMiuix(
     navigationBadge: NavigationBadgeState,
     modifier: Modifier,
 ) {
-    val fullFeatured = Natives.isFullFeatured()
-    if (!fullFeatured) return
-
     val mainState = LocalMainPagerState.current
+    // 内核模块没加载时不再整条导航消失：入口常驻、置灰，点一下说明原因（4.1）。
+    if (!Natives.isFullFeatured()) {
+        DisabledNavigationBar(
+            gate = rememberNavGate(),
+            onGoHome = { mainState.animateToPage(0) },
+            modifier = modifier,
+        )
+        return
+    }
+
     val enableFloatingBottomBar = LocalEnableFloatingBottomBar.current
     val enableFloatingBottomBarBlur = LocalEnableFloatingBottomBarBlur.current
 

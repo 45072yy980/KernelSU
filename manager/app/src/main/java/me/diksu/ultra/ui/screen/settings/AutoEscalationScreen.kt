@@ -139,6 +139,8 @@ private fun rememberEscalationState(): Pair<EscalationState, EscalationActions> 
             if (!running) {
                 scope.launch {
                     running = true
+                    // 手动重试意味着用户认为链路应该能通：把开机自动尝试的失败计数清零。
+                    AutoEscalation.resetFailStreak()
                     log = listOf("准备开始…")
                     val outcome = withContext(Dispatchers.IO) {
                         AutoEscalation.run(context) { line ->
@@ -225,7 +227,7 @@ private fun AutoEscalationMiuix(onBack: () -> Unit) {
                             )
                             Spacer(Modifier.height(2.dp))
                             MiuixText(
-                                text = "开机后按下面的顺序自动尝试，拿到 root 后立即停止",
+                                text = "由普通开机自启权限触发，不需要预先有 root；拿到 root 后立即停止",
                                 fontSize = 12.sp,
                                 color = colorScheme.onSurfaceVariantSummary,
                             )
@@ -366,8 +368,9 @@ private fun AutoEscalationMiuix(onBack: () -> Unit) {
                             color = colorScheme.onSurface,
                         )
                         MiuixText(
-                            text = "开机自动提权会延长开机时间，并且失败时可能留下内核痕迹；" +
-                                "越狱模式本来就要求每次重启后重新提权，所以默认关闭。",
+                            text = "越狱模式每次完整重启后都没有 root，所以自动提权只能在开机时从应用进程发起：" +
+                                "不预先假设有 root，也不写系统分区。开机提权会延长开机时间，失败还可能留下痕迹，" +
+                                "因此默认关闭；连续失败 3 次会自动暂停，直到你手动重试。",
                             fontSize = 11.sp,
                             color = colorScheme.onSurfaceVariantSummary,
                             modifier = Modifier.padding(top = 4.dp),
@@ -416,7 +419,7 @@ private fun AutoEscalationMaterial(onBack: () -> Unit) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text("开机自动提权", style = MaterialTheme.typography.titleSmall)
                             Text(
-                                text = "开机后按下面的顺序自动尝试，拿到 root 后立即停止",
+                                text = "由普通开机自启权限触发，不需要预先有 root；拿到 root 后立即停止",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = scheme.onSurfaceVariant,
                             )
@@ -549,8 +552,9 @@ private fun AutoEscalationMaterial(onBack: () -> Unit) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text("说明", style = MaterialTheme.typography.titleSmall)
                         Text(
-                            text = "开机自动提权会延长开机时间，并且失败时可能留下内核痕迹；" +
-                                "越狱模式本来就要求每次重启后重新提权，所以默认关闭。",
+                            text = "越狱模式每次完整重启后都没有 root，所以自动提权只能在开机时从应用进程发起：" +
+                                "不预先假设有 root，也不写系统分区。开机提权会延长开机时间，失败还可能留下痕迹，" +
+                                "因此默认关闭；连续失败 3 次会自动暂停，直到你手动重试。",
                             style = MaterialTheme.typography.bodySmall,
                             color = scheme.onSurfaceVariant,
                             modifier = Modifier.padding(top = 4.dp),

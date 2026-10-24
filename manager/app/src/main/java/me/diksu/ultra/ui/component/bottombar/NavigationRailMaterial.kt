@@ -38,6 +38,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import me.diksu.ultra.Natives
+import me.diksu.ultra.ui.capability.rememberNavGate
 import me.diksu.ultra.R
 import me.diksu.ultra.data.repository.SettingsRepositoryImpl
 import me.diksu.ultra.ui.LocalMainPagerState
@@ -47,10 +48,17 @@ fun NavigationRailMaterial(
     navigationBadge: NavigationBadgeState,
     modifier: Modifier = Modifier,
 ) {
-    val fullFeatured = Natives.isFullFeatured()
-    if (!fullFeatured) return
-
     val mainPagerState = LocalMainPagerState.current
+    // 内核模块没加载时不再整条导航消失：入口常驻、置灰，点一下说明原因（4.1）。
+    if (!Natives.isFullFeatured()) {
+        DisabledNavigationRail(
+            gate = rememberNavGate(),
+            onGoHome = { mainPagerState.animateToPage(0) },
+            modifier = modifier,
+        )
+        return
+    }
+
 
     val items = listOf(
         Triple(R.string.home, Icons.Filled.Home, Icons.Outlined.Home),
