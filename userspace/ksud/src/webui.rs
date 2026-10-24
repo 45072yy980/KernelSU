@@ -784,6 +784,23 @@ fn serve_module_asset_by_referer(
 }
 
 #[cfg(target_os = "android")]
+/// 重载模块：按开机那三个阶段的顺序各跑一次 ksud 子命令。
+///
+/// 管理器的"重载模块"就是这么做的（`ksud post-fs-data` / `services` /
+/// `boot-completed`），网页端复用同一条路径，行为才和 App 一致。
+#[cfg(target_os = "android")]
+fn reload_modules_via_cli() -> Result<u32> {
+    let exe = std::env::current_exe()?;
+    let mut done = 0u32;
+    for stage in ["post-fs-data", "services", "boot-completed"] {
+        let status = std::process::Command::new(&exe).arg(stage).status()?;
+        if status.success() {
+            done += 1;
+        }
+    }
+    Ok(done)
+}
+
 fn get_features() -> Result<Vec<FeatureState>> {
     let features = [
         (
@@ -792,7 +809,24 @@ fn get_features() -> Result<Vec<FeatureState>> {
             "允许通过 /system/bin/su 获取 Root 权限",
         ),
         (1, "卸载模块（内核级）", "在内核给需要的应用卸载模块"),
+        (2, "记录 Root 操作日志", "把 su 授权、模块挂载等事件写入 sulog 文件"),
+        (3, "ADB Root", "允许 adbd 以 root 身份运行"),
         (4, "隐藏 SELinux 修改", "阻止应用检测 SELinux 修改"),
+        (
+            6,
+            "Shell su 仅限 ADB",
+            "只有 adbd 或 KernelSU root 进程派生的 shell 才能拿到 root，防止普通应用先拿到 shell 再提权",
+        ),
+        (
+            7,
+            "系统分区守卫",
+            "拦截对 system / vendor / product 等分区的写入，避免误改系统分区导致无法开机",
+        ),
+        (
+            8,
+            "运行时分区守卫",
+            "在分区守卫之外继续拦截运行期的块设备写入（需要内核支持）",
+        ),
         (
             999,
             "默认卸载模块",
@@ -2331,6 +2365,23 @@ fn handle_request(stream: &mut TcpStream, req: &HttpRequest, peer: Option<u32>) 
                         json_response(stream, &ApiResponse::ok("Updated"))
                     }
                     Err(e) => error_response(stream, 500, &e.to_string()),
+                }
+            }
+            #[cfg(not(target_os = "android"))]
+            {
+                error_response(stream, 500, "Not supported on this platform")
+            }
+        }
+
+        ("POST", "/api/tools/reload-modules") => {
+            #[cfg(target_os = "android")]
+            {
+                match reload_modules_via_cli() {
+                    Ok(done) => json_response(
+                        stream,
+                        &ApiResponse::ok(format!("已完成 {done}/3 个阶段")),
+                    ),
+                    Err(e) => error_response(stream, 500, &format!("重载失败：{e:#}")),
                 }
             }
             #[cfg(not(target_os = "android"))]

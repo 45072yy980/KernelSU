@@ -584,6 +584,33 @@ body.modal-open { overflow: hidden; }
           <div class="pref-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></div>
         </div>
       </div>
+      <div class="section-title">内核特性</div>
+      <div class="card" id="featureCard">
+        <div class="loading">加载中...</div>
+      </div>
+      <div class="section-title">工具</div>
+      <div class="card">
+        <div class="pref-item" onclick="reloadModules()">
+          <div class="pref-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          </div>
+          <div class="pref-content">
+            <div class="pref-title">重载模块</div>
+            <div class="pref-subtitle">按开机三个阶段重跑一遍，改完模块脚本不用重启</div>
+          </div>
+          <div class="pref-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></div>
+        </div>
+        <div class="pref-item" onclick="softReboot()">
+          <div class="pref-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>
+          </div>
+          <div class="pref-content">
+            <div class="pref-title">软重启</div>
+            <div class="pref-subtitle">重启系统界面与 zygote，保留当前 root 会话</div>
+          </div>
+          <div class="pref-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></div>
+        </div>
+      </div>
       <div class="section-title">WebUI</div>
       <div class="card">
         <div class="pref-item" onclick="showToast('服务正在运行；关闭浏览器后约 20 秒自动退出')">
@@ -2283,6 +2310,86 @@ function setFrameFullscreen(enable) {
 function loadSettings() {
   const status = document.getElementById('webuiStatus');
   if (status) status.textContent = '运行中';
+  loadFeatures();
+}
+
+function escapeHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+/** 内核特性开关：状态来自内核（/api/features），写入也走同一条 supercall。 */
+async function loadFeatures() {
+  const card = document.getElementById('featureCard');
+  if (!card) return;
+  try {
+    const features = await api('/api/features');
+    if (!features || !features.length) {
+      card.innerHTML = '<div class="pref-item"><div class="pref-content">' +
+        '<div class="pref-title">没有可调的特性</div>' +
+        '<div class="pref-subtitle">内核没有返回任何特性，通常是模块未加载</div>' +
+        '</div></div>';
+      return;
+    }
+    card.innerHTML = features.map(f => {
+      const on = !!f.value;
+      const supported = !!f.enabled;
+      const style = supported ? '' : 'opacity:.45;';
+      const subtitle = supported ? f.description : (f.description + '（当前内核不支持）');
+      return '<div class="pref-item" style="' + style + '" onclick="toggleFeature(' + f.id + ',' + (on ? 0 : 1) + ',' + supported + ')">' +
+        '<div class="pref-content">' +
+        '<div class="pref-title">' + escapeHtml(f.name) + '</div>' +
+        '<div class="pref-subtitle">' + escapeHtml(subtitle) + '</div>' +
+        '</div>' +
+        '<div class="switch ' + (on ? 'active' : '') + '"><div class="switch-knob"></div></div>' +
+        '</div>';
+    }).join('');
+  } catch (e) {
+    card.innerHTML = '<div class="pref-item"><div class="pref-content">' +
+      '<div class="pref-title">加载失败</div>' +
+      '<div class="pref-subtitle">' + escapeHtml(e.message) + '</div>' +
+      '</div></div>';
+  }
+}
+
+async function toggleFeature(id, value, supported) {
+  if (!supported) { showToast('当前内核不支持这个特性'); return; }
+  try {
+    await api('/api/features', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: id, value: value }),
+    });
+    showToast(value ? '已开启' : '已关闭');
+    await loadFeatures();
+  } catch (e) {
+    showToast('设置失败：' + e.message);
+  }
+}
+
+async function reloadModules() {
+  showToast('正在重载模块…');
+  try {
+    const msg = await api('/api/tools/reload-modules', { method: 'POST' });
+    showToast('重载完成：' + msg);
+  } catch (e) {
+    showToast('重载失败：' + e.message);
+  }
+}
+
+async function softReboot() {
+  if (!confirm('软重启会重启系统界面与 zygote，当前 root 会话保留。继续？')) return;
+  try {
+    await api('/api/reboot', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: 'soft_reboot' }),
+    });
+    showToast('正在软重启…');
+  } catch (e) {
+    showToast('软重启失败：' + e.message);
+  }
 }
 
 
