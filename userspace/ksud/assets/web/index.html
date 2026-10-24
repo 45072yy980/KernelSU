@@ -484,6 +484,7 @@ body.modal-open { overflow: hidden; }
     .fm-field { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 13px; }
     .fm-field label { flex: 0 0 68px; color: var(--text-secondary); font-size: 12px; }
     .fm-field input[type=text] { flex: 1 1 auto; min-width: 0; padding: 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-tertiary); color: var(--text-primary); font-size: 13px; }
+    .fm-field input[type=number], .fm-field select { flex: 1 1 auto; min-width: 0; padding: 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-tertiary); color: var(--text-primary); font-size: 13px; font-family: inherit; }
     .fm-presets { display: flex; gap: 6px; margin: 0 0 10px 76px; flex-wrap: wrap; }
     .fm-props { font-size: 12px; color: var(--text-secondary); line-height: 1.7; word-break: break-all; }
     @media (max-width: 480px) {
@@ -586,6 +587,10 @@ body.modal-open { overflow: hidden; }
       </div>
       <div class="section-title">内核特性</div>
       <div class="card" id="featureCard">
+        <div class="loading">加载中...</div>
+      </div>
+      <div class="section-title">SuSFS</div>
+      <div class="card" id="susfsCard">
         <div class="loading">加载中...</div>
       </div>
       <div class="section-title">工具</div>
@@ -2311,6 +2316,7 @@ function loadSettings() {
   const status = document.getElementById('webuiStatus');
   if (status) status.textContent = '运行中';
   loadFeatures();
+  loadSusfs();
 }
 
 function escapeHtml(s) {
@@ -2392,6 +2398,223 @@ async function softReboot() {
   }
 }
 
+// ── SuSFS ────────────────────────────────────────────────────────────────────
+// 只显示内核真值：状态/版本/变体/特性都来自 /api/susfs/status 的 supercall 结果。
+// 内核没有「查询开关当前值」和「枚举规则」的命令，所以开关初始一律显示「未知」，
+// 点了只显示「已下发」，绝不画成「已开启」；删除也只如实显示内核的答复。
+
+const SUSFS_TOGGLES = [
+  { key: 'log', title: '内核日志', sub: 'enable_log：把 SuSFS 的隐藏动作写进内核日志' },
+  { key: 'avc', title: 'AVC 日志伪造', sub: 'enable_avc_log_spoofing：改写 AVC 审计里的路径' },
+  { key: 'hide_mnts', title: '对非 su 进程隐藏挂载点', sub: 'hide_sus_mnts_for_non_su_procs：普通进程看不到 SuSFS 的挂载' },
+];
+
+const SUSFS_KINDS = [
+  { id: 'path', label: '隐藏路径（add-sus-path）' },
+  { id: 'path_loop', label: '隐藏路径·跟随挂载（add-sus-path-loop）' },
+  { id: 'map', label: 'sus map（add-sus-map）' },
+  { id: 'kstat', label: 'kstat（add-sus-kstat）' },
+  { id: 'redirect', label: 'open redirect（add-open-redirect）' },
+];
+
+const SUSFS = { status: null, sent: {}, featuresOpen: false };
+
+async function loadSusfs() {
+  const card = document.getElementById('susfsCard');
+  if (!card) return;
+  card.innerHTML = '<div class="loading">加载中...</div>';
+  try {
+    SUSFS.status = await api('/api/susfs/status');
+  } catch (e) {
+    card.innerHTML = '<div class="pref-item" style="cursor:default;">' +
+      '<div class="pref-content"><div class="pref-title">读取失败</div>' +
+      '<div class="pref-subtitle">' + escapeHtml(e.message) + '</div></div></div>';
+    return;
+  }
+  renderSusfs();
+}
+
+function renderSusfs() {
+  const card = document.getElementById('susfsCard');
+  if (!card) return;
+  const st = SUSFS.status || {};
+  const loaded = !!st.loaded;
+  const features = Array.isArray(st.features) ? st.features : [];
+  const dim = loaded ? '' : 'opacity:.45;';
+
+  const statusRow = `
+    <div class="pref-item" style="cursor:default;">
+      <div class="pref-icon">${uiIcon('shield')}</div>
+      <div class="pref-content">
+        <div class="pref-title">${loaded ? 'SuSFS 已加载' : 'SuSFS 未加载'}</div>
+        <div class="pref-subtitle">${loaded
+          ? `${escapeHtml(st.version || '')} · ${escapeHtml(st.variant || '未知变体')} · ${features.length} 个特性`
+          : '内核没有应答 SuSFS supercall（模块没加载，或当前内核没编译 SuSFS）'}</div>
+      </div>
+    </div>`;
+
+  const featureRow = loaded && features.length ? `
+    <div class="pref-item" onclick="susfsToggleFeatures()">
+      <div class="pref-content">
+        <div class="pref-title">特性清单（${features.length}）</div>
+        <div class="pref-subtitle" id="susfsFeaturesHint">${SUSFS.featuresOpen ? '点击收起' : '点击展开，内容来自内核 supercall'}</div>
+      </div>
+      <div class="pref-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></div>
+    </div>
+    <div id="susfsFeatures" style="display:${SUSFS.featuresOpen ? 'block' : 'none'};padding:0 16px 14px;">
+      <div class="fm-props">${features.map(f => '· ' + escapeHtml(f)).join('<br>')}</div>
+    </div>` : '';
+
+  const toggleRows = SUSFS_TOGGLES.map(t => {
+    const sent = SUSFS.sent[t.key];
+    const state = sent === undefined
+      ? '<span style="color:var(--text-tertiary);">当前值未知（内核不提供查询）</span>'
+      : `<span style="color:var(--accent);">已下发：${sent ? '开' : '关'}（内核不回报结果）</span>`;
+    const buttons = loaded ? `
+      <div class="fm-btns" style="flex-wrap:nowrap;">
+        <button class="fm-btn" style="min-height:32px;padding:0 12px;font-size:13px;" onclick="susfsToggle('${t.key}', true)">开</button>
+        <button class="fm-btn" style="min-height:32px;padding:0 12px;font-size:13px;" onclick="susfsToggle('${t.key}', false)">关</button>
+      </div>` : '';
+    return `
+      <div class="pref-item" style="cursor:default;${dim}">
+        <div class="pref-content">
+          <div class="pref-title">${t.title}</div>
+          <div class="pref-subtitle">${t.sub}<br><span id="susfsState-${t.key}">${state}</span></div>
+        </div>
+        ${buttons}
+      </div>`;
+  }).join('');
+
+  const notLoaded = loaded ? '' : `
+    <div class="pref-item" style="cursor:default;opacity:.45;">
+      <div class="pref-content">
+        <div class="pref-title">面板不可用</div>
+        <div class="pref-subtitle">SuSFS 没加载时，开关和规则都没有地方写。先在首页完成提权/安装（或刷入带 SuSFS 的内核），再回来重新检测。</div>
+      </div>
+    </div>
+    <div class="fm-btns" style="padding:0 16px 14px;">
+      <button class="fm-btn primary" onclick="switchPage('home')">去首页提权/安装</button>
+      <button class="fm-btn" onclick="loadSusfs()">重新检测</button>
+    </div>`;
+
+  const kindOptions = SUSFS_KINDS.map(k => `<option value="${k.id}">${k.label}</option>`).join('');
+  const addForm = `
+    <div style="padding:12px 16px 4px;border-top:0.5px solid var(--border);${dim}${loaded ? '' : 'pointer-events:none;'}">
+      <div class="pref-title" style="margin-bottom:10px;">添加规则</div>
+      <div class="fm-field"><label>类型</label><select id="susfsKind" onchange="susfsKindChange()">${kindOptions}</select></div>
+      <div class="fm-field"><label>路径</label><input type="text" id="susfsPath" placeholder="/data/local/tmp/foo" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
+      <div class="fm-field" id="susfsRedirectRow" style="display:none;"><label>目标路径</label><input type="text" id="susfsRedirected" placeholder="/data/local/tmp/bar" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
+      <div class="fm-field" id="susfsUidRow" style="display:none;"><label>uid scheme</label><input type="number" id="susfsUidScheme" value="0" min="0" step="1"></div>
+      <div class="fm-btns"><button class="fm-btn primary" onclick="susfsAdd()">添加并下发</button></div>
+      <div class="fm-props" style="margin-top:8px;">只对本次开机有效：网页端不保存规则，重启后要它继续生效，请把同样的规则加进 App 面板的清单。</div>
+    </div>`;
+
+  const removeRow = `
+    <div class="pref-item" style="cursor:default;${dim}"${loaded ? ' onclick="susfsRemove()"' : ''}>
+      <div class="pref-content">
+        <div class="pref-title">删除规则</div>
+        <div class="pref-subtitle">内核没有删除命令：已添加的规则无法在运行时撤销，点这里看内核的答复。</div>
+      </div>
+    </div>`;
+
+  const footer = `<div class="fm-props" style="padding:0 16px 14px;">${escapeHtml(st.note || '')}</div>`;
+
+  card.innerHTML = statusRow + featureRow + toggleRows + notLoaded + addForm + removeRow + footer;
+}
+
+function susfsToggleFeatures() {
+  SUSFS.featuresOpen = !SUSFS.featuresOpen;
+  const box = document.getElementById('susfsFeatures');
+  const hint = document.getElementById('susfsFeaturesHint');
+  if (box) box.style.display = SUSFS.featuresOpen ? 'block' : 'none';
+  if (hint) hint.textContent = SUSFS.featuresOpen ? '点击收起' : '点击展开，内容来自内核 supercall';
+}
+
+function susfsKindChange() {
+  const kindEl = document.getElementById('susfsKind');
+  const isRedirect = !!kindEl && kindEl.value === 'redirect';
+  const redirectRow = document.getElementById('susfsRedirectRow');
+  const uidRow = document.getElementById('susfsUidRow');
+  if (redirectRow) redirectRow.style.display = isRedirect ? 'flex' : 'none';
+  if (uidRow) uidRow.style.display = isRedirect ? 'flex' : 'none';
+}
+
+async function susfsToggle(key, value) {
+  if (!SUSFS.status || !SUSFS.status.loaded) {
+    showToast('SuSFS 未加载，先在首页完成提权/安装');
+    return;
+  }
+  try {
+    await api('/api/susfs/toggle', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: key, value: !!value }),
+    });
+    SUSFS.sent[key] = !!value;
+    const el = document.getElementById('susfsState-' + key);
+    if (el) {
+      el.innerHTML = `<span style="color:var(--accent);">已下发：${value ? '开' : '关'}（内核不回报结果）</span>`;
+    }
+    showToast('已下发：' + key + ' = ' + (value ? '开' : '关'));
+  } catch (e) {
+    showToast('下发失败：' + e.message);
+  }
+}
+
+async function susfsAdd() {
+  if (!SUSFS.status || !SUSFS.status.loaded) {
+    showToast('SuSFS 未加载，先在首页完成提权/安装');
+    return;
+  }
+  const kindEl = document.getElementById('susfsKind');
+  const pathEl = document.getElementById('susfsPath');
+  const redirectEl = document.getElementById('susfsRedirected');
+  const uidEl = document.getElementById('susfsUidScheme');
+  const kind = kindEl ? kindEl.value : 'path';
+  const path = pathEl ? pathEl.value.trim() : '';
+  if (!path.startsWith('/')) {
+    showToast('路径必须是以 / 开头的绝对路径');
+    return;
+  }
+  const body = { kind: kind, path: path };
+  if (kind === 'redirect') {
+    const redirected = redirectEl ? redirectEl.value.trim() : '';
+    if (!redirected.startsWith('/')) {
+      showToast('目标路径必须是以 / 开头的绝对路径');
+      return;
+    }
+    body.redirected = redirected;
+    body.uid_scheme = parseInt(uidEl && uidEl.value ? uidEl.value : '0', 10) || 0;
+  }
+  try {
+    const res = await api('/api/susfs/add', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    showToast('已下发：' + (res.kind || kind) + ' ' + (res.path || path));
+    if (pathEl) pathEl.value = '';
+    if (redirectEl) redirectEl.value = '';
+  } catch (e) {
+    showToast('添加失败：' + e.message);
+  }
+}
+
+async function susfsRemove() {
+  try {
+    const res = await api('/api/susfs/remove', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    fmDialog('删除规则',
+      '<div class="fm-props">' + escapeHtml(res.note || '内核没有删除命令：已添加的规则无法在运行时撤销。') + '</div>' +
+      '<div class="fm-btns" style="margin-top:14px;justify-content:flex-end;">' +
+      '<button class="fm-btn" onclick="fmDialogClose()">知道了</button></div>');
+  } catch (e) {
+    showToast('请求失败：' + e.message);
+  }
+}
 
 const FM_JSON = { 'Content-Type': 'application/json' };
 

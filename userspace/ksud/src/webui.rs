@@ -2393,6 +2393,162 @@ fn handle_request(stream: &mut TcpStream, req: &HttpRequest, peer: Option<u32>) 
             }
         }
 
+        // SuSFS 只读状态：加载与否、版本、变体、特性清单，全部来自 supercall 真值。
+        // 内核没有 LIST 命令，规则清单不在这里伪造（后续步骤单独处理）。
+        ("GET", "/api/susfs/status") => {
+            #[cfg(target_os = "android")]
+            {
+                let loaded = crate::susfs::get_susfs_status();
+                let version = crate::susfs::get_susfs_version();
+                let variant = crate::susfs::get_susfs_variant();
+                let features: Vec<String> = crate::susfs::get_susfs_features()
+                    .split(',')
+                    .map(str::trim)
+                    .filter(|feature| !feature.is_empty())
+                    .map(ToString::to_string)
+                    .collect();
+                json_response(
+                    stream,
+                    &ApiResponse::ok(serde_json::json!({
+                        "loaded": loaded,
+                        "version": version,
+                        "variant": variant,
+                        "features": features,
+                        "togglesReadable": false,
+                        "rulesSupported": false,
+                        "note": "内核不提供开关状态查询与规则枚举；本页只显示真实的内核信息，写入类操作会真实生效。",
+                    })),
+                )
+            }
+            #[cfg(not(target_os = "android"))]
+            {
+                error_response(stream, 500, "Not supported on this platform")
+            }
+        }
+
+        // SuSFS 开关：直接下发内核 supercall。内核没有查询当前值的命令，
+        // 所以这里只回「已下发」，不回「现在的状态」。
+        ("POST", "/api/susfs/toggle") => {
+            #[cfg(target_os = "android")]
+            {
+                let body: serde_json::Value =
+                    serde_json::from_slice(&req.body).unwrap_or(serde_json::Value::Null);
+                let key = body
+                    .get("key")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .trim()
+                    .to_ascii_lowercase();
+                let value = body.get("value").and_then(|v| v.as_bool()).unwrap_or(false);
+                if !crate::susfs::get_susfs_status() {
+                    return error_response(stream, 400, "SuSFS 未加载，先在首页完成提权/安装");
+                }
+                let result = match key.as_str() {
+                    "log" => crate::susfs::enable_log(value),
+                    "avc" => crate::susfs::enable_avc_log_spoofing(value),
+                    "hide_mnts" => crate::susfs::hide_sus_mnts_for_non_su_procs(value),
+                    _ => return error_response(stream, 400, "未知的开关名"),
+                };
+                match result {
+                    Ok(()) => json_response(
+                        stream,
+                        &ApiResponse::ok(serde_json::json!({
+                            "key": key,
+                            "applied": true,
+                        })),
+                    ),
+                    Err(e) => error_response(stream, 500, &format!("{e:#}")),
+                }
+            }
+            #[cfg(not(target_os = "android"))]
+            {
+                error_response(stream, 500, "Not supported on this platform")
+            }
+        }
+
+        // SuSFS 规则：五类 ADD 命令。路径校验是硬要求（防注入）。
+        ("POST", "/api/susfs/add") => {
+            #[cfg(target_os = "android")]
+            {
+                let body: serde_json::Value =
+                    serde_json::from_slice(&req.body).unwrap_or(serde_json::Value::Null);
+                let kind = body
+                    .get("kind")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .trim()
+                    .to_ascii_lowercase();
+                let path = body
+                    .get("path")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .trim()
+                    .to_string();
+                let redirected = body
+                    .get("redirected")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .trim()
+                    .to_string();
+                let uid_scheme = body
+                    .get("uid_scheme")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0) as u32;
+                if !path.starts_with('/') || path.contains('\0') {
+                    return error_response(stream, 400, "路径必须是以 / 开头的绝对路径");
+                }
+                let redirect_bad = !redirected.starts_with('/') || redirected.contains('\0');
+                if kind == "redirect" && redirect_bad {
+                    return error_response(stream, 400, "重定向目标必须是以 / 开头的绝对路径");
+                }
+                if !crate::susfs::get_susfs_status() {
+                    return error_response(stream, 400, "SuSFS 未加载，先在首页完成提权/安装");
+                }
+                let result = match kind.as_str() {
+                    "path" => crate::susfs::add_sus_path(&path),
+                    "path_loop" => crate::susfs::add_sus_path_loop(&path),
+                    "map" => crate::susfs::add_sus_map(&path),
+                    "kstat" => crate::susfs::add_sus_kstat(&path),
+                    "redirect" => crate::susfs::add_open_redirect(&path, &redirected, uid_scheme),
+                    _ => return error_response(stream, 400, "未知的规则类型"),
+                };
+                match result {
+                    Ok(()) => json_response(
+                        stream,
+                        &ApiResponse::ok(serde_json::json!({
+                            "kind": kind,
+                            "path": path,
+                            "applied": true,
+                        })),
+                    ),
+                    Err(e) => error_response(stream, 500, &format!("{e:#}")),
+                }
+            }
+            #[cfg(not(target_os = "android"))]
+            {
+                error_response(stream, 500, "Not supported on this platform")
+            }
+        }
+
+        // 内核没有 remove 命令：这里如实回答「删不掉」，不做假动作。
+        ("POST", "/api/susfs/remove") => {
+            #[cfg(target_os = "android")]
+            {
+                json_response(
+                    stream,
+                    &ApiResponse::ok(serde_json::json!({
+                        "removed": false,
+                        "kernelSupportsRemove": false,
+                        "note": "内核没有删除命令：已添加的规则无法在运行时撤销，只能等重启（App 里删掉后下次开机不再重放）。",
+                    })),
+                )
+            }
+            #[cfg(not(target_os = "android"))]
+            {
+                error_response(stream, 500, "Not supported on this platform")
+            }
+        }
+
         ("POST", "/api/reboot") => {
             #[cfg(target_os = "android")]
             {
