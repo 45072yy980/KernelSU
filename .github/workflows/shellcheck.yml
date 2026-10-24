@@ -26,4 +26,6 @@ jobs:
         uses: ludeeus/action-shellcheck@2.0.0
         with:
           ignore_names: gradlew
-          ignore_paths: ./userspace/ksud/src/installer.sh ./.github/scripts/setup-rust-build.sh
+          # hma-oss-config.sh 是推到设备上执行的资产脚本，不是仓库构建脚本；
+          # 它带着上游的几处风格问题（SC2012/SC2059/SC2126），扫描它只会一直红。
+          ignore_paths: ./userspace/ksud/src/installer.sh ./.github/scripts/setup-rust-build.sh ./manager/app/src/main/assets/hma-oss-config.sh
