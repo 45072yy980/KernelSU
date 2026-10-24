@@ -658,4 +658,15 @@
     <string name="script_param_below_min">Must be at least %d</string>
     <string name="script_param_above_max">Must be at most %d</string>
     <string name="script_param_invalid">Invalid value</string>
+    <!-- 导航入口不可用时的说明：4.2 起每个入口独立判定，文案由 NavGate 提供。 -->
+    <string name="nav_gate_safe_mode_title">Safe mode</string>
+    <string name="nav_gate_safe_mode_reason">The device booted in safe mode, so kernel modules and module management are unavailable. Reboot once to restore them.</string>
+    <string name="nav_gate_safe_mode_action">Go to Home</string>
+    <string name="nav_gate_late_load_title">Not escalated yet</string>
+    <string name="nav_gate_late_load_reason">In jailbreak mode there is no root after every full reboot. Complete the escalation on the Home page first; Superuser and Modules come back afterwards.</string>
+    <string name="nav_gate_late_load_action">Escalate on Home</string>
+    <string name="nav_gate_not_loaded_title">Kernel module not loaded</string>
+    <string name="nav_gate_not_loaded_reason">The manager has not been claimed by the kernel yet, so Superuser and Modules are unavailable. Finish installation or escalation on the Home page.</string>
+    <string name="nav_gate_not_loaded_action">Fix on Home</string>
+    <string name="nav_gate_dismiss">Got it</string>
 </resources>

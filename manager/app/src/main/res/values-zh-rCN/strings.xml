@@ -621,4 +621,15 @@
     <string name="script_param_below_min">不能小于 %d</string>
     <string name="script_param_above_max">不能大于 %d</string>
     <string name="script_param_invalid">无效的值</string>
+    <!-- 导航入口不可用时的说明：4.2 起每个入口独立判定，文案由 NavGate 提供。 -->
+    <string name="nav_gate_safe_mode_title">安全模式</string>
+    <string name="nav_gate_safe_mode_reason">设备以安全模式启动，内核模块与模块管理暂不可用。重启一次即可恢复正常。</string>
+    <string name="nav_gate_safe_mode_action">前往首页</string>
+    <string name="nav_gate_late_load_title">尚未提权</string>
+    <string name="nav_gate_late_load_reason">越狱模式每次完整重启后都没有 root，需要先在首页完成一次提权，超级用户与模块管理才会恢复。</string>
+    <string name="nav_gate_late_load_action">前往首页提权</string>
+    <string name="nav_gate_not_loaded_title">内核模块未加载</string>
+    <string name="nav_gate_not_loaded_reason">管理器还没有被内核认领，超级用户与模块管理暂不可用。请到首页完成安装或提权。</string>
+    <string name="nav_gate_not_loaded_action">前往首页处理</string>
+    <string name="nav_gate_dismiss">知道了</string>
 </resources>

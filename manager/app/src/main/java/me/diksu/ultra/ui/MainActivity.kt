@@ -461,13 +461,13 @@ fun MainScreen(
     val interceptPagerGestures = pagerMode == PagerInterceptionMode.CrossAxisInterceptor
     // The "disable pager swipe" switch: read it here and fold it into the pager's
     // scroll flag, otherwise the setting is stored and provided but never acted on.
+    // 4.2：内核是否 full-featured 不再连带关闭翻页——不可用入口在导航层拦截，而不是禁用整个 Pager。
     val disablePagerSwipe = LocalDisablePagerSwipe.current
-    var userScrollEnabled by remember(isFullFeatured, disablePagerSwipe) {
-        mutableStateOf(isFullFeatured && !disablePagerSwipe)
-    }
+    val userScrollEnabled = !disablePagerSwipe
 
     val enableNavigationBadge = LocalEnableNavigationBadge.current
-    val badgeEnabled = enableNavigationBadge && isFullFeatured
+    // 徽标同样只跟用户设置走：内核没加载时计数本来就是 0，没必要把整个徽标关掉。
+    val badgeEnabled = enableNavigationBadge
     val moduleViewModel = viewModel<ModuleViewModel>()
     val moduleUiState by moduleViewModel.uiState.collectAsStateWithLifecycle()
 

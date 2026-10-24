@@ -23,27 +23,29 @@ import androidx.compose.material3.ShortNavigationBar
 import androidx.compose.material3.ShortNavigationBarItem
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
-import me.diksu.ultra.Natives
-import me.diksu.ultra.ui.capability.rememberNavGate
 import me.diksu.ultra.R
+import me.diksu.ultra.ui.capability.NavEntry
+import me.diksu.ultra.ui.capability.NavGate
+import me.diksu.ultra.ui.capability.rememberNavGates
 import me.diksu.ultra.ui.LocalMainPagerState
 
 @Composable
 fun BottomBarMaterial(navigationBadge: NavigationBadgeState) {
     val mainPagerState = LocalMainPagerState.current
-    // 内核模块没加载时不再整条导航消失：入口常驻、置灰，点一下说明原因（4.1）。
-    if (!Natives.isFullFeatured()) {
-        DisabledNavigationBar(
-            gate = rememberNavGate(),
-            onGoHome = { mainPagerState.animateToPage(0) },
-        )
-        return
-    }
+    // 4.2：逐入口判定。不可用的条目只置灰自己，其余条目照常点击；整条导航不再降级。
+    val gates = rememberNavGates()
+    var pendingGate by remember { mutableStateOf<NavGate?>(null) }
 
-
+    // 顺序与 NavEntry / Pager 页序一致：Home、SuperUser、Module、Setting。
     val items = listOf(
         Triple(R.string.home, Icons.Filled.Home, Icons.Outlined.Home),
         Triple(R.string.superuser, Icons.Filled.Shield, Icons.Outlined.Shield),
@@ -59,10 +61,14 @@ fun BottomBarMaterial(navigationBadge: NavigationBadgeState) {
     ) {
         items.forEachIndexed { index, (label, selectedIcon, unselectedIcon) ->
             val selected = mainPagerState.selectedPage == index
+            val gate = gates[NavEntry.entries[index]] ?: NavGate.Open
+            val itemAlpha = if (gate.available) 1f else NavGateDisabledAlpha
             ShortNavigationBarItem(
                 selected = selected,
                 onClick = {
-                    if (!selected) {
+                    if (!gate.available) {
+                        pendingGate = gate
+                    } else if (!selected) {
                         mainPagerState.animateToPage(index)
                     }
                 },
@@ -71,18 +77,29 @@ fun BottomBarMaterial(navigationBadge: NavigationBadgeState) {
                         icon = if (selected) selectedIcon else unselectedIcon,
                         contentDescription = stringResource(label),
                         badge = badgeFor(index, navigationBadge),
+                        modifier = Modifier.alpha(itemAlpha),
                     )
                 },
                 label = {
                     Text(
                         stringResource(label),
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.alpha(itemAlpha),
                     )
                 }
             )
         }
     }
+
+    NavGateDialog(
+        gate = pendingGate,
+        onDismiss = { pendingGate = null },
+        onGoHome = {
+            pendingGate = null
+            mainPagerState.animateToPage(0)
+        },
+    )
 }
 
 @Composable
@@ -90,9 +107,11 @@ internal fun NavigationIconWithBadge(
     icon: ImageVector,
     contentDescription: String?,
     badge: NavBadge?,
+    modifier: Modifier = Modifier,
 ) {
     if (badge != null) {
         BadgedBox(
+            modifier = modifier,
             badge = {
                 when (badge.tone) {
                     BadgeTone.Alert -> Badge {
@@ -111,6 +130,6 @@ internal fun NavigationIconWithBadge(
             Icon(icon, contentDescription)
         }
     } else {
-        Icon(icon, contentDescription)
+        Icon(icon, contentDescription, modifier = modifier)
     }
 }

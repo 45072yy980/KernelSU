@@ -30,6 +30,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import me.diksu.ultra.R
 import me.diksu.ultra.ui.LocalUiMode
 import me.diksu.ultra.ui.capability.NavGate
 import me.diksu.ultra.ui.component.dialog.AppAlertDialog
@@ -37,6 +38,9 @@ import me.diksu.ultra.ui.isMiuixFamily
 import top.yukonga.miuix.kmp.basic.Icon as MiuixIcon
 import top.yukonga.miuix.kmp.basic.Text as MiuixText
 import top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme
+
+/** 不可用入口的置灰度，与 4.1 整条导航置灰时保持一致。 */
+internal const val NavGateDisabledAlpha = 0.35f
 
 /**
  * 不可用状态下的导航：入口仍然画出来，但整体置灰，点一下说明原因。
@@ -178,11 +182,12 @@ private fun GateDialog(
     onGoHome: () -> Unit,
 ) {
     if (!show) return
+    val dismissText = stringResource(R.string.nav_gate_dismiss)
     AppAlertDialog(
         title = gate.title,
         onDismissRequest = onDismiss,
         confirmText = gate.action,
-        dismissText = "知道了",
+        dismissText = dismissText,
         onConfirm = onGoHome,
     ) {
         val miuix = LocalUiMode.current.isMiuixFamily
@@ -201,4 +206,20 @@ private fun GateDialog(
             )
         }
     }
+}
+
+/** 单个入口不可用时的说明弹窗；gate 为 null 表示不显示。 */
+@Composable
+internal fun NavGateDialog(
+    gate: NavGate?,
+    onDismiss: () -> Unit,
+    onGoHome: () -> Unit,
+) {
+    if (gate == null) return
+    GateDialog(
+        gate = gate,
+        show = true,
+        onDismiss = onDismiss,
+        onGoHome = onGoHome,
+    )
 }

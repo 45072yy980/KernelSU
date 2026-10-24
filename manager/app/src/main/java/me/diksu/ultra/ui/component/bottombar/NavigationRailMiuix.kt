@@ -56,8 +56,8 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import me.diksu.ultra.Natives
-import me.diksu.ultra.ui.capability.rememberNavGate
+import me.diksu.ultra.ui.capability.NavGate
+import me.diksu.ultra.ui.capability.rememberNavGates
 import me.diksu.ultra.ui.component.rebootlistpopup.RebootListPopupMiuix
 import me.diksu.ultra.ui.LocalMainPagerState
 import me.diksu.ultra.ui.component.iosIndicatorSpecular
@@ -88,18 +88,12 @@ fun NavigationRailMiuix(
     modifier: Modifier = Modifier,
 ) {
     val mainState = LocalMainPagerState.current
-    // 内核模块没加载时不再整条导航消失：入口常驻、置灰，点一下说明原因（4.1）。
-    if (!Natives.isFullFeatured()) {
-        DisabledNavigationRail(
-            gate = rememberNavGate(),
-            onGoHome = { mainState.animateToPage(0) },
-            modifier = modifier,
-        )
-        return
-    }
+    // 4.2：逐入口判定。不可用的条目只置灰自己，其余条目照常点击；整条导航不再降级。
+    val gates = rememberNavGates()
+    var pendingGate by remember { mutableStateOf<NavGate?>(null) }
+    val destinations = BottomBarDestination.entries
 
-
-    val icons = BottomBarDestination.entries.map { it.icon }
+    val icons = destinations.map { it.icon }
 
     // The destinations belong at the bottom of the column: a rail that starts at the top leaves the
     // lower half of the screen empty and parks the last destination — settings — in the middle of
@@ -157,6 +151,8 @@ fun NavigationRailMiuix(
                         selectedIndex = mainState.selectedPage,
                         onSelect = { mainState.animateToPage(it) },
                         badgeFor = { index -> navigationBadgeFor(index, navigationBadge) },
+                        gateFor = { index -> gates[destinations[index].navEntry] ?: NavGate.Open },
+                        onGate = { gate -> pendingGate = gate },
                         backdrop = backdrop,
                         onItemsHeight = { itemsHeight = it },
                     )
@@ -180,6 +176,15 @@ fun NavigationRailMiuix(
             SceneClock(modifier = Modifier.align(BiasAlignment(0f, -0.35f)))
         }
     }
+
+    NavGateDialog(
+        gate = pendingGate,
+        onDismiss = { pendingGate = null },
+        onGoHome = {
+            pendingGate = null
+            mainState.animateToPage(0)
+        },
+    )
 }
 
 /**
@@ -196,11 +201,17 @@ private fun RailItems(
     selectedIndex: Int,
     onSelect: (Int) -> Unit,
     badgeFor: (Int) -> (@Composable () -> Unit)?,
+    gateFor: (Int) -> NavGate,
+    onGate: (NavGate) -> Unit,
     backdrop: LayerBackdrop?,
     onItemsHeight: (Dp) -> Unit,
 ) {
     val count = icons.size
     val currentSelectedIndex by rememberUpdatedState(selectedIndex)
+    // 手势块以 count 为 key，闭包会一直活到下一次数量变化；用 rememberUpdatedState 保证
+    // 提权状态变化后，拖动判定拿到的是最新的 gate，而不是首次组合时的旧 map。
+    val currentGateFor by rememberUpdatedState(gateFor)
+    val currentOnGate by rememberUpdatedState(onGate)
     val animationScope = rememberCoroutineScope()
     val dampedDrag = remember(animationScope, count) {
         DampedDragAnimation(
@@ -278,9 +289,17 @@ private fun RailItems(
                     },
                     onDragEnd = {
                         val target = dragTargetIndex.coerceIn(0, count - 1)
-                        dampedDrag.updateValue(target.toFloat())
-                        dampedDrag.release()
-                        onSelect(target)
+                        val gate = currentGateFor(target)
+                        if (gate.available) {
+                            dampedDrag.updateValue(target.toFloat())
+                            dampedDrag.release()
+                            onSelect(target)
+                        } else {
+                            // 拖到不可用入口：药丸退回当前页，并给出原因，不切换页面。
+                            dampedDrag.updateValue(currentSelectedIndex.toFloat())
+                            dampedDrag.release()
+                            currentOnGate(gate)
+                        }
                     },
                     onDragCancel = {
                         dampedDrag.updateValue(currentSelectedIndex.toFloat())
@@ -302,11 +321,13 @@ private fun RailItems(
         )
         Column(modifier = Modifier.fillMaxWidth()) {
             icons.forEachIndexed { index, icon ->
+                val gate = gateFor(index)
                 RailItem(
                     selected = index == selectedIndex,
-                    onClick = { onSelect(index) },
+                    onClick = { if (gate.available) onSelect(index) else onGate(gate) },
                     icon = icon,
                     badge = badgeFor(index),
+                    dimmed = !gate.available,
                 )
             }
         }
@@ -320,6 +341,7 @@ private fun RailItem(
     onClick: () -> Unit,
     icon: ImageVector,
     badge: (@Composable () -> Unit)?,
+    dimmed: Boolean,
 ) {
     val tint = MiuixTheme.colorScheme.onSurfaceContainer
     Box(
@@ -339,10 +361,12 @@ private fun RailItem(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Box(
-                modifier = Modifier.padding(
-                    horizontal = NavigationRailDefaults.ExpandedItemContentHorizontalPadding,
-                    vertical = NavigationRailDefaults.CollapsedIndicatorVerticalPadding,
-                ),
+                modifier = Modifier
+                    .padding(
+                        horizontal = NavigationRailDefaults.ExpandedItemContentHorizontalPadding,
+                        vertical = NavigationRailDefaults.CollapsedIndicatorVerticalPadding,
+                    )
+                    .alpha(if (dimmed) NavGateDisabledAlpha else 1f),
             ) {
                 val iconContent: @Composable () -> Unit = {
                     Image(
