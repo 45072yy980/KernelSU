@@ -3134,10 +3134,8 @@ fn handle_request(stream: &mut TcpStream, req: &HttpRequest, peer: Option<u32>) 
                     .unwrap_or("")
                     .trim()
                     .to_string();
-                let uid_scheme = body
-                    .get("uid_scheme")
-                    .and_then(|v| v.as_u64())
-                    .unwrap_or(0) as u32;
+                let uid_scheme =
+                    body.get("uid_scheme").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
                 if !path.starts_with('/') || path.contains('\0') {
                     return error_response(stream, 400, "路径必须是以 / 开头的绝对路径");
                 }
