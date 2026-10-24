@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -16,6 +17,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Refresh
@@ -23,7 +25,6 @@ import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
@@ -46,9 +47,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.compose.dropUnlessResumed
 import androidx.lifecycle.viewmodel.compose.viewModel
 import me.diksu.ultra.R
+import me.diksu.ultra.susfs.SusfsRepository
 import me.diksu.ultra.susfs.SusfsUiState
 import me.diksu.ultra.susfs.SusfsViewModel
 import me.diksu.ultra.ui.LocalUiMode
+import me.diksu.ultra.ui.component.dialog.AppAlertDialog
 import me.diksu.ultra.ui.UiMode
 import me.diksu.ultra.ui.component.material.SegmentedColumn
 import me.diksu.ultra.ui.component.material.SegmentedListItem
@@ -58,6 +61,7 @@ import top.yukonga.miuix.kmp.basic.Icon as MiuixIcon
 import top.yukonga.miuix.kmp.basic.IconButton as MiuixIconButton
 import top.yukonga.miuix.kmp.basic.Scaffold as MiuixScaffold
 import top.yukonga.miuix.kmp.basic.Text as MiuixText
+import top.yukonga.miuix.kmp.basic.TextField as MiuixTextField
 import top.yukonga.miuix.kmp.basic.TopAppBar as MiuixTopAppBar
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
@@ -101,7 +105,14 @@ fun SusfsScreen() {
             viewModel = viewModel,
         )
 
-        UiMode.Material -> SusfsMaterialFallback(onBack)
+        UiMode.Material -> SusfsMaterial(
+            state = state,
+            onBack = onBack,
+            onRefresh = viewModel::refresh,
+            onInput = { pending = it },
+            onStaticKstat = { pendingStatic = true },
+            viewModel = viewModel,
+        )
     }
 
     val input = pending
@@ -148,7 +159,7 @@ fun SusfsScreen() {
  * [fieldB] null and the dialog hides that line. [showUidScheme] adds a
  * uid_scheme picker (0 = all processes, 1 = non-root only, 2 = custom).
  */
-private data class SusfsInput(
+internal data class SusfsInput(
     val title: String,
     val fieldA: String,
     val fieldB: String? = null,
@@ -213,6 +224,7 @@ private fun SusfsMiuix(
                 item { SusfsKstatCard(onInput, onStaticKstat, viewModel) }
                 item { SusfsRedirectCard(onInput, viewModel) }
                 item { SusfsUnameCard(state, onInput, viewModel) }
+                item { SusfsRulesCard(state) }
             }
 
             item { SusfsProcCard(state) }
@@ -710,36 +722,7 @@ private fun SusfsLogCard(state: SusfsUiState) {
     }
 }
 
-/**
- * What Material builds see.
- *
- * A one-line note rather than a second copy of the screen: the Material skin
- * is barely used, and maintaining two layouts for the same panel is not
- * worth it. The miuix options are one switch away in settings.
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun SusfsMaterialFallback(onBack: () -> Unit) {
-    Column(modifier = Modifier.padding(16.dp)) {
-        SegmentedColumn(
-            content = buildList<@Composable () -> Unit> {
-                add {
-                    SegmentedListItem(
-                        onClick = onBack,
-                        headlineContent = { Text(stringResource(R.string.susfs_back)) },
-                        supportingContent = {
-                            Text(stringResource(R.string.susfs_material_note))
-                        },
-                        leadingContent = { Icon(Icons.Filled.Info, contentDescription = null) },
-                    )
-                }
-            },
-        )
-    }
-}
-
 /** The two-field prompt (plus optional uid_scheme) used by every action. */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SusfsInputDialog(
     input: SusfsInput,
@@ -757,84 +740,99 @@ private fun SusfsInputDialog(
         else -> customUid.toIntOrNull() ?: 0
     }
 
-    AlertDialog(
+    AppAlertDialog(
+        title = input.title,
         onDismissRequest = onDismiss,
-        title = { Text(input.title) },
-        text = {
-            Column {
-                OutlinedTextField(
-                    value = valueA,
-                    onValueChange = { valueA = it },
-                    singleLine = true,
-                    label = { Text(input.fieldA) },
-                    modifier = Modifier.fillMaxWidth(),
+        confirmText = stringResource(R.string.susfs_confirm),
+        dismissText = stringResource(R.string.susfs_cancel),
+        confirmEnabled = valueA.isNotBlank(),
+        onConfirm = { onConfirm(valueA, valueB, resolvedUid) },
+    ) {
+        Column {
+            SusfsTextField(
+                label = input.fieldA,
+                value = valueA,
+                onValueChange = { valueA = it },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            val labelB = input.fieldB
+            if (labelB != null) {
+                SusfsTextField(
+                    label = labelB,
+                    value = valueB,
+                    onValueChange = { valueB = it },
+                    modifier = Modifier.padding(top = 12.dp).fillMaxWidth(),
                 )
-                val labelB = input.fieldB
-                if (labelB != null) {
-                    OutlinedTextField(
-                        value = valueB,
-                        onValueChange = { valueB = it },
-                        singleLine = true,
-                        label = { Text(labelB) },
-                        modifier = Modifier
-                            .padding(top = 12.dp)
-                            .fillMaxWidth(),
-                    )
-                }
-                if (input.showUidScheme) {
-                    Text(
-                        text = stringResource(R.string.susfs_uid_scheme_title),
-                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.padding(top = 16.dp),
-                    )
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        listOf(
-                            0 to stringResource(R.string.susfs_uid_all),
-                            1 to stringResource(R.string.susfs_uid_non_root),
-                            2 to stringResource(R.string.susfs_uid_custom),
-                        ).forEach { (mode, label) ->
-                            FilterChipCompat(
-                                selected = uidMode == mode,
-                                onClick = { uidMode = mode },
-                                label = label,
-                                modifier = Modifier.weight(1f),
-                            )
-                        }
-                    }
-                    if (uidMode == 2) {
-                        OutlinedTextField(
-                            value = customUid,
-                            onValueChange = { customUid = it },
-                            singleLine = true,
-                            label = { Text(stringResource(R.string.susfs_uid_custom_hint)) },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            modifier = Modifier
-                                .padding(top = 8.dp)
-                                .fillMaxWidth(),
+            }
+            if (input.showUidScheme) {
+                MiuixText(
+                    text = stringResource(R.string.susfs_uid_scheme_title),
+                    style = MiuixTheme.textStyles.footnote1,
+                    color = colorScheme.onSurfaceVariantSummary,
+                    modifier = Modifier.padding(top = 16.dp),
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    listOf(
+                        0 to stringResource(R.string.susfs_uid_all),
+                        1 to stringResource(R.string.susfs_uid_non_root),
+                        2 to stringResource(R.string.susfs_uid_custom),
+                    ).forEach { (mode, label) ->
+                        FilterChipCompat(
+                            selected = uidMode == mode,
+                            onClick = { uidMode = mode },
+                            label = label,
+                            modifier = Modifier.weight(1f),
                         )
                     }
                 }
+                if (uidMode == 2) {
+                    SusfsTextField(
+                        label = stringResource(R.string.susfs_uid_custom_hint),
+                        value = customUid,
+                        onValueChange = { customUid = it },
+                        modifier = Modifier.padding(top = 8.dp).fillMaxWidth(),
+                        keyboardType = KeyboardType.Number,
+                    )
+                }
             }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = { onConfirm(valueA, valueB, resolvedUid) },
-                enabled = valueA.isNotBlank(),
-            ) {
-                Text(stringResource(R.string.susfs_confirm))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.susfs_cancel))
-            }
-        },
-    )
+        }
+    }
+}
+
+/**
+ * 按当前皮肤渲染的输入框。
+ *
+ * 弹窗容器已经跟随皮肤（见 [AppAlertDialog]），里面的输入框也必须跟随，
+ * 否则 miuix 弹窗里嵌一个 Material 的 OutlinedTextField，观感仍然割裂。
+ */
+@Composable
+private fun SusfsTextField(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    keyboardType: KeyboardType = KeyboardType.Text,
+) {
+    if (LocalUiMode.current.isMiuixFamily) {
+        MiuixTextField(
+            value = value,
+            onValueChange = onValueChange,
+            label = label,
+            modifier = modifier,
+        )
+    } else {
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            singleLine = true,
+            label = { Text(label) },
+            keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+            modifier = modifier,
+        )
+    }
 }
 
 /** Minimal selectable chip built from Box + clickable. */
@@ -894,10 +892,32 @@ private fun SusfsStaticKstatDialog(
 
     fun toLong(s: String) = s.toLongOrNull() ?: 0L
 
-    AlertDialog(
+    AppAlertDialog(
+        title = stringResource(R.string.susfs_add_kstat_static),
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.susfs_add_kstat_static)) },
-        text = {
+        confirmText = stringResource(R.string.susfs_confirm),
+        dismissText = stringResource(R.string.susfs_cancel),
+        confirmEnabled = path.isNotBlank() && ino.isNotBlank(),
+        onConfirm = {
+            onConfirm(
+                SusfsStaticKstatArgs(
+                    path = path,
+                    ino = toLong(ino),
+                    dev = toLong(dev),
+                    nlink = toLong(nlink),
+                    size = toLong(size),
+                    atimeSec = toLong(atimeSec),
+                    atimeNsec = toLong(atimeNsec),
+                    mtimeSec = toLong(mtimeSec),
+                    mtimeNsec = toLong(mtimeNsec),
+                    ctimeSec = toLong(ctimeSec),
+                    ctimeNsec = toLong(ctimeNsec),
+                    blocks = toLong(blocks),
+                    blksize = toLong(blksize),
+                )
+            )
+        },
+    ) {
             Column(
                 modifier = Modifier
                     .horizontalScroll(rememberScrollState())
@@ -917,39 +937,7 @@ private fun SusfsStaticKstatDialog(
                 StaticField(stringResource(R.string.susfs_field_blocks), blocks, { blocks = it })
                 StaticField(stringResource(R.string.susfs_field_blksize), blksize, { blksize = it })
             }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    onConfirm(
-                        SusfsStaticKstatArgs(
-                            path = path,
-                            ino = toLong(ino),
-                            dev = toLong(dev),
-                            nlink = toLong(nlink),
-                            size = toLong(size),
-                            atimeSec = toLong(atimeSec),
-                            atimeNsec = toLong(atimeNsec),
-                            mtimeSec = toLong(mtimeSec),
-                            mtimeNsec = toLong(mtimeNsec),
-                            ctimeSec = toLong(ctimeSec),
-                            ctimeNsec = toLong(ctimeNsec),
-                            blocks = toLong(blocks),
-                            blksize = toLong(blksize),
-                        )
-                    )
-                },
-                enabled = path.isNotBlank() && ino.isNotBlank(),
-            ) {
-                Text(stringResource(R.string.susfs_confirm))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.susfs_cancel))
-            }
-        },
-    )
+    }
 }
 
 /** One labelled OutlinedTextField for the static-kstat form. */
@@ -960,14 +948,89 @@ private fun StaticField(
     onValueChange: (String) -> Unit,
     keyboardType: KeyboardType = KeyboardType.Number,
 ) {
-    OutlinedTextField(
+    SusfsTextField(
+        label = label,
         value = value,
         onValueChange = onValueChange,
-        singleLine = true,
-        label = { Text(label) },
-        keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+        keyboardType = keyboardType,
         modifier = Modifier
             .padding(top = 6.dp)
             .fillMaxWidth(),
     )
+}
+
+/**
+ * 已持久化的规则清单（miuix 皮肤）。
+ *
+ * SuSFS 内核侧没有 remove 命令，删除只影响下次开机重放；卡片里把这句话
+ * 直接写出来，避免用户误以为规则已经从内核里消失。
+ */
+@Composable
+private fun SusfsRulesCard(state: SusfsUiState) {
+    var localTick by remember { mutableStateOf(0) }
+    val paths = remember(state.lastOutput, localTick) { SusfsRepository.susPaths.sorted() }
+    val loops = remember(state.lastOutput, localTick) { SusfsRepository.susPathLoops.sorted() }
+    val maps = remember(state.lastOutput, localTick) { SusfsRepository.susMaps.sorted() }
+    val kstats = remember(state.lastOutput, localTick) { SusfsRepository.susKstatPaths.sorted() }
+    val redirects = remember(state.lastOutput, localTick) {
+        SusfsRepository.susRedirects.sorted().map { packed ->
+            val (target, redirected, uid) = SusfsRepository.unpackRedirect(packed)
+            "$target → $redirected (uid $uid)"
+        }
+    }
+    val total = paths.size + loops.size + maps.size + kstats.size + redirects.size
+    if (total == 0) return
+
+    Card(modifier = Modifier.padding(top = 12.dp)) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            MiuixText(
+                text = "已保存的规则（$total）",
+                style = MiuixTheme.textStyles.title2,
+                color = colorScheme.onSurface,
+            )
+            MiuixText(
+                text = "开机后自动重放；删除只影响下次开机，本次开机内规则仍然生效",
+                style = MiuixTheme.textStyles.footnote1,
+                color = colorScheme.onSurfaceVariantSummary,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
+        MiuixRuleGroup("隐藏路径", paths) { SusfsRepository.removeSusPath(it); localTick++ }
+        MiuixRuleGroup("循环隐藏路径", loops) { SusfsRepository.removeSusPathLoop(it); localTick++ }
+        MiuixRuleGroup("sus map", maps) { SusfsRepository.removeSusMap(it); localTick++ }
+        MiuixRuleGroup("kstat", kstats) { SusfsRepository.removeSusKstatPath(it); localTick++ }
+        MiuixRuleGroup("open redirect", redirects) { }
+    }
+}
+
+@Composable
+private fun MiuixRuleGroup(label: String, items: List<String>, onDelete: (String) -> Unit) {
+    if (items.isEmpty()) return
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
+        MiuixText(
+            text = label,
+            style = MiuixTheme.textStyles.footnote1,
+            color = colorScheme.primary,
+        )
+        items.forEach { item ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                MiuixText(
+                    text = item,
+                    style = MiuixTheme.textStyles.footnote1,
+                    fontFamily = FontFamily.Monospace,
+                    color = colorScheme.onSurfaceVariantSummary,
+                    maxLines = 2,
+                    modifier = Modifier.weight(1f).padding(vertical = 4.dp),
+                )
+                MiuixIconButton(onClick = { onDelete(item) }) {
+                    MiuixIcon(
+                        imageVector = Icons.Filled.Delete,
+                        contentDescription = "删除",
+                        tint = colorScheme.onSurfaceVariantSummary,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+            }
+        }
+    }
 }

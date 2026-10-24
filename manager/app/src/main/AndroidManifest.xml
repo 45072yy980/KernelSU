@@ -152,6 +152,15 @@
             </intent-filter>
         </receiver>
 
+        <!-- 自动提权并越狱：按用户设定的顺序尝试内置提权链 -->
+        <receiver
+            android:name="me.diksu.ultra.jailbreak.AutoEscalationBootReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+
         <!-- 内置 Shizuku 开机自启：独立于 SUSFS 重放，开关打开即执行 -->
         <receiver
             android:name="me.diksu.ultra.shizuku.ShizukuBootReceiver"

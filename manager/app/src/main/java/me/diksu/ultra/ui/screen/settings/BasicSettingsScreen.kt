@@ -81,13 +81,14 @@ fun BasicSettingsScreen() {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val onBack = dropUnlessResumed { navigator.pop() }
     val onOpenProfileTemplate = dropUnlessResumed { navigator.push(Route.AppProfileTemplate) }
+    val onOpenAutoEscalation = dropUnlessResumed { navigator.push(Route.AutoEscalation) }
 
     when (LocalUiMode.current) {
         UiMode.Miuix, UiMode.MiuixStock -> BasicSettingsMiuix(
-            uiState, viewModel, onBack, onOpenProfileTemplate,
+            uiState, viewModel, onBack, onOpenProfileTemplate, onOpenAutoEscalation,
         )
         UiMode.Material -> BasicSettingsMaterial(
-            uiState, viewModel, onBack, onOpenProfileTemplate,
+            uiState, viewModel, onBack, onOpenProfileTemplate, onOpenAutoEscalation,
         )
     }
 }
@@ -239,6 +240,7 @@ private fun BasicSettingsMaterial(
     viewModel: SettingsViewModel,
     onBack: () -> Unit,
     onOpenProfileTemplate: () -> Unit,
+    onOpenAutoEscalation: () -> Unit,
 ) {
     var showModuleBlacklist by remember { mutableStateOf(false) }
     if (showModuleBlacklist) {
@@ -289,6 +291,25 @@ private fun BasicSettingsMaterial(
                                     enabled = uiState.suCompatStatus == "supported",
                                     selectedIndex = uiState.suCompatMode,
                                     onItemSelected = viewModel::setSuCompatMode,
+                                )
+                            }
+                        }
+                        if (index == 1) {
+                            add {
+                                val autoEscalation = stringResource(R.string.settings_auto_escalation)
+                                SegmentedListItem(
+                                    onClick = onOpenAutoEscalation,
+                                    headlineContent = { Text(autoEscalation) },
+                                    supportingContent = {
+                                        Text(stringResource(R.string.settings_auto_escalation_summary))
+                                    },
+                                    leadingContent = { Icon(Icons.Filled.FlashOn, autoEscalation) },
+                                    trailingContent = {
+                                        Icon(
+                                            Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                            contentDescription = null,
+                                        )
+                                    },
                                 )
                             }
                         }
@@ -355,6 +376,7 @@ private fun BasicSettingsMiuix(
     viewModel: SettingsViewModel,
     onBack: () -> Unit,
     onOpenProfileTemplate: () -> Unit,
+    onOpenAutoEscalation: () -> Unit,
 ) {
     var showModuleBlacklist by remember { mutableStateOf(false) }
     if (showModuleBlacklist) {
@@ -418,6 +440,21 @@ private fun BasicSettingsMiuix(
                                 enabled = uiState.suCompatStatus == "supported",
                                 selectedIndex = uiState.suCompatMode,
                                 onSelectedIndexChange = viewModel::setSuCompatMode,
+                            )
+                        }
+                        if (index == 1) {
+                            ArrowPreference(
+                                title = stringResource(R.string.settings_auto_escalation),
+                                summary = stringResource(R.string.settings_auto_escalation_summary),
+                                startAction = {
+                                    MiuixIcon(
+                                        imageVector = Icons.Filled.FlashOn,
+                                        contentDescription = null,
+                                        tint = colorScheme.onBackground,
+                                        modifier = Modifier.padding(end = 6.dp),
+                                    )
+                                },
+                                onClick = onOpenAutoEscalation,
                             )
                         }
                         if (index == 2) {

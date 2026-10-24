@@ -83,6 +83,10 @@ sealed interface Route : NavKey, Parcelable {
     @Parcelize
     @Serializable
     data object ShizukuLog : Route
+    @Parcelize
+    @Serializable
+    data object AutoEscalation : Route
+
 
     @Parcelize
     @Serializable

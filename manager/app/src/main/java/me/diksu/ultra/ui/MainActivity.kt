@@ -91,6 +91,7 @@ import me.diksu.ultra.ui.screen.modulerepo.ModuleRepoDetailScreen
 import me.diksu.ultra.ui.screen.modulerepo.ModuleRepoScreen
 import me.diksu.ultra.ui.screen.scriptrun.ScriptRunScreen
 import me.diksu.ultra.ui.screen.settings.SettingPager
+import me.diksu.ultra.ui.screen.settings.AutoEscalationScreen
 import me.diksu.ultra.ui.screen.settings.BasicSettingsScreen
 import me.diksu.ultra.ui.screen.settings.KeymintScreen
 import me.diksu.ultra.ui.screen.settings.OtherFeaturesScreen
@@ -375,6 +376,7 @@ open class MainActivity : ComponentActivity() {
                             entry<Route.Susfs>(swipeDismiss = swipeDismiss) { SusfsScreen() }
                             entry<Route.Shizuku>(swipeDismiss = swipeDismiss) { ShizukuScreen() }
                             entry<Route.ShizukuLog>(swipeDismiss = swipeDismiss) { ShizukuLogScreen() }
+                            entry<Route.AutoEscalation>(swipeDismiss = swipeDismiss) { AutoEscalationScreen() }
                         }
                     }
 
