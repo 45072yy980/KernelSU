@@ -3,7 +3,9 @@
 > **写给下一个接手的人（或 Agent）**：这份文档记录"现在是什么状态、为什么是这样、下一步该做什么"。
 > 基线（`wuhudiao/DikSU`）已停更，本分支自 4.0 起独立演进，**不必再为兼容基线而保留旧路径**。
 >
-> 最后更新：2026-10-24 · tag `v4.1.0-ultra` · versionCode `41000`
+> 最后更新：2026-10-25 · 4.2 开发轮进行中（**未发版、未跑 CI**，详见第十一节）
+>
+> 上一个发布基线：tag `v4.1.0-ultra` · versionCode `41000`
 >
 > 要直接交给下一个 Agent，用 [`docs/handoff-prompt.md`](handoff-prompt.md) 里那段「提示词正文」。
 
@@ -310,3 +312,64 @@ grep -n "getVersionCode" manager/build.gradle.kts | head
 - [ ] 设置页三套皮肤各点一遍，确认没有空白页/重复项
 - [ ] 网页端：首页 / 超级用户 / 模块 / 设置（内核特性开关）/ 文件 各点一遍
 - [ ] 内置 Shizuku：开关 → 启动 → 授权一个应用 → 重启后自动拉起
+
+---
+
+## 十一、4.2 开发轮进展（2026-10-25，未发版）
+
+> **最重要的一句：这一轮一次 CI 都没跑。** harness 进程里没有 `DSH_GIT_TOKEN`，
+> `git_push` / `ci_*` 全部不可用；所有 Rust/Kotlin 改动只做了静态自检，**没有编译验证**。
+> 下一轮第一件事就是配好 token 跑 `build-manager` + `clippy` + `rustfmt`。
+
+### 11.1 提交清单（按时间顺序）
+
+| 提交 | 内容 |
+|---|---|
+| `1322ecac` | 修 `dsha-diksu-git`：无 tag 时返回显式 `undefined` 导致工具输出校验失败；README 补两条坑 |
+| `8fe18adb` | 网页端 SuSFS 面板：4 条 API + 设置页卡片；开关/规则只报"已下发"，删除如实说明内核无 remove |
+| `49b2d67b` | `kernel/Kbuild` 默认签名 size/hash 改为仓库自带 `ksu-signing.jks` 的实际值（799 / `b27c5a47…`） |
+| `7e2d2977` | 导航置灰细化到每个入口：`NavEntry` + 5 个导航组件逐项判定 + MainActivity 去掉连带禁用 |
+| `9ef3767c` | Material 巡检修 3 处 + `docs/material3-audit.md`（25 页逐行结论） |
+| `04f25daf` | `docs/device-verification-4.1.md` + 网页端 Shizuku / 视觉重构两份方案 |
+| `5addaf62` | 网页端内置 Shizuku 管理：3 条 API + 设置页卡片（只读 + 启停，授权仍回 App） |
+
+### 11.2 环境问题（下一轮开工先处理）
+
+1. **没有 git token**：`DSH_GIT_TOKEN` / `GITHUB_TOKEN` / `GH_TOKEN` 在 harness 进程环境里都不存在。
+   要在启动 harness 的环境里 `export DSH_GIT_TOKEN=<新 PAT>` 再重启；上一轮泄露的 PAT 必须先吊销。
+2. **插件 `repoPath`**：harness 的 cwd 是 `/root`，插件默认拿 `process.cwd()` 当仓库路径，
+   导致所有 git 工具在 `/root` 上跑。已把 `repoPath: /sdcard/diksu` 写进
+   `~/.dsh/profiles/web/cordis.patch.yml`，**重启 harness 后生效**。
+3. **设备通道**：无障碍（`ACCESSIBILITY_UNAVAILABLE`）与设备 shell（`DEVICE_CHANNEL_UNAVAILABLE`）
+   都未授权，`/app/ui/*` 与 `adb-shell` 用不了。真机核验按用户要求取消，只留了只读证据。
+4. **github.com 直连不稳**：`curl https://github.com` 能回 200 但 body 传 16KB 就挂住，
+   `api.github.com` 正常。推送时用插件的 `hostsPin` + 重试。
+
+### 11.3 必须优先确认的风险
+
+- **编译风险最高三处**（本地没编译，CI 红了先看这里）：
+  1. Miuix `NavigationBarItem(modifier = Modifier.weight(1f).alpha(...))`；
+  2. Material3 `BadgedBox(modifier = ...)` 与 `ShortNavigationBarItem` 的 icon/label slot；
+  3. `webui.rs` 里 Shizuku 启停的进程管理（`setsid -d` + `app_process` argv、`libc::kill`）。
+- **导航置灰的三个已知边界**（没解决，别当成已解决）：
+  Pager 滑动仍可到达不可用页；`Natives.isFullFeatured()` 不是 Compose State，提权成功后要等重组；
+  悬浮底栏拖到不可用项时内部高亮可能先移动再复位。
+- **tag 不在 HEAD**：`v4.1.0-ultra` 之后已有 7 个提交，现在重编会得到 `41007` 而不是 `41000`。
+  发版二选一：把 tag 移到最终 HEAD 再构建，或直接起 `4.1.1`。
+- **Material 6 处中文硬编码**待抽资源，8 个 key 已列在 `docs/material3-audit.md` 第六节。
+- **`setAutoJailbreak` 是死代码**：BasicRow 已删，但 `SettingsViewModel` / `SettingsScreenActions`
+  里还留着引用，要清需再动 2 个文件。
+
+### 11.4 任务板状态
+
+| 任务 | 状态 |
+|---|---|
+| task-1 网页端 SuSFS 面板 | ✅ 完成（`8fe18adb`） |
+| task-2 导航置灰做细 | ✅ 完成（`7e2d2977`） |
+| task-3 Material 3 巡检 | ✅ 完成（`9ef3767c`） |
+| task-4 真机核验 | ⏹ 按用户要求取消，只留只读证据（`04f25daf`） |
+| task-5 网页端 Shizuku 管理 | ✅ 完成（`5addaf62`） |
+| task-6 网页端视觉重构 | 📋 只有方案（`docs/webui-redesign-plan.md`），**没动代码** |
+
+task-6 没动代码是刻意的：它要重写 `index.html`（已 4986 行），在没有真机浏览器回归的前提下做，
+风险远大于收益。下一轮建议单独开一轮，先拆文件再改样式，每步可回滚。
