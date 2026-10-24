@@ -77,3 +77,13 @@ export DSH_GIT_TOKEN=<PAT>
 ```
 
 注意：`node_modules` 软链指向 dsh 安装目录，是为了让 `@deepseek-ai/dsh-tools` 可解析（本插件的唯一外部依赖）。
+
+## 已知坑
+
+- **harness 进程的 cwd 不是仓库**：`repoPath` 默认取 `process.cwd()`，而 `dsh web` 一般从 `/root` 启动。
+  不显式配置时所有 git 工具都在 `/root` 上跑：拿不到 tag → `versionCode` 为 `null` → 工具输出里出现
+  显式 `undefined`，最终报 `returned invalid output: value is not lossless JSON`。
+  两个修法都要做：一是 `cordis.patch.yml` 里给 `diksu-git` 配 `repoPath: /sdcard/diksu`（重启生效），
+  二是插件里 `versionCode` 为 `null` 时**省略这个键**而不是写 `undefined`（`lib/index.js` 已修）。
+- **github.com 直连会卡在 TLS 之后**：本次实测 `curl https://github.com` 能回 200 但 body 传 16KB 就挂住，
+  `api.github.com` 正常。推送不稳时用 `hostsPin`，并依赖插件内置的重试。

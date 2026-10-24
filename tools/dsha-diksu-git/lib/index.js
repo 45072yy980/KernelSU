@@ -290,7 +290,9 @@ export function apply(ctx, config) {
           branch,
           head,
           tag: version.tag,
-          versionCode: version.versionCode ?? undefined,
+          // 注意：不能写 `versionCode: null ?? undefined` —— 显式 undefined 会让工具输出
+          // 校验报 "value is not lossless JSON"。没有 tag 时直接省略这个键。
+          ...(version.versionCode === null ? {} : { versionCode: version.versionCode }),
           dirty,
           apkLeftovers,
           ahead,
@@ -498,7 +500,8 @@ export function apply(ctx, config) {
           created: true,
           tag: args.tag,
           commit,
-          versionCode: version.versionCode ?? undefined,
+          // 同上：versionCode 为 null 时省略键，避免非 lossless JSON。
+          ...(version.versionCode === null ? {} : { versionCode: version.versionCode }),
           message:
             `已打 tag ${args.tag} @ ${commit.slice(0, 9)}；当前 versionCode = ${version.versionCode}` +
             '（tag 后 0 个提交时最干净）。别忘了 git_push 推 tag。',
