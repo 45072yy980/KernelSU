@@ -14,4 +14,6 @@ __pycache__
 /out
 
 # 自用构建产物（每版约 10MB，不进仓库）
+# 注意：4.0 更名后文件名从 DikSU_* 变成 DiksuUltra_*，只写 /DikSU_*.apk 是匹配不到的。
 /DikSU_*.apk
+/Diksu*.apk
