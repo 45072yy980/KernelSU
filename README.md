@@ -7,6 +7,7 @@
 > 包名变了意味着这是一个**新的应用**：需要先卸载旧管理器再装 4.0（`/data/adb` 下的模块、授权记录、配置都不受影响）。
 
 > 接手开发先看 [`docs/handoff.md`](docs/handoff.md)：当前状态、已知问题、下一步排期、构建与发版流程、踩过的坑。
+> 直接把项目交给下一个 Agent 时，用 [`docs/handoff-prompt.md`](docs/handoff-prompt.md) 里的「提示词正文」。
 
 - **GitHub**：https://github.com/45072yy980/KernelSU
 - **基线（原作者）**：https://github.com/wuhudiao/DikSU

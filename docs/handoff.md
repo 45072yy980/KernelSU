@@ -3,7 +3,9 @@
 > **写给下一个接手的人（或 Agent）**：这份文档记录"现在是什么状态、为什么是这样、下一步该做什么"。
 > 基线（`wuhudiao/DikSU`）已停更，本分支自 4.0 起独立演进，**不必再为兼容基线而保留旧路径**。
 >
-> 最后更新：2026-10-24 · `main` = `efaacd24` · tag `v4.1.0-ultra` · versionCode `41000`
+> 最后更新：2026-10-24 · tag `v4.1.0-ultra` · versionCode `41000`
+>
+> 要直接交给下一个 Agent，用 [`docs/handoff-prompt.md`](handoff-prompt.md) 里那段「提示词正文」。
 
 ---
 
@@ -125,6 +127,15 @@ kernel/                     内核模块（C），Kbuild 里固定 KSU_PACKAGE_N
 7. **Material 3 只做了设置项清理**，没有做完整功能巡检：其他 Material 页面（模块、超级用户、
    文件、WebUI）仍可能有类似"引用了已删除功能"的问题，需要逐页过一遍。
 
+### P1（补充）— 仓库卫生
+
+7.1 **4.1 误提交过两个 10MB 自用 APK**：`.gitignore` 当时只写了 `/DikSU_*.apk`，而 4.0 改名后文件叫
+   `DiksuUltra_*.apk`，匹配不到。已在 `aab99614` 移出索引并修正规则（`/Diksu*.apk`），
+   但**历史里仍留着这两个 blob**（约 20MB）。要彻底清掉：
+   `git filter-branch -f --index-filter 'git rm -r --cached --ignore-unmatch "DiksuUltra_*.apk"' <tag>..HEAD`
+   → `git reflog expire --expire=now --all && git gc --prune=now`
+   → force push 分支与 tag（tag 要重打，版本号会变，发版前想清楚）。
+
 ### P2 — 打磨
 
 8. `docs/project-map.md` 是 3.5.7 时代的文档，部分路径/结论已过时（本文件为准）。
@@ -200,6 +211,24 @@ kernel/                     内核模块（C），Kbuild 里固定 KSU_PACKAGE_N
 ---
 
 ## 七、构建与发布
+
+### 首选方式：用 `dsha-diksu-git` 插件
+
+上一轮把这套动作做成了 DSH 插件（`/root/dsha-diksu-git`，已接进 `web` profile）：
+
+| 工具 | 作用 |
+|---|---|
+| `git_status` | 分支/HEAD/tag/versionCode/改动/APK 残留/领先落后 |
+| `git_commit` | 固定作者提交；**拒绝新增 APK**（删除放行） |
+| `git_push` | 临时 askpass（token 只从环境变量读）+ 可选 hosts 钉 IP + 重试 + ls-remote 校验 |
+| `git_tag` | 打 `vX.Y.Z-ultra` 并算出 versionCode |
+| `ci_dispatch` / `ci_watch` | 触发 CI 并等到结束，回传失败 job/步骤 |
+| `release_publish` | 从 Release run 挑 28 个资产建 release 并发布 |
+
+**token 只走环境变量**：`export DSH_GIT_TOKEN=<PAT>`（其次 `GITHUB_TOKEN` / `GH_TOKEN`）。
+插件用临时 `GIT_ASKPASS` 脚本（内容只有 `echo "$DSH_GIT_TOKEN"`）+ 子进程环境传递，
+磁盘上没有明文，用完即删；所有输出会把 token 替换成 `***`。**不要再手搓 askpass 文件或把 token 贴进对话。**
+
 
 ### CI
 
