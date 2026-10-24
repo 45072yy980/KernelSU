@@ -414,6 +414,9 @@ private fun MaterialKstatCard(
 @Composable
 private fun MaterialRedirectCard(onInput: (SusfsInput) -> Unit, viewModel: SusfsViewModel) {
     val addRedirect = stringResource(R.string.susfs_add_redirect)
+    // 注意：stringResource 是 @Composable，只能在组合期调用；不能写进 onClick 里。
+    val fieldTarget = stringResource(R.string.susfs_field_target)
+    val fieldRedirected = stringResource(R.string.susfs_field_redirected)
     MaterialSectionCard {
         MaterialActionRow(
             icon = Icons.Filled.SwapHoriz,
@@ -423,8 +426,8 @@ private fun MaterialRedirectCard(onInput: (SusfsInput) -> Unit, viewModel: Susfs
                 onInput(
                     SusfsInput(
                         title = addRedirect,
-                        fieldA = stringResource(R.string.susfs_field_target),
-                        fieldB = stringResource(R.string.susfs_field_redirected),
+                        fieldA = fieldTarget,
+                        fieldB = fieldRedirected,
                         showUidScheme = true,
                     ) { target, redirected, uid ->
                         viewModel.addOpenRedirect(target, redirected, uid)
@@ -444,6 +447,9 @@ private fun MaterialUnameCard(
     val scheme = MaterialTheme.colorScheme
     val setUname = stringResource(R.string.susfs_set_uname)
     val setCmdline = stringResource(R.string.susfs_set_cmdline)
+    val fieldRelease = stringResource(R.string.susfs_field_release)
+    val fieldVersion = stringResource(R.string.susfs_field_version)
+    val fieldFile = stringResource(R.string.susfs_field_file)
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = scheme.surfaceContainer),
@@ -457,8 +463,8 @@ private fun MaterialUnameCard(
                     onInput(
                         SusfsInput(
                             title = setUname,
-                            fieldA = stringResource(R.string.susfs_field_release),
-                            fieldB = stringResource(R.string.susfs_field_version),
+                            fieldA = fieldRelease,
+                            fieldB = fieldVersion,
                             valueA = state.unameRelease,
                             valueB = state.unameVersion,
                         ) { release, version, _ -> viewModel.setUname(release, version) }
@@ -474,7 +480,7 @@ private fun MaterialUnameCard(
                     onInput(
                         SusfsInput(
                             title = setCmdline,
-                            fieldA = stringResource(R.string.susfs_field_file),
+                            fieldA = fieldFile,
                         ) { path, _, _ -> viewModel.setCmdline(path) }
                     )
                 },

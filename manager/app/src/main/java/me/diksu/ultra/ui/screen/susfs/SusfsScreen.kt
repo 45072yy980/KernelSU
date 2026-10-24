@@ -53,6 +53,7 @@ import me.diksu.ultra.susfs.SusfsViewModel
 import me.diksu.ultra.ui.LocalUiMode
 import me.diksu.ultra.ui.component.dialog.AppAlertDialog
 import me.diksu.ultra.ui.UiMode
+import me.diksu.ultra.ui.isMiuixFamily
 import me.diksu.ultra.ui.component.material.SegmentedColumn
 import me.diksu.ultra.ui.component.material.SegmentedListItem
 import me.diksu.ultra.ui.navigation3.LocalNavigator
