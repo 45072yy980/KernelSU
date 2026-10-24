@@ -1,0 +1,19 @@
+{
+  "name": "dsha-diksu-git",
+  "description": "Diksu Ultra 专用 git/CI/发布工具：token 只从环境变量读取，带网络重试、产物护栏与 CI 编排",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh-tools": "0.2.1-rc.2"
+  },
+  "license": "MIT"
+}

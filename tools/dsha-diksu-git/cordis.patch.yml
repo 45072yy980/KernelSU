@@ -1,0 +1,4 @@
+# Diksu Ultra git 工具包：注册 dsha-diksu-git 插件（token 走环境变量，不落盘）
+- insert:
+    - id: diksu-git
+      name: 'dsha-diksu-git'

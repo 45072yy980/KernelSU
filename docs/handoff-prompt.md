@@ -34,6 +34,7 @@ git_push（推分支） → ci_dispatch（workflow_dispatch，可带 abi=arm64-v
 - 插件 `dsha-diksu-git` 已装好：`git_status` / `git_commit` / `git_push` / `git_tag` / `ci_dispatch` / `ci_watch` / `release_publish`。
 - 它读 `DSH_GIT_TOKEN`（其次 `GITHUB_TOKEN` / `GH_TOKEN`）。**没有 token 就先去设置环境变量，不要在对话里贴 token，不要写进文件。**
 - 需要直连不稳时，插件支持 `hostsPin`（临时改 hosts 并自动还原），不要手搓 askpass 脚本。
+- 插件源码随仓库保存了一份副本：`tools/dsha-diksu-git/`（安装方法见该目录 README）。
 - 上一轮的 PAT 已在对话中出现过明文，**必须吊销重发**（见 handoff 的 P0-1）。
 
 **③ 构建产物绝不进仓库。**
