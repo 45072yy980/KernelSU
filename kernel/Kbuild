@@ -204,8 +204,18 @@ KSU_PACKAGE_NAME ?= me.diksu.ultra
 else
 KSU_PACKAGE_NAME ?= me.diksu.ultra.pr
 endif
-KSU_EXPECTED_SIZE ?= 0x033b
-KSU_EXPECTED_HASH ?= c371061b19d8c7d7d6133c6a9bafe198fa944e50c1b31c9d8daa8d7f1fc2d2d6
+# 管理器签名证书（DER）的长度与 SHA-256，throne_tracker 靠它判断"这个 APK 是不是本管理器"。
+#
+# 默认值必须对应仓库自带的 ksu-signing.jks，否则**本地直接 `make -C kernel`** 编出来的 .ko
+# 会去认上游官方证书：模块能加载、su 能用，但管理器拿不到 MANAGER 标志，首页显示"未安装"、
+# 导航永远置灰——就是 handoff 第八节记的那个经典症状。
+#
+# CI（build-manager.yml 的 generate-key）会用 keytool 从 ksu-signing.jks 现算并覆盖这两个值
+# （build-lkm.yml → ddk-lkm.yml），所以 CI 产物一直是配对的；这里改的是"没带覆盖参数"时的兜底。
+# 取值来源：解包 DiksuUltra_4.1.0-arm64_selfuse_41000.apk 的 v2 签名块，
+# cert size = 799 字节，sha256 = b27c5a47…（CN=KernelSU Manager，serial 57093EFFDF1BED9E）。
+KSU_EXPECTED_SIZE ?= 0x031f
+KSU_EXPECTED_HASH ?= b27c5a4787d3541bbe1aeaf316eccae0eb07d5795d485199f9c0d2f9aedea815
 
 $(info -- KernelSU Manager package name: $(KSU_PACKAGE_NAME))
 $(info -- KernelSU Manager signature size: $(KSU_EXPECTED_SIZE))
