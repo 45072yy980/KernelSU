@@ -171,14 +171,6 @@ private fun basicGroups(uiState: SettingsUiState, viewModel: SettingsViewModel):
                 checked = uiState.isSelinuxHideEnabled,
                 onCheckedChange = viewModel::setSelinuxHideEnabled,
             ),
-            BasicRow(
-                icon = Icons.Filled.FlashOn,
-                title = R.string.settings_auto_jailbreak,
-                summary = stringResource(R.string.settings_auto_jailbreak_summary),
-                enabled = uiState.isLateLoadMode,
-                checked = uiState.autoJailbreak,
-                onCheckedChange = viewModel::setAutoJailbreak,
-            ),
         ),
     ),
     BasicGroup(

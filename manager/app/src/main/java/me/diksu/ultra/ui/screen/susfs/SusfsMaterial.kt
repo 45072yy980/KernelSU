@@ -504,12 +504,10 @@ private fun MaterialRulesCard(state: SusfsUiState) {
     val loops = remember(state.lastOutput, localTick) { SusfsRepository.susPathLoops.sorted() }
     val maps = remember(state.lastOutput, localTick) { SusfsRepository.susMaps.sorted() }
     val kstats = remember(state.lastOutput, localTick) { SusfsRepository.susKstatPaths.sorted() }
-    val redirects = remember(state.lastOutput, localTick) {
-        SusfsRepository.susRedirects.sorted().map { packed ->
-            val (target, redirected, uid) = SusfsRepository.unpackRedirect(packed)
-            "$target → $redirected (uid $uid)"
-        }
-    }
+    // Keep the packed form: deleting needs (target, redirected, uidScheme) to remove
+    // exactly one rule, and the rendered "target → redirected (uid N)" text is not a
+    // reliable key to parse back.
+    val redirects = remember(state.lastOutput, localTick) { SusfsRepository.susRedirects.sorted() }
     val total = paths.size + loops.size + maps.size + kstats.size + redirects.size
     if (total == 0) return
 
@@ -540,13 +538,30 @@ private fun MaterialRulesCard(state: SusfsUiState) {
             MaterialRuleGroup("kstat", kstats) {
                 SusfsRepository.removeSusKstatPath(it); localTick++
             }
-            MaterialRuleGroup("open redirect", redirects) { }
+            MaterialRuleGroup(
+                label = "open redirect",
+                items = redirects,
+                display = { packed ->
+                    val (target, redirected, uid) = SusfsRepository.unpackRedirect(packed)
+                    "$target → $redirected (uid $uid)"
+                },
+                onDelete = { packed ->
+                    val (target, redirected, uid) = SusfsRepository.unpackRedirect(packed)
+                    SusfsRepository.removeSusRedirect(target, redirected, uid)
+                    localTick++
+                },
+            )
         }
     }
 }
 
 @Composable
-private fun MaterialRuleGroup(label: String, items: List<String>, onDelete: (String) -> Unit) {
+private fun MaterialRuleGroup(
+    label: String,
+    items: List<String>,
+    display: (String) -> String = { it },
+    onDelete: (String) -> Unit,
+) {
     if (items.isEmpty()) return
     val scheme = MaterialTheme.colorScheme
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
@@ -554,7 +569,7 @@ private fun MaterialRuleGroup(label: String, items: List<String>, onDelete: (Str
         items.forEach { item ->
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = item,
+                    text = display(item),
                     style = MaterialTheme.typography.bodySmall,
                     fontFamily = FontFamily.Monospace,
                     color = scheme.onSurfaceVariant,
