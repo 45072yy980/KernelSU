@@ -183,6 +183,13 @@ body.fm-files .topbar { background: transparent; backdrop-filter: none; -webkit-
 .switch.active { background: var(--switch-active); }
 .switch-knob { position: absolute; top: 2px; left: 2px; width: 27px; height: 27px; background: white; border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.2); transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1); }
 .switch.active .switch-knob { transform: translateX(20px); }
+.shizuku-dot { display: inline-block; width: 8px; height: 8px; margin-right: 8px; border-radius: 50%; background: var(--text-tertiary); vertical-align: middle; }
+.shizuku-dot.running { background: var(--success); }
+.shizuku-actions { display: flex; gap: 8px; padding: 12px 16px; border-bottom: 0.5px solid var(--border); }
+.shizuku-actions .fm-btn { flex: 1; min-height: 40px; }
+.shizuku-actions .fm-btn:disabled { opacity: 0.45; cursor: default; }
+.shizuku-error { display: none; padding: 0 16px 12px; color: var(--danger); font-size: 12px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+.shizuku-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; word-break: break-all; }
 .warning-card { display: flex; align-items: flex-start; gap: 10px; padding: 14px 16px; background: var(--warning-bg); border-radius: var(--radius); margin-bottom: 12px; cursor: pointer; transition: opacity 0.15s; }
 .warning-card:active { opacity: 0.7; }
 .warning-icon { width: 24px; height: 24px; color: var(--warning); flex-shrink: 0; margin-top: 1px; }
@@ -615,6 +622,10 @@ body.modal-open { overflow: hidden; }
           </div>
           <div class="pref-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></div>
         </div>
+      </div>
+      <div class="section-title">内置 Shizuku</div>
+      <div class="card" id="shizukuCard">
+        <div class="loading">加载中...</div>
       </div>
       <div class="section-title">WebUI</div>
       <div class="card">
@@ -2317,6 +2328,7 @@ function loadSettings() {
   if (status) status.textContent = '运行中';
   loadFeatures();
   loadSusfs();
+  loadShizuku();
 }
 
 function escapeHtml(s) {
@@ -2613,6 +2625,173 @@ async function susfsRemove() {
       '<button class="fm-btn" onclick="fmDialogClose()">知道了</button></div>');
   } catch (e) {
     showToast('请求失败：' + e.message);
+  }
+}
+
+// ── 内置 Shizuku ─────────────────────────────────────────────────────────────
+// ksud 只能看到 shizuku_server 进程；binder 是否可用仍以 App 面板为准。
+// 授权文件只读：只展示条数与权限，不展示任何 uid/包名明细。
+
+const SHIZUKU = { status: null, busy: false, actionError: '' };
+
+function shizukuAutostartText(a) {
+  if (!a || !a.readable) return '无法读取（需在 App 内查看）';
+  const enabled = a.enabled ? '已开启' : '已关闭（在 App 内修改）';
+  if (a.lastResult === 'never') return enabled + ' · 本次安装后尚未尝试过自启';
+  if (a.lastResult === 'unknown') return enabled + ' · 上次结果无法读取';
+  const when = a.lastTime ? new Date(a.lastTime).toLocaleString('zh-CN', { hour12: false }) : '未知时间';
+  const sources = { boot: '开机', 'package-replaced': '应用更新', manual: '手动', 'enable-toggle': '打开开关时' };
+  const source = sources[a.lastSource] || a.lastSource || '未知';
+  if (a.lastResult === 'success') {
+    return enabled + ' · 上次自启成功 · ' + escapeHtml(when) + ' · ' + escapeHtml(source);
+  }
+  const detail = a.lastDetail ? '<br>' + escapeHtml(a.lastDetail) : '';
+  return enabled + ' · 上次自启失败 · ' + escapeHtml(when) + ' · ' + escapeHtml(source) + detail;
+}
+
+async function loadShizuku() {
+  const card = document.getElementById('shizukuCard');
+  if (!card) return;
+  if (!SHIZUKU.status) card.innerHTML = '<div class="loading">加载中...</div>';
+  try {
+    SHIZUKU.status = await api('/api/shizuku/status');
+  } catch (e) {
+    card.innerHTML = '<div class="pref-item" style="cursor:default;">' +
+      '<div class="pref-content"><div class="pref-title">读取失败</div>' +
+      '<div class="pref-subtitle">' + escapeHtml(e.message) + '</div></div></div>';
+    return;
+  }
+  renderShizuku();
+}
+
+function renderShizuku() {
+  const card = document.getElementById('shizukuCard');
+  if (!card) return;
+  const st = SHIZUKU.status || {};
+  const running = !!st.running;
+  const pid = st.pid == null ? '—' : st.pid;
+  const identity = st.serverIsRoot ? 'root' : (st.uid == null ? '身份未知' : 'uid ' + st.uid);
+  const statusSub = running
+    ? 'pid ' + pid + ' · ' + identity + '；binder 可用性请在 App 内确认'
+    : 'shizuku_server 未运行';
+
+  const statusRow = '<div class="pref-item" style="cursor:default;">' +
+    '<div class="pref-icon">' + uiIcon('shield') + '</div>' +
+    '<div class="pref-content">' +
+    '<div class="pref-title"><span class="shizuku-dot ' + (running ? 'running' : '') + '"></span>' +
+    (running ? '运行中' : '已停止') + '</div>' +
+    '<div class="pref-subtitle">' + escapeHtml(statusSub) + '</div>' +
+    '</div></div>';
+
+  const actions = '<div class="shizuku-actions">' +
+    '<button class="fm-btn primary" id="shizukuStartBtn" onclick="shizukuStart()">启动</button>' +
+    '<button class="fm-btn danger" id="shizukuStopBtn" onclick="shizukuStop()">停止</button>' +
+    '<button class="fm-btn" id="shizukuRefreshBtn" onclick="loadShizuku()">刷新</button>' +
+    '</div>';
+
+  const errorRow = '<div class="shizuku-error" id="shizukuActionError" style="display:' +
+    (SHIZUKU.actionError ? 'block' : 'none') + ';">' + escapeHtml(SHIZUKU.actionError || '') + '</div>';
+
+  const autostartRow = '<div class="pref-item" style="cursor:default;">' +
+    '<div class="pref-content"><div class="pref-title">开机自启</div>' +
+    '<div class="pref-subtitle">' + shizukuAutostartText(st.autostart) + '</div></div></div>';
+
+  const auth = st.authorization || {};
+  const count = Number(st.authorizedCount || 0);
+  let authText;
+  if (!auth.exists) {
+    authText = '授权文件不存在（尚未授权任何应用）';
+  } else if (!auth.readable) {
+    authText = '授权文件不可读或格式异常（需要 root）';
+  } else {
+    authText = '允许 ' + (auth.allowedCount || 0) + ' · 拒绝 ' + (auth.deniedCount || 0) +
+      ' · 仅 Shell ' + (auth.shellOnlyCount || 0);
+    if (auth.mode !== '0600' || auth.ownerUid !== 2000) {
+      authText += ' <span style="color:var(--danger);">权限异常：' +
+        escapeHtml(auth.mode || '?') + ' / uid ' +
+        escapeHtml(String(auth.ownerUid == null ? '?' : auth.ownerUid)) + '</span>';
+    }
+  }
+  const authRow = '<div class="pref-item" style="cursor:default;">' +
+    '<div class="pref-content"><div class="pref-title">授权应用 ' + count + ' 个</div>' +
+    '<div class="pref-subtitle">' + authText + '</div></div></div>';
+
+  const noteRow = '<div class="pref-item" style="cursor:default;">' +
+    '<div class="pref-content"><div class="pref-subtitle">授权请在 App 内修改；网页端只读展示，不写入授权文件。</div></div></div>';
+
+  const managerText = escapeHtml(st.packageName || '—') +
+    (st.apkPath ? '<br><span class="shizuku-mono">' + escapeHtml(st.apkPath) + '</span>' : '');
+  const managerRow = '<div class="pref-item" style="cursor:default;">' +
+    '<div class="pref-content"><div class="pref-title">管理器</div>' +
+    '<div class="pref-subtitle">' + managerText + '</div></div></div>';
+
+  card.innerHTML = statusRow + actions + errorRow + autostartRow + authRow + noteRow + managerRow;
+  shizukuApplyBusy();
+}
+
+function shizukuApplyBusy() {
+  const start = document.getElementById('shizukuStartBtn');
+  const stop = document.getElementById('shizukuStopBtn');
+  const refresh = document.getElementById('shizukuRefreshBtn');
+  if (!start || !stop || !refresh) return;
+  const running = !!(SHIZUKU.status && SHIZUKU.status.running);
+  start.disabled = SHIZUKU.busy || running;
+  stop.disabled = SHIZUKU.busy || !running;
+  refresh.disabled = SHIZUKU.busy;
+  start.textContent = SHIZUKU.busy ? '处理中…' : '启动';
+  stop.textContent = SHIZUKU.busy ? '处理中…' : '停止';
+}
+
+function shizukuSetError(text) {
+  SHIZUKU.actionError = text || '';
+  const el = document.getElementById('shizukuActionError');
+  if (el) {
+    el.textContent = SHIZUKU.actionError;
+    el.style.display = SHIZUKU.actionError ? 'block' : 'none';
+  }
+}
+
+async function shizukuStart() {
+  if (SHIZUKU.busy) return;
+  SHIZUKU.busy = true;
+  shizukuSetError('');
+  shizukuApplyBusy();
+  try {
+    const res = await api('/api/shizuku/start', { method: 'POST' });
+    const pid = res.pid == null ? '—' : res.pid;
+    showToast(res.alreadyRunning ? ('服务已在运行（pid ' + pid + '）') : ('已启动（pid ' + pid + '）'));
+    setTimeout(() => { if (!SHIZUKU.busy) loadShizuku(); }, 3000);
+  } catch (e) {
+    const raw = e && e.message ? e.message : String(e);
+    const message = raw.indexOf('启动失败：') === 0 ? raw : ('启动失败：' + raw);
+    shizukuSetError(message);
+    showToast(message);
+  } finally {
+    SHIZUKU.busy = false;
+    await loadShizuku();
+  }
+}
+
+async function shizukuStop() {
+  if (SHIZUKU.busy) return;
+  if (!confirm('停止 Shizuku 会中断正在使用它的应用，继续？')) return;
+  SHIZUKU.busy = true;
+  shizukuSetError('');
+  shizukuApplyBusy();
+  try {
+    const res = await api('/api/shizuku/stop', { method: 'POST' });
+    const killed = Array.isArray(res.killedPids) && res.killedPids.length
+      ? ('（pid ' + res.killedPids.join(', ') + '）')
+      : '';
+    showToast(res.alreadyStopped ? '服务已经停止' : ('已停止' + killed));
+  } catch (e) {
+    const raw = e && e.message ? e.message : String(e);
+    const message = raw.indexOf('停止失败：') === 0 ? raw : ('停止失败：' + raw);
+    shizukuSetError(message);
+    showToast(message);
+  } finally {
+    SHIZUKU.busy = false;
+    await loadShizuku();
   }
 }
 

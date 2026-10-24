@@ -63,6 +63,75 @@ struct FeatureState {
     enabled: bool,
 }
 
+#[cfg(target_os = "android")]
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ShizukuStatus {
+    running: bool,
+    pid: Option<u32>,
+    pids: Vec<u32>,
+    uid: Option<u32>,
+    server_is_root: bool,
+    binder_reachable: Option<bool>,
+    package_name: String,
+    apk_path: String,
+    autostart: ShizukuAutostartStatus,
+    authorization: ShizukuAuthorizationStatus,
+    authorized_count: usize,
+}
+
+#[cfg(target_os = "android")]
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ShizukuAutostartStatus {
+    readable: bool,
+    enabled: bool,
+    last_result: String,
+    last_time: Option<i64>,
+    last_detail: Option<String>,
+    last_source: Option<String>,
+}
+
+#[cfg(target_os = "android")]
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ShizukuAuthorizationStatus {
+    exists: bool,
+    readable: bool,
+    mode: Option<String>,
+    owner_uid: Option<u32>,
+    owner_gid: Option<u32>,
+    size: Option<u64>,
+    total_count: usize,
+    allowed_count: usize,
+    denied_count: usize,
+    shell_only_count: usize,
+}
+
+#[cfg(target_os = "android")]
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ShizukuStartResult {
+    started: bool,
+    already_running: bool,
+    pid: Option<u32>,
+    pids: Vec<u32>,
+    package_name: String,
+    apk_path: String,
+    native_library_dir: String,
+    waited_ms: u64,
+}
+
+#[cfg(target_os = "android")]
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ShizukuStopResult {
+    stopped: bool,
+    already_stopped: bool,
+    killed_pids: Vec<u32>,
+    waited_ms: u64,
+}
+
 #[derive(Serialize)]
 struct ApiResponse<T: Serialize> {
     success: bool,
@@ -900,6 +969,538 @@ fn get_features() -> Result<Vec<FeatureState>> {
         FeatureState { id: 4, name: "SELinux 隐藏".to_string(), description: "对应用隐藏 SELinux 状态，提升兼容性".to_string(), value: 0, enabled: false },
         FeatureState { id: 999, name: "默认卸载模块".to_string(), description: "App Profile 中「卸载模块」的全局默认值，如果启用，会将未自定义 Profile 的应用移除所有模块针对系统的修改".to_string(), value: 1, enabled: true },
     ])
+}
+
+// ==================== 内置 Shizuku（只读 + 启停） ====================
+
+#[cfg(target_os = "android")]
+const SHIZUKU_PROCESS_NAME: &str = "shizuku_server";
+#[cfg(target_os = "android")]
+const SHIZUKU_SERVER_CLASS: &str = "rikka.shizuku.server.ShizukuService";
+#[cfg(target_os = "android")]
+const SHIZUKU_START_LOG: &str = "/data/local/tmp/shizuku_ksu.log";
+#[cfg(target_os = "android")]
+const SHIZUKU_CONFIG_FILE: &str = "/data/user_de/0/com.android.shell/shizuku.json";
+#[cfg(target_os = "android")]
+const SHIZUKU_START_TIMEOUT_MS: u64 = 10_000;
+#[cfg(target_os = "android")]
+const SHIZUKU_POLL_INTERVAL_MS: u64 = 200;
+#[cfg(target_os = "android")]
+const SHIZUKU_STOP_TIMEOUT_MS: u64 = 5_000;
+#[cfg(target_os = "android")]
+const SHIZUKU_STOP_POLL_INTERVAL_MS: u64 = 250;
+#[cfg(target_os = "android")]
+const SHIZUKU_FLAG_ALLOWED: i32 = 1 << 1;
+#[cfg(target_os = "android")]
+const SHIZUKU_FLAG_DENIED: i32 = 1 << 2;
+
+#[cfg(target_os = "android")]
+static SHIZUKU_OP_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+#[cfg(target_os = "android")]
+#[derive(Default)]
+struct ShizukuPrefs {
+    enabled: bool,
+    last_at: i64,
+    last_ok: bool,
+    last_detail: String,
+    last_source: String,
+}
+
+#[cfg(target_os = "android")]
+#[derive(serde::Deserialize, Default)]
+struct ShizukuConfigFile {
+    #[serde(default)]
+    packages: Vec<ShizukuPackageEntry>,
+}
+
+#[cfg(target_os = "android")]
+#[derive(serde::Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct ShizukuPackageEntry {
+    #[serde(default)]
+    flags: i32,
+    #[serde(default)]
+    shell_only: bool,
+}
+
+#[cfg(target_os = "android")]
+fn require_shizuku_root() -> Result<()> {
+    let euid = unsafe { libc::geteuid() };
+    if euid != 0 {
+        bail!("内置 Shizuku 管理需要 root 权限（当前 euid={euid}，请从桌面启动器进入）");
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "android")]
+fn shizuku_pids() -> Result<Vec<u32>> {
+    let mut pids = Vec::new();
+    if let Ok(output) = std::process::Command::new("/system/bin/pidof")
+        .arg(SHIZUKU_PROCESS_NAME)
+        .output()
+    {
+        for token in String::from_utf8_lossy(&output.stdout).split_whitespace() {
+            if let Ok(pid) = token.parse::<u32>()
+                && pid > 0
+                && !pids.contains(&pid)
+            {
+                pids.push(pid);
+            }
+        }
+    }
+    if pids.is_empty() {
+        pids = scan_shizuku_pids();
+    }
+    Ok(pids)
+}
+
+#[cfg(target_os = "android")]
+fn scan_shizuku_pids() -> Vec<u32> {
+    let mut pids = Vec::new();
+    let Ok(entries) = std::fs::read_dir("/proc") else {
+        return pids;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let Some(name) = name.to_str() else {
+            continue;
+        };
+        let Ok(pid) = name.parse::<u32>() else {
+            continue;
+        };
+        if is_shizuku_process(pid) {
+            pids.push(pid);
+        }
+    }
+    pids.sort_unstable();
+    pids
+}
+
+#[cfg(target_os = "android")]
+fn shizuku_process_uid(pid: u32) -> Option<u32> {
+    let status = std::fs::read_to_string(format!("/proc/{pid}/status")).ok()?;
+    let line = status.lines().find(|line| line.starts_with("Uid:"))?;
+    line.split_whitespace().nth(1)?.parse().ok()
+}
+
+#[cfg(target_os = "android")]
+fn is_shizuku_process(pid: u32) -> bool {
+    if let Ok(comm) = std::fs::read_to_string(format!("/proc/{pid}/comm"))
+        && comm.trim() == SHIZUKU_PROCESS_NAME
+    {
+        return true;
+    }
+    let Ok(bytes) = std::fs::read(format!("/proc/{pid}/cmdline")) else {
+        return false;
+    };
+    let text = String::from_utf8_lossy(&bytes);
+    if !text.contains(SHIZUKU_PROCESS_NAME) || !text.contains(SHIZUKU_SERVER_CLASS) {
+        return false;
+    }
+    // 排除 setsid/env 包装进程：它们的 cmdline 也带着完整参数，但 argv[0] 不是 app_process。
+    let first_arg = bytes.split(|byte| *byte == 0).next().unwrap_or_default();
+    String::from_utf8_lossy(first_arg).contains("app_process")
+}
+
+#[cfg(target_os = "android")]
+fn manager_apk_path() -> Result<String> {
+    let package = defs::DEFAULT_PACKAGE_NAME;
+    for (name, apk_path, _, _) in parse_pm_lines(&pm_query(&["-f", "-U"])) {
+        if name == package && !apk_path.is_empty() {
+            return Ok(apk_path);
+        }
+    }
+    let output = std::process::Command::new("pm")
+        .args(["path", package])
+        .output()
+        .context("执行 pm path 失败")?;
+    if output.status.success() {
+        for line in String::from_utf8_lossy(&output.stdout).lines() {
+            if let Some(path) = line.trim().strip_prefix("package:")
+                && !path.is_empty()
+            {
+                return Ok(path.to_string());
+            }
+        }
+    }
+    bail!("未找到管理器 {package} 的 APK 路径")
+}
+
+#[cfg(target_os = "android")]
+fn manager_native_library_dir(apk_path: &str) -> String {
+    let package = defs::DEFAULT_PACKAGE_NAME;
+    let dump = std::process::Command::new("cmd")
+        .args(["package", "dump", package])
+        .output()
+        .or_else(|_| {
+            std::process::Command::new("pm")
+                .args(["dump", package])
+                .output()
+        });
+    if let Ok(output) = dump
+        && output.status.success()
+    {
+        for line in String::from_utf8_lossy(&output.stdout).lines() {
+            if let Some(dir) = line.trim().strip_prefix("nativeLibraryDir=")
+                && !dir.is_empty()
+                && dir != "null"
+            {
+                return dir.to_string();
+            }
+        }
+    }
+    let abi = crate::utils::getprop("ro.product.cpu.abi").unwrap_or_default();
+    let abi_dir = match abi.as_str() {
+        "arm64-v8a" => "arm64",
+        "armeabi-v7a" => "arm",
+        other => other,
+    };
+    let parent = std::path::Path::new(apk_path)
+        .parent()
+        .map(|path| path.display().to_string())
+        .unwrap_or_default();
+    format!("{parent}/lib/{abi_dir}")
+}
+
+#[cfg(target_os = "android")]
+fn read_shizuku_prefs() -> Option<ShizukuPrefs> {
+    let path = format!(
+        "/data/user/0/{}/shared_prefs/shizuku_settings.xml",
+        defs::DEFAULT_PACKAGE_NAME
+    );
+    let xml = std::fs::read_to_string(path).ok()?;
+    let mut prefs = ShizukuPrefs::default();
+    prefs.enabled = pref_attr(&xml, "shizuku_service_enabled").is_some_and(|value| value == "true");
+    prefs.last_at = pref_attr(&xml, "autostart_last_at")
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(0);
+    prefs.last_ok = pref_attr(&xml, "autostart_last_ok").is_some_and(|value| value == "true");
+    prefs.last_detail = pref_string(&xml, "autostart_last_detail").unwrap_or_default();
+    prefs.last_source = pref_string(&xml, "autostart_last_source").unwrap_or_default();
+    Some(prefs)
+}
+
+#[cfg(target_os = "android")]
+fn pref_attr(xml: &str, key: &str) -> Option<String> {
+    let needle = format!("name=\"{key}\"");
+    let start = xml.find(&needle)? + needle.len();
+    let rest = &xml[start..];
+    let value_start = rest.find("value=\"")? + "value=\"".len();
+    let rest = &rest[value_start..];
+    let end = rest.find('"')?;
+    Some(rest[..end].to_string())
+}
+
+#[cfg(target_os = "android")]
+fn pref_string(xml: &str, key: &str) -> Option<String> {
+    let needle = format!("<string name=\"{key}\">");
+    let start = xml.find(&needle)? + needle.len();
+    let rest = &xml[start..];
+    let end = rest.find("</string>")?;
+    Some(xml_unescape(&rest[..end]))
+}
+
+#[cfg(target_os = "android")]
+fn xml_unescape(text: &str) -> String {
+    text.replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&apos;", "'")
+        .replace("&amp;", "&")
+}
+
+#[cfg(target_os = "android")]
+fn truncate_chars(text: &str, max: usize) -> String {
+    if text.chars().count() <= max {
+        return text.to_string();
+    }
+    text.chars().take(max).collect()
+}
+
+#[cfg(target_os = "android")]
+fn read_shizuku_authorization() -> ShizukuAuthorizationStatus {
+    let path = std::path::Path::new(SHIZUKU_CONFIG_FILE);
+    let mut status = ShizukuAuthorizationStatus {
+        exists: false,
+        readable: false,
+        mode: None,
+        owner_uid: None,
+        owner_gid: None,
+        size: None,
+        total_count: 0,
+        allowed_count: 0,
+        denied_count: 0,
+        shell_only_count: 0,
+    };
+    let Ok(metadata) = std::fs::metadata(path) else {
+        return status;
+    };
+    status.exists = metadata.is_file();
+    if !status.exists {
+        return status;
+    }
+    {
+        use std::os::unix::fs::MetadataExt;
+        status.mode = Some(format!("{:04o}", metadata.mode() & 0o7777));
+        status.owner_uid = Some(metadata.uid());
+        status.owner_gid = Some(metadata.gid());
+        status.size = Some(metadata.len());
+    }
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return status;
+    };
+    let Ok(config) = serde_json::from_str::<ShizukuConfigFile>(&text) else {
+        return status;
+    };
+    status.readable = true;
+    status.total_count = config.packages.len();
+    for entry in &config.packages {
+        if entry.flags & SHIZUKU_FLAG_ALLOWED != 0 {
+            status.allowed_count += 1;
+        }
+        if entry.flags & SHIZUKU_FLAG_DENIED != 0 {
+            status.denied_count += 1;
+        }
+        if entry.shell_only {
+            status.shell_only_count += 1;
+        }
+    }
+    status
+}
+
+#[cfg(target_os = "android")]
+fn tail_file(path: &str, max_bytes: usize) -> String {
+    let Ok(mut file) = std::fs::File::open(path) else {
+        return String::new();
+    };
+    let Ok(metadata) = file.metadata() else {
+        return String::new();
+    };
+    let start = metadata.len().saturating_sub(max_bytes as u64);
+    {
+        use std::io::{Seek, SeekFrom};
+        if file.seek(SeekFrom::Start(start)).is_err() {
+            return String::new();
+        }
+    }
+    let mut buffer = Vec::new();
+    if file.read_to_end(&mut buffer).is_err() {
+        return String::new();
+    }
+    String::from_utf8_lossy(&buffer)
+        .chars()
+        .filter(|ch| *ch == '\n' || *ch == '\t' || !ch.is_control())
+        .collect()
+}
+
+#[cfg(target_os = "android")]
+fn shizuku_status() -> Result<ShizukuStatus> {
+    let pids = shizuku_pids()?;
+    let pid = pids.first().copied();
+    let uid = pid.and_then(shizuku_process_uid);
+    let apk_path = manager_apk_path().unwrap_or_default();
+    let autostart = if let Some(prefs) = read_shizuku_prefs() {
+        let last_result = if prefs.last_at <= 0 {
+            "never"
+        } else if prefs.last_ok {
+            "success"
+        } else {
+            "failed"
+        };
+        ShizukuAutostartStatus {
+            readable: true,
+            enabled: prefs.enabled,
+            last_result: last_result.to_string(),
+            last_time: if prefs.last_at > 0 {
+                Some(prefs.last_at)
+            } else {
+                None
+            },
+            last_detail: if prefs.last_detail.is_empty() {
+                None
+            } else {
+                Some(truncate_chars(&prefs.last_detail, 200))
+            },
+            last_source: if prefs.last_source.is_empty() {
+                None
+            } else {
+                Some(prefs.last_source)
+            },
+        }
+    } else {
+        ShizukuAutostartStatus {
+            readable: false,
+            enabled: false,
+            last_result: "unknown".to_string(),
+            last_time: None,
+            last_detail: None,
+            last_source: None,
+        }
+    };
+    let authorization = read_shizuku_authorization();
+    let authorized_count = authorization.allowed_count;
+    Ok(ShizukuStatus {
+        running: !pids.is_empty(),
+        pid,
+        pids,
+        uid,
+        server_is_root: uid == Some(0),
+        binder_reachable: None,
+        package_name: defs::DEFAULT_PACKAGE_NAME.to_string(),
+        apk_path,
+        autostart,
+        authorization,
+        authorized_count,
+    })
+}
+
+#[cfg(target_os = "android")]
+fn shizuku_start() -> Result<ShizukuStartResult> {
+    let _guard = match SHIZUKU_OP_LOCK.try_lock() {
+        Ok(guard) => guard,
+        Err(_) => bail!("另一个 Shizuku 操作正在进行，请稍后重试"),
+    };
+
+    let existing = shizuku_pids()?;
+    if !existing.is_empty() {
+        let apk_path = manager_apk_path().unwrap_or_default();
+        let native_library_dir = if apk_path.is_empty() {
+            String::new()
+        } else {
+            manager_native_library_dir(&apk_path)
+        };
+        return Ok(ShizukuStartResult {
+            started: true,
+            already_running: true,
+            pid: existing.first().copied(),
+            pids: existing,
+            package_name: defs::DEFAULT_PACKAGE_NAME.to_string(),
+            apk_path,
+            native_library_dir,
+            waited_ms: 0,
+        });
+    }
+
+    let apk_path = manager_apk_path()?;
+    let native_library_dir = manager_native_library_dir(&apk_path);
+    let _ = std::fs::remove_file(SHIZUKU_START_LOG);
+    let log_file = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(true)
+        .write(true)
+        .open(SHIZUKU_START_LOG)
+        .with_context(|| format!("打开启动日志 {SHIZUKU_START_LOG} 失败"))?;
+    let log_err = log_file.try_clone().context("复制启动日志句柄失败")?;
+
+    let child = std::process::Command::new("/system/bin/setsid")
+        .arg("-d")
+        .arg("/system/bin/env")
+        .arg(format!("CLASSPATH={apk_path}"))
+        .arg("/system/bin/app_process")
+        .arg(format!("-Djava.class.path={apk_path}"))
+        .arg(format!("-Dshizuku.library.path={native_library_dir}"))
+        .arg(format!(
+            "-Dshizuku.manager.packageName={}",
+            defs::DEFAULT_PACKAGE_NAME
+        ))
+        .arg("/system/bin")
+        .arg("--nice-name=shizuku_server")
+        .arg("rikka.shizuku.server.ShizukuService")
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::from(log_file))
+        .stderr(std::process::Stdio::from(log_err))
+        .spawn()
+        .context("启动 shizuku_server 失败")?;
+
+    std::thread::spawn(move || {
+        let mut child = child;
+        let _ = child.wait();
+    });
+
+    let started_at = std::time::Instant::now();
+    loop {
+        let pids = shizuku_pids()?;
+        if !pids.is_empty() {
+            return Ok(ShizukuStartResult {
+                started: true,
+                already_running: false,
+                pid: pids.first().copied(),
+                pids,
+                package_name: defs::DEFAULT_PACKAGE_NAME.to_string(),
+                apk_path,
+                native_library_dir,
+                waited_ms: started_at.elapsed().as_millis() as u64,
+            });
+        }
+        if started_at.elapsed() >= std::time::Duration::from_millis(SHIZUKU_START_TIMEOUT_MS) {
+            let tail = tail_file(SHIZUKU_START_LOG, 2048);
+            let detail = if tail.is_empty() {
+                "启动日志为空".to_string()
+            } else {
+                format!("日志尾部：{tail}")
+            };
+            bail!("10 秒内没有看到 shizuku_server 进程；{detail}");
+        }
+        std::thread::sleep(std::time::Duration::from_millis(SHIZUKU_POLL_INTERVAL_MS));
+    }
+}
+
+#[cfg(target_os = "android")]
+fn shizuku_stop() -> Result<ShizukuStopResult> {
+    let _guard = match SHIZUKU_OP_LOCK.try_lock() {
+        Ok(guard) => guard,
+        Err(_) => bail!("另一个 Shizuku 操作正在进行，请稍后重试"),
+    };
+
+    let pids = shizuku_pids()?;
+    if pids.is_empty() {
+        return Ok(ShizukuStopResult {
+            stopped: true,
+            already_stopped: true,
+            killed_pids: Vec::new(),
+            waited_ms: 0,
+        });
+    }
+
+    let mut killed = Vec::new();
+    for pid in &pids {
+        if !is_shizuku_process(*pid) {
+            bail!("拒绝结束非 shizuku_server 进程（pid {pid}）");
+        }
+        let rc = unsafe { libc::kill(*pid as i32, libc::SIGKILL) };
+        if rc != 0 {
+            let error = std::io::Error::last_os_error();
+            if error.raw_os_error() != Some(libc::ESRCH) {
+                bail!("向 pid {pid} 发送 SIGKILL 失败：{error}");
+            }
+        }
+        killed.push(*pid);
+    }
+
+    let started_at = std::time::Instant::now();
+    loop {
+        let remaining = shizuku_pids()?;
+        if remaining.is_empty() {
+            return Ok(ShizukuStopResult {
+                stopped: true,
+                already_stopped: false,
+                killed_pids: killed,
+                waited_ms: started_at.elapsed().as_millis() as u64,
+            });
+        }
+        if started_at.elapsed() >= std::time::Duration::from_millis(SHIZUKU_STOP_TIMEOUT_MS) {
+            let pids = remaining
+                .iter()
+                .map(|pid| pid.to_string())
+                .collect::<Vec<_>>()
+                .join(", ");
+            bail!("5 秒后 shizuku_server 仍在运行（pid {pids}）");
+        }
+        std::thread::sleep(std::time::Duration::from_millis(
+            SHIZUKU_STOP_POLL_INTERVAL_MS,
+        ));
+    }
 }
 
 #[cfg(target_os = "android")]
@@ -2385,6 +2986,49 @@ fn handle_request(stream: &mut TcpStream, req: &HttpRequest, peer: Option<u32>) 
                         json_response(stream, &ApiResponse::ok(format!("已完成 {done}/3 个阶段")))
                     }
                     Err(e) => error_response(stream, 500, &format!("重载失败：{e:#}")),
+                }
+            }
+            #[cfg(not(target_os = "android"))]
+            {
+                error_response(stream, 500, "Not supported on this platform")
+            }
+        }
+
+        // 内置 Shizuku：状态只读；启停只操作 shizuku_server 自身。
+        ("GET", "/api/shizuku/status") => {
+            #[cfg(target_os = "android")]
+            {
+                match shizuku_status() {
+                    Ok(status) => json_response(stream, &ApiResponse::ok(status)),
+                    Err(e) => error_response(stream, 500, &format!("{e:#}")),
+                }
+            }
+            #[cfg(not(target_os = "android"))]
+            {
+                error_response(stream, 500, "Not supported on this platform")
+            }
+        }
+
+        ("POST", "/api/shizuku/start") => {
+            #[cfg(target_os = "android")]
+            {
+                match require_shizuku_root().and_then(|()| shizuku_start()) {
+                    Ok(result) => json_response(stream, &ApiResponse::ok(result)),
+                    Err(e) => error_response(stream, 500, &format!("启动失败：{e:#}")),
+                }
+            }
+            #[cfg(not(target_os = "android"))]
+            {
+                error_response(stream, 500, "Not supported on this platform")
+            }
+        }
+
+        ("POST", "/api/shizuku/stop") => {
+            #[cfg(target_os = "android")]
+            {
+                match require_shizuku_root().and_then(|()| shizuku_stop()) {
+                    Ok(result) => json_response(stream, &ApiResponse::ok(result)),
+                    Err(e) => error_response(stream, 500, &format!("停止失败：{e:#}")),
                 }
             }
             #[cfg(not(target_os = "android"))]
