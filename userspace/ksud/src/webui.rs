@@ -783,7 +783,6 @@ fn serve_module_asset_by_referer(
     error_response(stream, 500, "Not supported on this platform")
 }
 
-#[cfg(target_os = "android")]
 /// 重载模块：按开机那三个阶段的顺序各跑一次 ksud 子命令。
 ///
 /// 管理器的"重载模块"就是这么做的（`ksud post-fs-data` / `services` /
@@ -801,6 +800,7 @@ fn reload_modules_via_cli() -> Result<u32> {
     Ok(done)
 }
 
+#[cfg(target_os = "android")]
 fn get_features() -> Result<Vec<FeatureState>> {
     let features = [
         (
@@ -809,7 +809,11 @@ fn get_features() -> Result<Vec<FeatureState>> {
             "允许通过 /system/bin/su 获取 Root 权限",
         ),
         (1, "卸载模块（内核级）", "在内核给需要的应用卸载模块"),
-        (2, "记录 Root 操作日志", "把 su 授权、模块挂载等事件写入 sulog 文件"),
+        (
+            2,
+            "记录 Root 操作日志",
+            "把 su 授权、模块挂载等事件写入 sulog 文件",
+        ),
         (3, "ADB Root", "允许 adbd 以 root 身份运行"),
         (4, "隐藏 SELinux 修改", "阻止应用检测 SELinux 修改"),
         (
@@ -2377,10 +2381,9 @@ fn handle_request(stream: &mut TcpStream, req: &HttpRequest, peer: Option<u32>) 
             #[cfg(target_os = "android")]
             {
                 match reload_modules_via_cli() {
-                    Ok(done) => json_response(
-                        stream,
-                        &ApiResponse::ok(format!("已完成 {done}/3 个阶段")),
-                    ),
+                    Ok(done) => {
+                        json_response(stream, &ApiResponse::ok(format!("已完成 {done}/3 个阶段")))
+                    }
                     Err(e) => error_response(stream, 500, &format!("重载失败：{e:#}")),
                 }
             }

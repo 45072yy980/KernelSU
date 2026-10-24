@@ -237,6 +237,28 @@ versionCode = major × 10000 + minor × 1000 + patch × 100 + tag 之后的提�
 
 ## 5. 更新记录
 
+### v4.1.0-ultra
+
+这一版处理四件事：自动提权不再依赖"往内核里注入"，导航入口不再整条消失，Material 3 设置页清掉残留项，网页端补上本项目自己的设置。
+
+#### 自动提权并越狱：改用开机自启权限
+- 3.x/4.0 的开关会顺带打开 `com.mngr.app.magica.BootCompletedReceiver`，由 app zygote 的 preload 直接 exec `ksud late-load` —— 完整重启后越狱用户没有 root，这条路径等于"在没有权限的情况下往内核里注入模块"，既不会成功，失败还会留下痕迹。
+- 4.1 断开这条链路：开关**只写偏好**，真正的提权由 `AutoEscalationBootReceiver` 用普通应用就有的 `RECEIVE_BOOT_COMPLETED` 权限触发，在应用进程里跑随包内置的提权链（和手动点"提权"同一条路），不预先假设有 root，也不写系统分区。
+- 新增开机守卫：本次开机只尝试一次（按 `boot_id` 判重）、连续失败 3 次自动暂停、安全模式直接跳过；手动"立即尝试"会把失败计数清零，让下次开机重新有机会。
+
+#### 导航入口置灰
+- 五个导航组件原本都是 `if (!Natives.isFullFeatured()) return`：内核模块没加载时整条导航消失，只剩首页一张"未安装"卡片。
+- 现在入口常驻、整体置灰，点一下弹出原因与恢复入口（安全模式 / 尚未提权 / 内核模块未加载三种判定，越狱未提权优先于"未加载"，避免误导），并可直接跳回首页处理。
+
+#### Material 3 设置页清理
+- 主设置页还留着已经迁到「基础功能设置」的整块开关：su compat、sulog、ADB root、内核卸载、SELinux 隐藏、Shell su 仅 ADB、默认卸载模块、Web 调试、软重启，以及已废弃的"自动越狱"和"应用配置模板"。
+- 4.1 全部移除，三套皮肤口径一致：主设置页只保留「通用 / 外观 / 功能入口 / 关于 / 危险操作」，具体开关统一在基础功能设置里。
+
+#### 网页端
+- 新增「内核特性」区块：直接读写内核 supercall，列出并切换 su compat、内核级卸载、sulog、ADB Root、SELinux 隐藏、Shell su 仅 ADB、系统分区守卫、运行时分区守卫，不支持的特性会置灰并注明。
+- 新增「工具」区块：重载模块（按 `post-fs-data` / `services` / `boot-completed` 三个阶段重跑）与软重启（保留当前 root 会话）。
+- 后端 `/api/features` 补齐本分支的特性清单，并新增 `/api/tools/reload-modules`。
+
 ### v4.0.0-ultra
 
 **这是更名后的第一个大版本。** 管理器包名从 `me.diksu.kernelsu` 改为 `me.diksu.ultra`，应用名改为 **Diksu Ultra**。
