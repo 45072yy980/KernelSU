@@ -376,8 +376,8 @@ grep -n "getVersionCode" manager/build.gradle.kts | head
   悬浮底栏拖到不可用项时内部高亮可能先移动再复位。
 - **tag 不在 HEAD**：`v4.1.0-ultra` 之后已有 18 个提交，现在重编会得到 `41018` 而不是 `41000`。
   发版二选一：把 tag 移到最终 HEAD 再构建，或直接起 `4.1.1`。
-  本轮最终自用包是 `DiksuUltra_4.1.0-arm64_selfuse_41018.apk`（`e1e3fcd7` 上构建，versionCode 41018，
-  含网页端拆分与视觉重构；run `40150587088`）。中途那个 41014 的包只到 SuSFS/Shizuku，可丢弃。
+  本轮最终自用包是 `DiksuUltra_4.1.0-arm64_selfuse_41019.apk`（`0e337751` 上构建，versionCode 41019，
+  含网页端拆分、视觉重构与旧名修复；run `40152685930`）。41014/41018 两个中间包已删除。
 - **Material 6 处中文硬编码**待抽资源，8 个 key 已列在 `docs/material3-audit.md` 第六节。
 - **`setAutoJailbreak` 是死代码**：BasicRow 已删，但 `SettingsViewModel` / `SettingsScreenActions`
   里还留着引用，要清需再动 2 个文件。
