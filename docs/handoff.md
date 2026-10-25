@@ -326,6 +326,9 @@ grep -n "getVersionCode" manager/build.gradle.kts | head
 > | Build Manager（dispatch，`abi=arm64-v8a` 自用包） | `40144362274` | ✅ success |
 > | Clippy check | `40143631600` | ✅ success |
 > | Rustfmt check | `40143631581` | ✅ success（第一次 `40143337455` 红在 `uid_scheme` 换行，已修） |
+> | Build Manager（拆分提交 `7dede5cb`） | `40146685186` | ✅ success |
+> | Build Manager（视觉+文档 `e1e3fcd7`） | `40149887152` | ✅ success |
+> | Build Manager（dispatch，最终 arm64 自用包） | `40150587088` | ✅ success |
 >
 > 结论：**Kotlin 与 Rust 都真实编译通过**——`webui.rs` 新增的 SuSFS/Shizuku 接口、导航置灰的
 > 五个组件、Material 修复都在编译范围内。ShellCheck 未触发（它按 `*.sh` 过滤，本轮没改脚本）。
@@ -371,9 +374,10 @@ grep -n "getVersionCode" manager/build.gradle.kts | head
 - **导航置灰的三个已知边界**（没解决，别当成已解决）：
   Pager 滑动仍可到达不可用页；`Natives.isFullFeatured()` 不是 Compose State，提权成功后要等重组；
   悬浮底栏拖到不可用项时内部高亮可能先移动再复位。
-- **tag 不在 HEAD**：`v4.1.0-ultra` 之后已有 15 个提交，现在重编会得到 `41015` 而不是 `41000`。
+- **tag 不在 HEAD**：`v4.1.0-ultra` 之后已有 18 个提交，现在重编会得到 `41018` 而不是 `41000`。
   发版二选一：把 tag 移到最终 HEAD 再构建，或直接起 `4.1.1`。
-  本轮自用包是 `DiksuUltra_4.1.0-arm64_selfuse_41014.apk`（`248c5b8a` 上构建，versionCode 41014）。
+  本轮最终自用包是 `DiksuUltra_4.1.0-arm64_selfuse_41018.apk`（`e1e3fcd7` 上构建，versionCode 41018，
+  含网页端拆分与视觉重构；run `40150587088`）。中途那个 41014 的包只到 SuSFS/Shizuku，可丢弃。
 - **Material 6 处中文硬编码**待抽资源，8 个 key 已列在 `docs/material3-audit.md` 第六节。
 - **`setAutoJailbreak` 是死代码**：BasicRow 已删，但 `SettingsViewModel` / `SettingsScreenActions`
   里还留着引用，要清需再动 2 个文件。

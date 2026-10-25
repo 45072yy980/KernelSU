@@ -6,7 +6,7 @@ let appList = [];
 let moduleList = [];
 let systemInfoCache = null;
 
-const pageTitles = { home: 'DikSU', superuser: '超级用户', modules: '模块', settings: '设置', files: '文件管理', keymint: 'keyMint 配置' };
+const pageTitles = { home: 'Diksu Ultra', superuser: '超级用户', modules: '模块', settings: '设置', files: '文件管理', keymint: 'keyMint 配置' };
 
 async function api(path, options = {}) {
   try {
@@ -672,7 +672,7 @@ async function loadHome() {
     `}).join('');
 
     container.innerHTML = `
-      <div class="card card-clickable" onclick="showToast('DikSU 工作正常')">
+      <div class="card card-clickable" onclick="showToast('Diksu Ultra 工作正常')">
         <div class="status-card">
           <div class="status-label">工作状态</div>
           <div class="status-value" style="display:flex;align-items:center;gap:8px;">
@@ -699,7 +699,7 @@ async function loadHome() {
       <div class="section-title">功能开关</div>
       <div class="card">${featuresHtml}</div>
     `;
-    document.getElementById('versionInfo').textContent = 'DikSU v' + info.version;
+    document.getElementById('versionInfo').textContent = 'Diksu Ultra v' + info.version;
   } catch (e) {
     container.innerHTML = `
       <div class="card">
