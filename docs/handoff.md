@@ -317,9 +317,18 @@ grep -n "getVersionCode" manager/build.gradle.kts | head
 
 ## 十一、4.2 开发轮进展（2026-10-25，未发版）
 
-> **最重要的一句：这一轮一次 CI 都没跑。** harness 进程里没有 `DSH_GIT_TOKEN`，
-> `git_push` / `ci_*` 全部不可用；所有 Rust/Kotlin 改动只做了静态自检，**没有编译验证**。
-> 下一轮第一件事就是配好 token 跑 `build-manager` + `clippy` + `rustfmt`。
+> **状态：CI 已全绿。** 本轮前半段因为 harness 里没有 `DSH_GIT_TOKEN`，一次 CI 都没跑；
+> 后半段拿到 token 后推送并验证通过：
+>
+> | 工作流 | run | 结论 |
+> |---|---|---|
+> | Build Manager（push：管理器 APK + ksud + LKM + repack） | `40143631687` | ✅ success |
+> | Build Manager（dispatch，`abi=arm64-v8a` 自用包） | `40144362274` | ✅ success |
+> | Clippy check | `40143631600` | ✅ success |
+> | Rustfmt check | `40143631581` | ✅ success（第一次 `40143337455` 红在 `uid_scheme` 换行，已修） |
+>
+> 结论：**Kotlin 与 Rust 都真实编译通过**——`webui.rs` 新增的 SuSFS/Shizuku 接口、导航置灰的
+> 五个组件、Material 修复都在编译范围内。ShellCheck 未触发（它按 `*.sh` 过滤，本轮没改脚本）。
 
 ### 11.1 提交清单（按时间顺序）
 
@@ -332,14 +341,17 @@ grep -n "getVersionCode" manager/build.gradle.kts | head
 | `9ef3767c` | Material 巡检修 3 处 + `docs/material3-audit.md`（25 页逐行结论） |
 | `04f25daf` | `docs/device-verification-4.1.md` + 网页端 Shizuku / 视觉重构两份方案 |
 | `5addaf62` | 网页端内置 Shizuku 管理：3 条 API + 设置页卡片（只读 + 启停，授权仍回 App） |
+| `af8dbdd1` | 本文件第十一节（4.2 进展） |
+| `248c5b8a` | rustfmt：`uid_scheme` 链式换行（CI 唯一红点） |
 
 ### 11.2 环境问题（下一轮开工先处理）
 
-1. **没有 git token**：`DSH_GIT_TOKEN` / `GITHUB_TOKEN` / `GH_TOKEN` 在 harness 进程环境里都不存在。
-   要在启动 harness 的环境里 `export DSH_GIT_TOKEN=<新 PAT>` 再重启；上一轮泄露的 PAT 必须先吊销。
+1. **git token 仍是硬伤**：harness 进程环境里 `DSH_GIT_TOKEN` / `GITHUB_TOKEN` / `GH_TOKEN` 都没有。
+   本轮后半段是用户把一个 PAT **直接贴在对话里**才推上去的——这个 token 等同已泄露，**必须吊销重发**。
+   下一轮请务必在启动 harness 的环境里 `export DSH_GIT_TOKEN=<新 PAT>` 再重启，不要再走对话。
 2. **插件 `repoPath`**：harness 的 cwd 是 `/root`，插件默认拿 `process.cwd()` 当仓库路径，
    导致所有 git 工具在 `/root` 上跑。已把 `repoPath: /sdcard/diksu` 写进
-   `~/.dsh/profiles/web/cordis.patch.yml`，**重启 harness 后生效**。
+   `~/.dsh/profiles/web/cordis.patch.yml`，**重启 harness 后生效**（本轮重启后 `git_status` 已验证正常）。
 3. **设备通道**：无障碍（`ACCESSIBILITY_UNAVAILABLE`）与设备 shell（`DEVICE_CHANNEL_UNAVAILABLE`）
    都未授权，`/app/ui/*` 与 `adb-shell` 用不了。真机核验按用户要求取消，只留了只读证据。
 4. **github.com 直连不稳**：`curl https://github.com` 能回 200 但 body 传 16KB 就挂住，
@@ -347,15 +359,18 @@ grep -n "getVersionCode" manager/build.gradle.kts | head
 
 ### 11.3 必须优先确认的风险
 
-- **编译风险最高三处**（本地没编译，CI 红了先看这里）：
-  1. Miuix `NavigationBarItem(modifier = Modifier.weight(1f).alpha(...))`；
-  2. Material3 `BadgedBox(modifier = ...)` 与 `ShortNavigationBarItem` 的 icon/label slot；
-  3. `webui.rs` 里 Shizuku 启停的进程管理（`setsid -d` + `app_process` argv、`libc::kill`）。
+- **编译已过，运行未验**：Build Manager / Clippy / Rustfmt 全绿，编译级风险清零。
+  剩下的都是运行期问题，按优先级：
+  1. Shizuku 启停的真实行为（`setsid -d` 是否被目标 ROM 的 toybox 支持、`app_process` argv 顺序、
+     `pidof shizuku_server` 是否存在；失败时看 `/data/local/tmp/shizuku_ksu.log`）；
+  2. SuSFS 面板的开关/规则是否真作用于 `/proc/susfs_*`；
+  3. 网页端新增的 402 行 JS 只能在浏览器里回归。
 - **导航置灰的三个已知边界**（没解决，别当成已解决）：
   Pager 滑动仍可到达不可用页；`Natives.isFullFeatured()` 不是 Compose State，提权成功后要等重组；
   悬浮底栏拖到不可用项时内部高亮可能先移动再复位。
-- **tag 不在 HEAD**：`v4.1.0-ultra` 之后已有 7 个提交，现在重编会得到 `41007` 而不是 `41000`。
+- **tag 不在 HEAD**：`v4.1.0-ultra` 之后已有 15 个提交，现在重编会得到 `41015` 而不是 `41000`。
   发版二选一：把 tag 移到最终 HEAD 再构建，或直接起 `4.1.1`。
+  本轮自用包是 `DiksuUltra_4.1.0-arm64_selfuse_41014.apk`（`248c5b8a` 上构建，versionCode 41014）。
 - **Material 6 处中文硬编码**待抽资源，8 个 key 已列在 `docs/material3-audit.md` 第六节。
 - **`setAutoJailbreak` 是死代码**：BasicRow 已删，但 `SettingsViewModel` / `SettingsScreenActions`
   里还留着引用，要清需再动 2 个文件。
