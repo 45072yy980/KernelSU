@@ -21,6 +21,12 @@ use crate::webui_spawn;
 
 const INDEX_HTML: &str = include_str!("../assets/web/index.html");
 
+const APP_CSS: &str = include_str!("../assets/web/app.css");
+const APP_JS: &str = include_str!("../assets/web/app.js");
+
+/// 内置前端资产用短缓存；文件名没有版本号，60 秒足够避免开发时反复拉旧文件。
+const BUILTIN_ASSET_CACHE: &str = "Cache-Control: public, max-age=60\r\n";
+
 const HIDE_MANAGER_FLAG: &str = "/data/adb/ksu/hide_manager";
 
 const KSU_BRIDGE: &str = concat!(
@@ -2313,8 +2319,35 @@ fn bridge_packages_info(names: &[String]) -> Vec<serde_json::Value> {
         .collect()
 }
 
+/// 返回内置网页资产（app.css / app.js）。
+///
+/// 放在令牌校验之前调用：WebView 的子资源请求不一定会带上首页响应里种的 cookie，
+/// 若按普通路由鉴权，会出现“首页能开、css/js 403”的半坏状态。服务只监听
+/// 127.0.0.1，且这两个文件不含用户数据。
+fn serve_builtin_web_asset(stream: &mut TcpStream, path: &str) -> Option<Result<()>> {
+    let (body, content_type) = match path {
+        "/ui/app.css" => (APP_CSS.as_bytes(), "text/css; charset=utf-8"),
+        "/ui/app.js" => (APP_JS.as_bytes(), "application/javascript; charset=utf-8"),
+        _ => return None,
+    };
+    Some(send_response_with(
+        stream,
+        200,
+        content_type,
+        body,
+        BUILTIN_ASSET_CACHE,
+    ))
+}
+
 fn handle_request(stream: &mut TcpStream, req: &HttpRequest, peer: Option<u32>) -> Result<()> {
     let path = req.path.split('?').next().unwrap_or("/");
+
+    // 内置前端资产在令牌校验之前返回，避免子资源 403；非 Android 构建同样可用。
+    if req.method == "GET" {
+        if let Some(result) = serve_builtin_web_asset(stream, path) {
+            return result;
+        }
+    }
 
     let redeemed = query_param(req, "t").is_some_and(|ticket| redeem_ticket(&ticket, peer));
     if req.method != "OPTIONS" && !redeemed && !token_matches(&request_token(req)) {

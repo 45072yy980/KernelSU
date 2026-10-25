@@ -1,0 +1,4222 @@
+if (/[?&](k|t)=/.test(location.search)) history.replaceState(null, '', location.pathname);
+addEventListener('pagehide', () => { try { navigator.sendBeacon('/api/close'); } catch (e) {} });
+const API_BASE = '';
+let kernelInfo = null;
+let appList = [];
+let moduleList = [];
+let systemInfoCache = null;
+
+const pageTitles = { home: 'DikSU', superuser: '超级用户', modules: '模块', settings: '设置', files: '文件管理', keymint: 'keyMint 配置' };
+
+async function api(path, options = {}) {
+  try {
+    const res = await fetch(API_BASE + path, options);
+    const data = await res.json();
+    if (data.success) return data.data;
+    throw new Error(data.error || 'Request failed');
+  } catch (e) {
+    console.error('API error:', e);
+    throw e;
+  }
+}
+
+function fmSyncNavIndex(page) {
+  const bar = document.querySelector('.bottombar');
+  if (!bar) return;
+  const items = Array.from(bar.querySelectorAll('.bottombar-item'));
+  bar.style.setProperty('--nav-index', String(Math.max(0, items.findIndex(item => item.dataset.page === page))));
+}
+
+function fmInitNavGlass() {
+  const bar = document.querySelector('.bottombar');
+  if (!bar) return;
+  const point = event => (event.touches && event.touches[0]) || event;
+  const track = event => {
+    const rect = bar.getBoundingClientRect();
+    if (!rect.width) return;
+    const x = Math.min(Math.max(point(event).clientX - rect.left, 0), rect.width);
+    bar.style.setProperty('--nav-light-x', (x / rect.width * 100).toFixed(1) + '%');
+  };
+  const release = () => {
+    bar.classList.remove('pressing', 'dragging');
+    bar.style.setProperty('--nav-light-x', '50%');
+  };
+
+  bar.addEventListener('pointerdown', event => {
+    bar.classList.add('pressing');
+    track(event);
+  });
+  bar.addEventListener('pointermove', event => {
+    if (!bar.classList.contains('pressing')) return;
+    bar.classList.add('dragging');
+    track(event);
+  });
+  bar.addEventListener('pointerup', release);
+  bar.addEventListener('pointercancel', release);
+  bar.addEventListener('pointerleave', release);
+}
+
+function switchPage(page) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-' + page).classList.add('active');
+  document.querySelectorAll('.bottombar-item').forEach(item => {
+    item.classList.toggle('active', item.dataset.page === page);
+  });
+  fmSyncNavIndex(page);
+  document.getElementById('topbarTitle').textContent = pageTitles[page];
+  document.getElementById('fab').style.display = page === 'modules' ? 'flex' : 'none';
+  document.getElementById('content').scrollTop = 0;
+  document.body.classList.toggle('fm-mode', isSubPage(page));
+  document.body.classList.toggle('fm-files', page === 'files');
+  fmSyncTopbar(page);
+  if (page === 'settings') {}
+}
+
+
+const THEME_MODES = [
+  { id: 'system', label: '原版' },
+  { id: 'light', label: '浅色' },
+  { id: 'dark', label: '深色' },
+  { id: 'amoled', label: '深色 AMOLED' },
+];
+
+const THEME_KEY_COLOURS = [
+  ['#f44336', '红'], ['#e91e63', '粉'], ['#9c27b0', '紫'], ['#673ab7', '深紫'],
+  ['#3f51b5', '靛蓝'], ['#2196f3', '蓝'], ['#00bcd4', '青'], ['#009688', '蓝绿'],
+  ['#4faf50', '绿'], ['#ffeb3b', '黄'], ['#ffc107', '琥珀'], ['#ff9800', '橙'],
+  ['#795548', '棕'], ['#607d8f', '蓝灰'], ['#ff9ca8', '樱粉'],
+];
+
+const THEME_STYLES = {
+  TonalSpot: { shift: 0, chroma: 36, neutral: 6 },
+  Neutral: { shift: 0, chroma: 12, neutral: 4 },
+  Vibrant: { shift: 0, chroma: 150, neutral: 8 },
+  Expressive: { shift: 240, chroma: 40, neutral: 6 },
+  Rainbow: { shift: 0, chroma: 48, neutral: 8 },
+  FruitSalad: { shift: 0, chroma: 48, neutral: 8 },
+  Monochrome: { shift: 0, chroma: 0, neutral: 0 },
+  Fidelity: { source: true },
+  Content: { source: true, neutral: 12 },
+};
+const THEME_STYLE_NAMES = Object.keys(THEME_STYLES);
+
+const THEME_SPECS = ['SPEC_2025', 'SPEC_2021'];
+const THEME_SPEC_2025_STYLES = ['TonalSpot', 'Neutral', 'Vibrant', 'Expressive'];
+
+const THEME = { mode: 'system', seed: '', style: 'TonalSpot', spec: 'SPEC_2025', blur: true, floatBar: true, glass: false };
+
+const THEME_CACHE = 'ksu-theme-state';
+
+const THEME_TONES = ['--accent', '--accent-light', '--switch-active', '--on-accent',
+  '--status-working', '--status-working-text'];
+
+const THEME_SURFACE_TONES = {
+  light: {
+    '--bg-primary': [98, 1],
+    '--bg-secondary': [94, 1.3],
+    '--bg-tertiary': [92, 1.3],
+    '--btn-bg': [90, 1.3],
+    '--card-hover': [96, 1.15],
+    '--border': [86, 1.2],
+  },
+  dark: {
+    '--bg-primary': [6, 1],
+    '--bg-secondary': [12, 1.3],
+    '--bg-tertiary': [17, 1.3],
+    '--btn-bg': [20, 1.3],
+    '--card-hover': [15, 1.15],
+    '--border': [26, 1.2],
+  },
+};
+
+const THEME_WRITABLE = THEME_TONES.concat(
+  Object.keys(THEME_SURFACE_TONES.light), ['--topbar-bg', '--bottombar-bg']);
+
+
+function themeLinear(v) {
+  const c = v / 255;
+  return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+}
+
+function themeUnlinear(v) {
+  const c = v <= 0.0031308 ? v * 12.92 : 1.055 * Math.pow(v, 1 / 2.4) - 0.055;
+  return Math.round(Math.max(0, Math.min(1, c)) * 255);
+}
+
+function themeHexToRgb(hex) {
+  return [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16));
+}
+
+function themeHex(rgb) {
+  return '#' + rgb.map(v => v.toString(16).padStart(2, '0')).join('');
+}
+
+function themeRgbToTone(hex) {
+  const [r, g, b] = themeHexToRgb(hex).map(themeLinear);
+  const x = (0.4124 * r + 0.3576 * g + 0.1805 * b) / 0.95047;
+  const y = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  const z = (0.0193 * r + 0.1192 * g + 0.9505 * b) / 1.08883;
+  const f = t => (t > 0.008856 ? Math.cbrt(t) : 7.787 * t + 16 / 116);
+  const [fx, fy, fz] = [f(x), f(y), f(z)];
+  const a = 500 * (fx - fy);
+  const bb = 200 * (fy - fz);
+  return {
+    tone: 116 * fy - 16,
+    chroma: Math.hypot(a, bb),
+    hue: ((Math.atan2(bb, a) * 180) / Math.PI + 360) % 360,
+  };
+}
+
+function themeToneToRgb(tone, chroma, hue) {
+  const rad = (hue * Math.PI) / 180;
+  const finv = t => {
+    const cube = t * t * t;
+    return cube > 0.008856 ? cube : (t - 16 / 116) / 7.787;
+  };
+  for (let c = chroma; c >= 0; c -= 1) {
+    const fy = (tone + 16) / 116;
+    const fx = fy + (Math.cos(rad) * c) / 500;
+    const fz = fy - (Math.sin(rad) * c) / 200;
+    const x = finv(fx) * 0.95047;
+    const y = finv(fy);
+    const z = finv(fz) * 1.08883;
+    const rgb = [
+      3.2406 * x - 1.5372 * y - 0.4986 * z,
+      -0.9689 * x + 1.8758 * y + 0.0415 * z,
+      0.0557 * x - 0.204 * y + 1.057 * z,
+    ];
+    if (rgb.every(v => v >= -0.002 && v <= 1.002)) return themeHex(rgb.map(themeUnlinear));
+  }
+  return '#000000';
+}
+
+function themeEffectiveSpec() {
+  if (THEME.spec === 'SPEC_2025' && THEME_SPEC_2025_STYLES.includes(THEME.style)) return 'SPEC_2025';
+  return 'SPEC_2021';
+}
+
+function themePalette(seed, dark) {
+  const style = THEME_STYLES[THEME.style] || THEME_STYLES.TonalSpot;
+  const base = themeRgbToTone(seed);
+  const hue = (base.hue + (style.shift || 0)) % 360;
+  const chroma = style.source ? base.chroma : style.chroma;
+  const neutral = style.neutral === undefined ? 6 : style.neutral;
+  const spec2025 = themeEffectiveSpec() === 'SPEC_2025';
+
+  const accent = themeToneToRgb(dark ? (spec2025 ? 80 : 74) : spec2025 ? 40 : 45, chroma, hue);
+  const tones = {
+    '--accent': accent,
+    '--accent-light': themeToneToRgb(dark ? 30 : 90, Math.max(6, chroma * 0.35), hue),
+    '--switch-active': accent,
+    '--on-accent': dark ? themeToneToRgb(20, Math.max(4, chroma * 0.3), hue) : '#ffffff',
+    '--status-working': themeToneToRgb(dark ? 30 : 90, Math.max(8, chroma * 0.5), hue),
+    '--status-working-text': themeToneToRgb(dark ? 90 : 15, Math.max(6, chroma * 0.5), hue),
+  };
+
+  const ladder = THEME_SURFACE_TONES[dark ? 'dark' : 'light'];
+  for (const [name, [tone, scale]] of Object.entries(ladder)) {
+    tones[name] = themeToneToRgb(tone, neutral * (scale || 1), hue);
+  }
+  const bar = themeRgba(themeToneToRgb(dark ? 6 : 98, neutral, hue), 0.72);
+  tones['--topbar-bg'] = bar;
+  tones['--bottombar-bg'] = bar;
+  return tones;
+}
+
+const THEME_WALLPAPER = 'wallpaper';
+
+const THEME_WALLPAPERS = [
+  '/data/system/users/0/wallpaper',
+  '/data/system/users/0/wallpaper_orig',
+  '/data/system/users/0/wallpaper_lock',
+];
+
+THEME.auto = '';
+
+function themeDominant(image) {
+  const size = 48;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = Math.max(1, Math.round(size * image.height / image.width));
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+  const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+  const buckets = new Map();
+  for (let i = 0; i < data.length; i += 4) {
+    const r = data[i], g = data[i + 1], b = data[i + 2];
+    const max = Math.max(r, g, b) / 255;
+    const min = Math.min(r, g, b) / 255;
+    const light = (max + min) / 2;
+    const sat = max === min ? 0 : (max - min) / (light > 0.5 ? 2 - max - min : max + min);
+    if (light < 0.12 || light > 0.92 || sat < 0.18) continue;
+    const key = ((r >> 4) << 8) | ((g >> 4) << 4) | (b >> 4);
+    const hit = buckets.get(key) || { r: 0, g: 0, b: 0, n: 0, score: 0 };
+    hit.r += r; hit.g += g; hit.b += b; hit.n += 1; hit.score += sat;
+    buckets.set(key, hit);
+  }
+
+  let best = null;
+  for (const hit of buckets.values()) {
+    const value = hit.score * Math.log(1 + hit.n);
+    if (!best || value > best.value) best = { value, hit };
+  }
+  if (!best) return '';
+  const { r, g, b, n } = best.hit;
+  const hex = v => Math.round(v / n).toString(16).padStart(2, '0');
+  return '#' + hex(r) + hex(g) + hex(b);
+}
+
+function themeLoadWallpaper(announce) {
+  if (THEME.loading) return Promise.resolve(THEME.auto);
+  THEME.loading = true;
+
+  const attempt = paths => {
+    if (!paths.length) {
+      if (announce) showToast('读不到系统壁纸，先用手动选的颜色');
+      return Promise.resolve('');
+    }
+    return fetch(API_BASE + '/api/fs/raw?path=' + encodeURIComponent(paths[0]))
+      .then(res => {
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return res.blob();
+      })
+      .then(blob => createImageBitmap(blob))
+      .then(bitmap => {
+        const colour = themeDominant(bitmap);
+        if (bitmap.close) bitmap.close();
+        if (!colour) throw new Error('这张壁纸没有可用的颜色');
+        THEME.auto = colour;
+        applyTheme();
+        if (themeDialogVisible()) themeDialog();
+        if (announce) showToast('已跟随壁纸：' + colour.toUpperCase());
+        return colour;
+      })
+      .catch(() => attempt(paths.slice(1)));
+  };
+  return attempt(THEME_WALLPAPERS.slice())
+    .finally(() => { THEME.loading = false; });
+}
+
+function themeDialogVisible() {
+  const modal = document.getElementById('fmModal');
+  const title = document.getElementById('fmModalTitle');
+  return !!modal && modal.classList.contains('show') && !!title && title.textContent === '主题';
+}
+
+function themeScheme() {
+  if (THEME.mode === 'light') return 'light';
+  if (THEME.mode === 'dark' || THEME.mode === 'amoled') return 'dark';
+  return 'light';
+}
+
+function themeLabel() {
+  const hit = THEME_MODES.find(m => m.id === THEME.mode);
+  return hit ? hit.label : '跟随系统';
+}
+
+function themeRgba(hex, alpha) {
+  const [r, g, b] = themeHexToRgb(hex);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+function applyTheme() {
+  const root = document.documentElement;
+  const scheme = themeScheme();
+  root.setAttribute('data-theme', scheme);
+  if (THEME.mode === 'amoled') root.setAttribute('data-amoled', '1');
+  else root.removeAttribute('data-amoled');
+  root.classList.toggle('no-blur', !THEME.blur);
+  root.classList.toggle('dock-bar', !THEME.floatBar);
+  root.classList.toggle('glass', THEME.glass);
+
+  const chosen = THEME.mode === 'system'
+    ? ''
+    : (THEME.seed === THEME_WALLPAPER ? THEME.auto : THEME.seed);
+  const seed = /^#[0-9a-f]{6}$/i.test(chosen || '') ? chosen : '';
+  let tones = {};
+  if (seed) {
+    tones = themePalette(seed, scheme === 'dark');
+    if (THEME.mode === 'amoled') {
+      for (const name of THEME_WRITABLE) {
+        if (!THEME_TONES.includes(name)) delete tones[name];
+      }
+    }
+  }
+  THEME_WRITABLE.forEach(name =>
+    tones[name] ? root.style.setProperty(name, tones[name]) : root.style.removeProperty(name));
+
+  const status = document.getElementById('themeStatus');
+  if (status) {
+    const source = THEME.mode === 'system'
+      ? '自带浅色 · 不上色'
+      : (THEME.seed === THEME_WALLPAPER
+        ? '默认（Monet）' + (seed ? '' : '读取中…')
+        : (seed ? seed.toUpperCase() : '默认'));
+    status.textContent = themeLabel() + ' · ' + source
+      + (THEME.mode === 'system' || THEME.style === 'TonalSpot' ? '' : ' · ' + THEME.style);
+  }
+}
+
+function themeSwitchRow(title, subtitle, on, handler) {
+  return '<div class="pref-item" onclick="' + handler + '">' +
+    '<div class="pref-content"><div class="pref-title">' + title + '</div>' +
+    '<div class="pref-subtitle">' + subtitle + '</div></div>' +
+    '<div class="switch' + (on ? ' active' : '') + '"><div class="switch-knob"></div></div>' +
+    '</div>';
+}
+
+function themeDialog() {
+  const tick = on => (on ? `<span style="color:var(--accent);font-weight:600;">✓</span>` : '');
+  const pick = (names, current, setter, label) => names.map(n =>
+    `<div class="pref-item" onclick="${setter}('${n}')">` +
+    `<div class="pref-content"><div class="pref-title">${label(n)}</div></div>` +
+    tick(current === n) +
+    `</div>`).join('');
+
+  const modes = pick(THEME_MODES.map(m => m.id), THEME.mode, 'themeSetMode',
+    id => (THEME_MODES.find(m => m.id === id) || {}).label || id);
+  const styles = pick(THEME_STYLE_NAMES, THEME.style, 'themeSetStyle', n => n);
+  const specs = pick(THEME_SPECS, THEME.spec, 'themeSetSpec',
+    n => (n === 'SPEC_2025' ? 'SPEC_2025（Material 3 Expressive）' : 'SPEC_2021（Material 3）'));
+
+  const dots = THEME_KEY_COLOURS.map(([hex]) =>
+    `<button class="theme-dot${THEME.seed.toLowerCase() === hex ? ' on' : ''}" style="background:${hex}" ` +
+    `onclick="themeSetSeed('${hex}')"></button>`).join('');
+
+  const specNote = THEME_SPEC_2025_STYLES.includes(THEME.style) ? '' :
+    `<div class="fm-props">${THEME.style} 这一风格只有 2021 的色调，选了 2025 也会按 2021 算 —— ` +
+    `App 里同样只给 TonalSpot / Neutral / Vibrant / Expressive 四个风格用 2025。</div>`;
+
+  const colourSection = THEME.mode === 'system'
+    ? `<div class="section-title">颜色</div>` +
+      `<div class="fm-props">原版用的是页面自带的那套浅色配色（上游 KernelSU 的样子）：状态卡是绿色、` +
+      `背景不上色，也不跟随系统深浅。颜色选项、色彩风格和色彩标准只在浅色 / 深色 / 深色 AMOLED ` +
+      `这三档里出现 —— 切过去就能选。</div>`
+    : `<div class="section-title">颜色选项</div>` +
+      `<div class="theme-dots">` +
+      `<button class="theme-dot none${THEME.seed === THEME_WALLPAPER ? ' on' : ''}" ` +
+      `onclick="themeSetSeed('${THEME_WALLPAPER}')">默认（Monet）</button>` +
+      dots +
+      `<button class="theme-dot" onclick="themePickSeed()">+</button>` +
+      `</div>` +
+      `<div class="fm-props" style="margin-top:10px;">默认就是 Monet：跟随壁纸取色。App 里这一步是系统把` +
+      `量化好的颜色交给它，浏览器没有这条通道，所以这里是取设备上的壁纸文件自己算，颜色会略有出入；` +
+      `壁纸读不到时退回页面自带的配色。</div>` +
+      `<div class="section-title">色彩风格</div>` + styles +
+      `<div class="section-title">色彩标准</div>` + specs + specNote;
+
+  const body = `<div class="section-title" style="margin-top:0;">模式</div>` + modes +
+    `<div class="section-title">外观</div>` +
+    themeSwitchRow('模糊', '顶栏和底栏的毛玻璃效果', THEME.blur, 'themeToggleBlur()') +
+    themeSwitchRow('悬浮底栏', 'Apple 风格的悬浮胶囊底栏', THEME.floatBar, 'themeToggleFloatBar()') +
+    themeSwitchRow('液态玻璃', THEME.floatBar
+      ? '悬浮底栏上的重模糊、亮边与厚影子'
+      : '（要先开启「悬浮底栏」才有效果）', THEME.glass, 'themeToggleGlass()') +
+    colourSection +
+    fmFooter('完成');
+  fmDialog('主题', body, () => {});
+}
+
+function themeSetStyle(name) {
+  THEME.style = name;
+  applyTheme();
+  themeSave();
+  themeDialog();
+}
+
+function themeSetSpec(name) {
+  THEME.spec = name;
+  applyTheme();
+  themeSave();
+  themeDialog();
+}
+
+async function themeSetSeed(colour) {
+  THEME.seed = colour || '';
+  if (THEME.seed === THEME_WALLPAPER && !THEME.auto) {
+    themeDialog();
+    await themeLoadWallpaper(true);
+    return;
+  }
+  applyTheme();
+  themeSave();
+  themeDialog();
+}
+
+function themeSetMode(id) {
+  THEME.mode = id;
+  if (id !== 'system' && !THEME.seed) THEME.seed = THEME_WALLPAPER;
+  applyTheme();
+  if (THEME.seed === THEME_WALLPAPER && !THEME.auto) themeLoadWallpaper(false);
+  themeSave();
+  themeDialog();
+}
+
+function themeToggleBlur() {
+  THEME.blur = !THEME.blur;
+  applyTheme();
+  themeSave();
+  themeDialog();
+}
+
+function themeToggleFloatBar() {
+  THEME.floatBar = !THEME.floatBar;
+  applyTheme();
+  themeSave();
+  themeDialog();
+}
+
+function themeToggleGlass() {
+  if (!THEME.floatBar && !THEME.glass) {
+    showToast('液态玻璃只作用在悬浮底栏上，先打开「悬浮底栏」');
+  }
+  THEME.glass = !THEME.glass;
+  applyTheme();
+  themeSave();
+  themeDialog();
+}
+
+function themePickSeed() {
+  let picker = document.getElementById('themeSeedPicker');
+  if (!picker) {
+    picker = document.createElement('input');
+    picker.type = 'color';
+    picker.id = 'themeSeedPicker';
+    picker.style.cssText = 'position:fixed;left:-9999px;top:0;width:1px;height:1px;';
+    picker.addEventListener('change', () => themeSetSeed(picker.value));
+    document.body.appendChild(picker);
+  }
+  picker.value = /^#[0-9a-f]{6}$/i.test(THEME.seed) ? THEME.seed : '#007aff';
+  picker.click();
+}
+
+function themeSave() {
+  try { localStorage.setItem(THEME_CACHE, JSON.stringify(THEME)); } catch (e) { }
+  return fmApi('/api/ui/theme', {
+    method: 'POST', headers: FM_JSON,
+    body: JSON.stringify({
+      mode: THEME.mode, seed: THEME.seed, style: THEME.style, spec: THEME.spec,
+      blur: THEME.blur, float_bar: THEME.floatBar, glass: THEME.glass,
+    }),
+  }).catch(e => showToast('主题保存失败：' + e.message));
+}
+
+function themeLoad() {
+  return fmApi('/api/ui/theme').then(saved => {
+    if (!saved) return;
+    if (typeof saved.mode === 'string' && saved.mode) THEME.mode = saved.mode;
+    if (typeof saved.seed === 'string') THEME.seed = saved.seed;
+    if (THEME_STYLE_NAMES.includes(saved.style)) THEME.style = saved.style;
+    if (THEME_SPECS.includes(saved.spec)) THEME.spec = saved.spec;
+    if (typeof saved.blur === 'boolean') THEME.blur = saved.blur;
+    if (typeof saved.float_bar === 'boolean') THEME.floatBar = saved.float_bar;
+    if (typeof saved.glass === 'boolean') THEME.glass = saved.glass;
+    applyTheme();
+    if (THEME.seed === THEME_WALLPAPER && !THEME.auto) themeLoadWallpaper(false);
+  }).catch(() => {});
+}
+
+function initTheme() {
+  try {
+    const cached = JSON.parse(localStorage.getItem(THEME_CACHE) || 'null');
+    if (cached && typeof cached.mode === 'string') {
+      THEME.mode = cached.mode;
+      THEME.seed = typeof cached.seed === 'string' ? cached.seed : '';
+      if (THEME_STYLE_NAMES.includes(cached.style)) THEME.style = cached.style;
+      if (THEME_SPECS.includes(cached.spec)) THEME.spec = cached.spec;
+      if (typeof cached.blur === 'boolean') THEME.blur = cached.blur;
+      if (typeof cached.floatBar === 'boolean') THEME.floatBar = cached.floatBar;
+      if (typeof cached.glass === 'boolean') THEME.glass = cached.glass;
+    } else {
+      const legacy = localStorage.getItem('ksu-theme');
+      if (legacy === 'dark' || legacy === 'light') THEME.mode = legacy;
+    }
+  } catch (e) { }
+  applyTheme();
+  if (THEME.seed === THEME_WALLPAPER) themeLoadWallpaper(false);
+  themeLoad();
+
+  const mq = window.matchMedia('(prefers-color-scheme: dark)');
+  const onChange = () => { if (THEME.mode === 'system') applyTheme(); };
+  if (mq.addEventListener) mq.addEventListener('change', onChange);
+  else if (mq.addListener) mq.addListener(onChange);
+}
+
+document.getElementById('themeToggle').addEventListener('click', themeDialog);
+initTheme();
+fmSyncNavIndex('home');
+fmInitNavGlass();
+
+let toastTimer;
+function showToast(msg) {
+  const toast = document.getElementById('toast');
+  toast.textContent = msg;
+  toast.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toast.classList.remove('show'), 2000);
+}
+
+function openModal(id) { document.getElementById(id).classList.add('show'); }
+function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+document.getElementById('rebootBtn').addEventListener('click', () => {
+  const active = ['files', 'keymint'].find(page =>
+    document.getElementById('page-' + page).classList.contains('active'));
+  if (active) {
+    if (FM.pick) { fmPickCancel(); return; }
+    switchPage('settings');
+    return;
+  }
+  openRebootModal();
+});
+
+const FM_BACK_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>';
+const FM_REBOOT_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>';
+
+function isSubPage(page) { return page === 'files' || page === 'keymint'; }
+
+function fmSyncTopbar(page) {
+  const btn = document.getElementById('rebootBtn');
+  if (!btn) return;
+  const sub = isSubPage(page);
+  btn.title = sub ? '返回' : '重启';
+  btn.innerHTML = sub ? FM_BACK_ICON : FM_REBOOT_ICON;
+  const themeBtn = document.getElementById('themeToggle');
+  if (themeBtn) themeBtn.style.display = sub ? 'none' : 'flex';
+  const fab = document.getElementById('fmFab');
+  if (fab) {
+    fab.style.display = page === 'files' ? 'flex' : 'none';
+    fmCloseFab();
+  }
+}
+document.querySelectorAll('.modal-overlay').forEach(overlay => {
+  overlay.addEventListener('click', (e) => {
+    if (e.target !== overlay) return;
+    overlay.classList.remove('show');
+    if (!document.querySelector('.modal-overlay.show')) document.body.classList.remove('modal-open');
+  });
+});
+
+const REBOOT_LABELS = {
+  system: '重启',
+  userspace: '用户空间重启',
+  soft_reboot: '软重启',
+  recovery: '重启到 Recovery',
+  bootloader: '重启到 Bootloader',
+  download: '重启到 Download',
+  edl: '重启到 EDL',
+  shutdown: '关机',
+};
+
+async function openRebootModal() {
+  openModal('rebootModal');
+  if (systemInfoCache === null) {
+    try { systemInfoCache = await api('/api/systeminfo'); }
+    catch (e) { systemInfoCache = {}; }
+  }
+  const row = document.getElementById('rebootUserspace');
+  if (row) row.style.display = systemInfoCache.userspaceReboot ? '' : 'none';
+}
+
+async function reboot(mode) {
+  closeModal('rebootModal');
+  if (mode === 'system' && kernelInfo && kernelInfo.is_late_load &&
+      !confirm('当前处于越狱模式，重启后将失去 Root 权限，开机后需要重新越狱。\n\n想保留 Root 就用「软重启」。确定要普通重启吗？')) {
+    return;
+  }
+  try {
+    await api('/api/reboot', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({mode}) });
+    showToast('正在' + (REBOOT_LABELS[mode] || '重启') + '...');
+  } catch (e) {
+    showToast('重启失败：' + ((e && e.message) || e));
+    console.error('Reboot failed:', e);
+  }
+}
+
+async function loadHome() {
+  const container = document.getElementById('homeContent');
+  try {
+    const info = await api('/api/info');
+    kernelInfo = info;
+    const features = await api('/api/features');
+    let systemInfo = {};
+    try {
+        systemInfo = await api('/api/systeminfo');
+        systemInfoCache = systemInfo;
+    } catch (e) {
+        systemInfo = { kernelVersion: '未知', deviceModel: '未知', fingerprint: '未知', selinuxStatus: '未知', seccompStatus: '0' };
+    }
+
+    const modeBadge = info.is_lkm ? 'LKM' : 'GKI';
+    const lateBadge = info.is_late_load ? '越狱模式' : '正常模式';
+    const versionText = info.version > 0 ? 'v' + info.version : '未检测到';
+
+    let featuresHtml = features.map(f => {
+      const isOn = f.value > 0;
+      // 999 (默认卸载模块) and 1000 (隐藏管理器) are value-typed features: their `enabled`
+      // field carries the current value, not a kernel-support flag. Treating it as one made
+      // a disabled switch render as "unsupported" and made it impossible to turn back on.
+      const valueTyped = (f.id === 999 || f.id === 1000);
+      const isSupported = valueTyped || f.enabled;
+      const disabledAttr = isSupported ? '' : 'style="opacity:0.4;pointer-events:none;"';
+      const clickHandler = isSupported ? `onclick="toggleFeature(${f.id}, this)"` : '';
+      const descText = isSupported ? (f.description || '') : (f.description || '') + '（当前内核不支持）';
+      return `
+      <div class="feature-item">
+        <div class="feature-info">
+          <div class="feature-name">${f.name}</div>
+          <div class="feature-desc" style="font-size:12px;color:var(--text-secondary);margin-top:2px;">${descText}</div>
+        </div>
+        <div class="switch ${isOn ? 'active' : ''}" ${clickHandler} ${disabledAttr}><div class="switch-knob"></div></div>
+      </div>
+    `}).join('');
+
+    container.innerHTML = `
+      <div class="card card-clickable" onclick="showToast('DikSU 工作正常')">
+        <div class="status-card">
+          <div class="status-label">工作状态</div>
+          <div class="status-value" style="display:flex;align-items:center;gap:8px;">
+            ${info.version > 0 ? '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#34c759" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>' : ''}
+            ${info.version > 0 ? '正在工作' : '未检测到内核'}
+          </div>
+          <div class="status-sub">版本：${versionText}</div>
+          <div class="status-badges">
+            <span class="status-badge">${modeBadge}</span>
+            <span class="status-badge">${lateBadge}</span>
+          </div>
+        </div>
+      </div>
+      <div class="section-title">系统信息</div>
+      <div class="card">
+        <div class="info-section">
+          <div class="info-row"><span class="info-label">内核版本</span><span class="info-value" style="word-break:break-all;">${systemInfo.kernelVersion || '未知'}</span></div>
+          <div class="info-row"><span class="info-label">设备型号</span><span class="info-value">${systemInfo.deviceModel || '未知'}</span></div>
+          <div class="info-row"><span class="info-label">系统指纹</span><span class="info-value" style="word-break:break-all;font-size:11px;">${systemInfo.fingerprint || '未知'}</span></div>
+          <div class="info-row"><span class="info-label">SELinux 状态</span><span class="info-value" style="color:${systemInfo.selinuxStatus === 'Enforcing' ? '#34c759' : '#ff9500'};">${systemInfo.selinuxStatus || '未知'}</span></div>
+          <div class="info-row"><span class="info-label">Seccomp 状态</span><span class="info-value">${systemInfo.seccompStatus === '2' ? '过滤模式' : systemInfo.seccompStatus === '1' ? '严格模式' : systemInfo.seccompStatus === '0' ? '已禁用' : '不支持'}</span></div>
+        </div>
+      </div>
+      <div class="section-title">功能开关</div>
+      <div class="card">${featuresHtml}</div>
+    `;
+    document.getElementById('versionInfo').textContent = 'DikSU v' + info.version;
+  } catch (e) {
+    container.innerHTML = `
+      <div class="card">
+        <div class="status-card" style="background: var(--danger-bg); color: var(--danger);">
+          <div class="status-label">工作状态</div>
+          <div class="status-value">无法连接</div>
+          <div class="status-sub">请确保 ksud webui 服务正在运行</div>
+        </div>
+      </div>
+      <div class="warning-card">
+        <svg class="warning-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+        <div class="warning-text">无法连接到 ksud 服务。请确认已刷入 KernelSU 且 webui 服务已启动。</div>
+      </div>
+    `;
+  }
+}
+
+const QQ_GROUP = '864553367';
+const QQ_GROUP_URL = 'https://qun.qq.com/universal-share/share?ac=1&authKey=VWOzex%2BbEYTrURLkfTZyfS7LZQVN65O1SplmHJ1phxt%2F0seLNoA0A%2FNhIw3%2Bgvdp&busi_data=eyJncm91cENvZGUiOiI4NjQ1NTMzNjciLCJ0b2tlbiI6IkJpcjN4bVpPUUFZL2hQYyszcGVMc0xCYXU2ejVxNEVuaktiNE5IUWg1TExaWDEzdGhQZFRnWEJ6RVEwcVBsY2siLCJ1aW4iOiIyODQ3NzM4MjExIn0%3D&data=bz0Wl8LJJsGUdqgyiiDROlBDr-oTEIOg5zCPJOG-PU4cs2dYvaB6v3m23jsjCQ4K3SRIPZSgQBNO8F0-aA0vUQ&svctype=4&tempid=h5_group_info';
+
+function joinQqGroup() {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(QQ_GROUP)
+      .then(() => showToast('群号 ' + QQ_GROUP + ' 已复制'))
+      .catch(() => {});
+  }
+
+  if (!window.open(QQ_GROUP_URL, '_blank')) location.href = QQ_GROUP_URL;
+}
+
+async function runHmaConfig(scene) {
+  const extra = scene
+    ? '\n\nScene（com.omarea.vtools）不进隐藏范围，同时不勾选「无障碍功能」预设：它要靠无障碍读取应用，这两项都会让它用不了。'
+    : '';
+  if (!confirm('确定要一键配置隐藏应用列表' + (scene ? '（Scene 版本）' : '') + '吗？\n\n这将配置 HMA-OSS：把还没配过的第三方应用加进隐藏范围，并额外隐藏网页端启动器；启动器自己不进范围，已经配过的应用不会被改动。' + extra + '\n\n配完会自动打开 HMA-OSS 并按一下首页那张状态卡（新版要靠这一下才重新读取配置），然后退回浏览器。')) return;
+  showToast('正在配置...');
+  try {
+    const result = await api('/api/tools/hma-config' + (scene ? '?scene=1' : ''), { method: 'POST' });
+    const answer = typeof result === 'string' && result.trim() ? result.trim().split('\n').pop() : '';
+    showToast(answer || '配置完成！');
+  } catch (e) {
+    showToast('配置失败：' + e.message);
+  }
+}
+
+async function toggleFeature(id, el) {
+  const enabled = !el.classList.contains('active');
+  el.classList.toggle('active');
+  try {
+    await api('/api/features', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({id, value: enabled ? 1 : 0}) });
+    showToast(enabled ? '已启用' : '已禁用');
+  } catch (e) {
+    el.classList.toggle('active');
+    showToast('操作失败：' + e.message);
+  }
+}
+
+async function loadApps() {
+  const container = document.getElementById('appList');
+  try {
+    const apps = await api('/api/apps');
+    appList = apps;
+    if (apps.length === 0) {
+      container.innerHTML = `<div class="empty-state" style="padding: 40px 20px;"><div class="empty-title">暂无应用</div><div class="empty-desc">未检测到已安装应用</div></div>`;
+    } else {
+      renderApps(apps);
+    }
+  } catch (e) {
+    container.innerHTML = `<div class="empty-state" style="padding: 40px 20px;"><div class="empty-title">加载失败</div><div class="empty-desc">${e.message}</div></div>`;
+  }
+}
+
+function renderApps(apps) {
+  const container = document.getElementById('appList');
+  const sorted = [...apps].sort((a, b) => {
+    if (a.granted && !b.granted) return -1;
+    if (!a.granted && b.granted) return 1;
+    return 0;
+  });
+  const iconColors = ['#ff9500','#ff3b30','#34c759','#007aff','#af52de','#ff2d55','#5ac8fa','#ffcc00'];
+  container.innerHTML = sorted.map((app, idx) => {
+    const pkg = app.packageName || app.package || 'unknown';
+    const name = app.appName || app.name || pkg.split('.').pop() || pkg;
+    const uid = app.uid || '';
+    const colorIdx = [...pkg].reduce((a, c) => a + c.charCodeAt(0), 0) % iconColors.length;
+    const at = appList.indexOf(app);
+    return appRow({
+      id: `app-icon-${idx}`,
+      label: name,
+      sub: fmHtml(pkg),
+      bg: iconColors[colorIdx],
+      attrs: ` data-name="${fmHtml(name)}" data-pkg="${fmHtml(pkg)}" data-idx="${idx}"`,
+      right: `<div class="switch ${app.granted ? 'active' : ''}" onclick="toggleAppPermission('${fmHtml(pkg)}', ${uid}, this, ${at})"><div class="switch-knob"></div></div>`,
+    });
+  }).join('');
+  container.querySelectorAll('.app-item').forEach(row => {
+    if (appIconObserver) appIconObserver.observe(row);
+    else loadAppIcon(row.dataset.pkg, Number(row.dataset.idx));
+  });
+}
+
+const appIconObserver = (typeof IntersectionObserver === 'function')
+  ? new IntersectionObserver((entries, observer) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        observer.unobserve(entry.target);
+        loadAppIcon(entry.target.dataset.pkg, Number(entry.target.dataset.idx));
+      }
+    }, { rootMargin: '300px' })
+  : null;
+
+const appIconCache = {};
+
+const appIconPending = new Set();
+const APP_ICON_PARALLEL = 6;
+let appIconRunning = 0;
+const appIconQueue = [];
+
+function appIconPump() {
+  while (appIconRunning < APP_ICON_PARALLEL && appIconQueue.length) {
+    const run = appIconQueue.shift();
+    appIconRunning++;
+    run().catch(() => {}).then(() => { appIconRunning--; appIconPump(); });
+  }
+}
+
+function appIconFetch(pkg) {
+  if (appIconCache[pkg]) return Promise.resolve(appIconCache[pkg]);
+  if (appIconPending.has(pkg)) return Promise.resolve(null);
+  appIconPending.add(pkg);
+  return new Promise(resolve => {
+    appIconQueue.push(async () => {
+      try {
+        const res = await fetch(API_BASE + '/api/apps/icon?package=' + encodeURIComponent(pkg));
+        const data = await res.json();
+        if (data.success && data.icon) {
+          appIconCache[pkg] = { b64: data.icon, mime: data.mime };
+          resolve(appIconCache[pkg]);
+          return;
+        }
+        resolve(null);
+      } catch (e) {
+        resolve(null);
+      } finally {
+        appIconPending.delete(pkg);
+      }
+    });
+    appIconPump();
+  });
+}
+
+async function loadAppIcon(pkg, idx) {
+  const renderIcon = (iconEl, b64, mime) => {
+    if (iconEl) {
+      iconEl.classList.remove('app-icon-letter');
+      iconEl.style.background = 'transparent';
+      iconEl.innerHTML = `<img src="data:${mime || 'image/png'};base64,${b64}" style="width:100%;height:100%;object-fit:contain;border-radius:10px;">`;
+    }
+  };
+  if (appIconCache[pkg]) {
+    renderIcon(document.getElementById('app-icon-' + idx), appIconCache[pkg].b64, appIconCache[pkg].mime);
+    return;
+  }
+  const icon = await appIconFetch(pkg);
+  if (icon) renderIcon(document.getElementById('app-icon-' + idx), icon.b64, icon.mime);
+}
+
+async function toggleAppPermission(pkg, uid, el, idx) {
+  const isActive = el.classList.contains('active');
+  const action = isActive ? 'revoke' : 'grant';
+
+  const revert = () => {
+    el.classList.toggle('active', isActive);
+    if (appList[idx]) appList[idx].granted = isActive;
+  };
+  el.classList.toggle('active', !isActive);
+  if (appList[idx]) appList[idx].granted = !isActive;
+
+  try {
+    const url = isActive ? '/api/apps/revoke' : '/api/apps/grant';
+    const body = isActive ? {uid: uid} : {uid: uid, packageName: pkg};
+    const resp = await fetch(API_BASE + url, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body)
+    });
+    if (!resp.ok) {
+      let errMsg = 'HTTP ' + resp.status;
+      try {
+        const errData = await resp.text();
+        if (errData && errData.length < 200) errMsg = errData;
+      } catch(e) {}
+      revert();
+      showToast('操作失败: ' + errMsg);
+      loadApps();
+      return;
+    }
+    showToast(isActive ? '已撤销 root 权限' : '已授予 root 权限');
+  } catch (e) {
+    revert();
+    showToast('操作失败: ' + e.message);
+    loadApps();
+  }
+}
+
+function filterApps(query) {
+  const q = query.toLowerCase();
+  const filtered = appList.filter(app => {
+    const pkg = (app.packageName || app.package || '').toLowerCase();
+    const name = (app.appName || app.name || pkg).toLowerCase();
+    return name.includes(q) || pkg.includes(q);
+  });
+  renderApps(filtered);
+}
+
+async function loadModules() {
+  const container = document.getElementById('moduleList');
+  try {
+    const modules = await api('/api/modules');
+    moduleList = modules;
+    if (modules.length === 0) {
+      container.innerHTML = `<div class="empty-state" style="padding: 40px 20px;"><div class="empty-title">暂无已安装模块</div><div class="empty-desc">点击右下角 + 按钮安装模块</div></div>`;
+      updateBatchBar();
+    } else {
+      container.innerHTML = modules.map(m => {
+        const safeId = String(m.id).replace(/'/g, "\\'");
+        const safeName = String(m.name || m.id).replace(/'/g, "\\'");
+        const isSelected = selectedModules.has(m.id);
+        const isJustInstalled = justInstalledIds.has(m.id);
+        const removeClass = m.remove ? ' remove-marked' : '';
+        const updateClass = m.update_available ? ' update-pending' : '';
+        const installedClass = isJustInstalled ? ' installed-justnow' : '';
+        const webBtn = m.web && !m.remove ? `<button class="module-btn" onclick="openModuleWeb('${safeId}', '${safeName}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>打开</button>` : '';
+        const actionBtn = m.has_action && m.enabled && !m.remove && !m.update_available ? `<button class="module-btn module-action-btn" onclick="runModuleAction('${safeId}')"><svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>执行</button>` : '';
+        const removeLabel = m.remove ? '<span style="color:var(--danger);font-size:12px;margin-left:8px;">（待卸载）</span>' : '';
+        const uninstallBtn = m.remove
+          ? `<button class="module-btn" onclick="undoUninstallModule('${safeId}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg>撤销</button>`
+          : `<button class="module-btn danger" onclick="uninstallModule('${safeId}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>卸载</button>`;
+        return `
+        <div class="module-item${removeClass}${updateClass}${installedClass}" data-id="${m.id}">
+          <div class="module-main">
+            <div class="module-checkbox ${isSelected ? 'checked' : ''}" onclick="toggleModuleSelect('${safeId}', this)"></div>
+            <div class="module-info">
+              <div class="module-name">${m.name || m.id}${removeLabel}</div>
+              <div class="module-desc">${m.description || ''}</div>
+              <div class="module-version">${m.version || ''}${m.author ? ' · by ' + m.author : ''}</div>
+            </div>
+            <div class="switch ${m.enabled ? 'active' : ''}" onclick="toggleModule('${safeId}', this)"><div class="switch-knob"></div></div>
+          </div>
+          <div class="module-actions">
+            ${actionBtn}
+            ${webBtn}
+            ${uninstallBtn}
+          </div>
+        </div>`;
+      }).join('');
+      updateBatchBar();
+      setTimeout(() => { justInstalledIds.clear(); }, 2500);
+    }
+  } catch (e) {
+    container.innerHTML = `<div class="empty-state" style="padding: 40px 20px;"><div class="empty-title">加载失败</div><div class="empty-desc">${e.message}</div></div>`;
+  }
+}
+
+let selectedModules = new Set();
+let justInstalledIds = new Set();
+
+function toggleModuleSelect(id, el) {
+  if (selectedModules.has(id)) {
+    selectedModules.delete(id);
+    el.classList.remove('checked');
+  } else {
+    selectedModules.add(id);
+    el.classList.add('checked');
+  }
+  updateBatchBar();
+}
+
+function updateBatchBar() {
+  const bar = document.getElementById('batchBar');
+  const count = document.getElementById('batchCount');
+  if (selectedModules.size > 0) {
+    bar.classList.add('active');
+    count.textContent = '已选择 ' + selectedModules.size + ' 个';
+  } else {
+    bar.classList.remove('active');
+  }
+}
+
+function cancelBatchSelect() {
+  selectedModules.clear();
+  document.querySelectorAll('.module-checkbox.checked').forEach(el => el.classList.remove('checked'));
+  updateBatchBar();
+}
+
+async function batchUninstallModules() {
+  if (selectedModules.size === 0) return;
+  if (!confirm('确定要卸载选中的 ' + selectedModules.size + ' 个模块吗？重启手机后生效。')) return;
+  let success = 0, failed = 0;
+  for (const id of selectedModules) {
+    try {
+      await api('/api/modules/' + encodeURIComponent(id), { method: 'DELETE' });
+      success++;
+    } catch (e) {
+      failed++;
+    }
+  }
+  selectedModules.clear();
+  showToast('批量卸载完成：成功 ' + success + ' 个' + (failed > 0 ? '，失败 ' + failed + ' 个' : ''));
+  loadModules();
+}
+
+async function installApkPaths(paths) {
+  const list = (paths || []).map(p => String(p || '').trim()).filter(Boolean);
+  if (!list.length) return;
+  const failed = [];
+  let ok = 0;
+  for (const path of list) {
+    const name = path.split('/').pop() || path;
+    showToast(list.length > 1 ? `正在安装 ${name}（${ok + failed.length + 1}/${list.length}）…` : `正在安装 ${name}…`);
+    try {
+      await api('/api/fs/install', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path }),
+      });
+      ok++;
+    } catch (e) {
+      failed.push(name + '：' + e.message);
+    }
+  }
+  if (failed.length) {
+    alert('以下应用安装失败：\n\n' + failed.join('\n'));
+  } else {
+    showToast(list.length > 1 ? `已安装 ${ok} 个应用` : '安装完成');
+  }
+}
+
+async function runModuleAction(id) {
+  try {
+    showToast('正在执行 action.sh...');
+    await api('/api/modules/' + encodeURIComponent(id) + '/action', { method: 'POST' });
+    showToast('action.sh 执行完成');
+  } catch (e) {
+    showToast('执行失败：' + e.message);
+  }
+}
+
+
+async function toggleModule(id, el) {
+  const enabled = !el.classList.contains('active');
+  el.classList.toggle('active');
+  try {
+    const action = enabled ? 'enable' : 'disable';
+    await api('/api/modules/' + id + '/' + action, { method: 'POST' });
+    showToast(enabled ? '模块已启用，重启后生效' : '模块已禁用，重启后生效');
+  } catch (e) {
+    el.classList.toggle('active');
+    showToast('操作失败：' + e.message);
+  }
+}
+
+async function uninstallModule(id) {
+  try {
+    await api('/api/modules/' + encodeURIComponent(id), { method: 'DELETE' });
+    showToast('已标记卸载，重启后生效');
+    loadModules();
+  } catch (e) {
+    showToast('卸载失败：' + e.message);
+  }
+}
+
+async function undoUninstallModule(id) {
+  try {
+    await api('/api/modules/' + encodeURIComponent(id) + '/undo', { method: 'POST' });
+    showToast('已撤销卸载');
+    loadModules();
+  } catch (e) {
+    showToast('撤销失败：' + e.message);
+  }
+}
+
+function openModuleWeb(id, name) {
+  const overlay = document.getElementById('webuiFrame');
+  document.getElementById('webuiTitle').textContent = name || id;
+
+  const previous = document.getElementById('webuiIframe');
+  const frame = document.createElement('iframe');
+  frame.id = 'webuiIframe';
+  frame.setAttribute('title', name || id);
+  frame.addEventListener('load', () => {
+    setTimeout(() => {
+      try {
+        const doc = frame.contentDocument;
+        if (!doc || !doc.body || doc.body.childNodes.length > 0) return;
+        console.warn('[KSU] 模块页面没有内容：' + frame.getAttribute('src'));
+        doc.body.innerHTML =
+          '<div style="font:14px -apple-system,system-ui,sans-serif;padding:24px;color:#8a8a8e;line-height:1.7">' +
+          '模块页面没有内容。<br>确认这个模块已启用、有 webroot，然后返回再打开一次。</div>';
+      } catch (e) { /* cross-origin would throw; ours never is */ }
+    }, 1500);
+  });
+  frame.src = '/modweb/' + encodeURIComponent(id) + '/index.html';
+
+  if (previous) previous.replaceWith(frame);
+  else overlay.appendChild(frame);
+  overlay.classList.add('active');
+}
+
+function closeModuleWeb() {
+  const overlay = document.getElementById('webuiFrame');
+  overlay.classList.remove('active');
+  setFrameFullscreen(false);
+  const frame = document.getElementById('webuiIframe');
+  if (frame) frame.remove();
+}
+
+function openModuleInstall() {
+  fmStartPick('选择模块 zip 或 APK/APKS：单击直接安装，左滑选中、长按全部刷入', /\.(zip|apk|apks)(\.\d+)?$/i, (paths) => {
+    const zips = (paths || []).filter(p => /\.zip(\.\d+)?$/i.test(p));
+    const apks = (paths || []).filter(p => /\.(apk|apks)(\.\d+)?$/i.test(p));
+    if (zips.length) installModulePaths(zips);
+    if (apks.length) installApkPaths(apks);
+    switchPage('modules');
+  });
+}
+
+let installJobId = null;
+
+function appendInstallConsole(text) {
+  const el = document.getElementById('installConsole');
+  if (!el || !text) return;
+  el.appendChild(document.createTextNode(text));
+  el.scrollTop = el.scrollHeight;
+}
+
+async function installModuleStreamed(path) {
+  const job = await api('/api/modules/install-stream', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path }),
+  });
+  if (!job || !job.id) throw new Error('安装任务没有启动');
+  installJobId = job.id;
+  while (true) {
+    const chunk = await api('/api/module/spawn/output?id=' + job.id);
+    if (chunk.stdout) appendInstallConsole(chunk.stdout);
+    if (chunk.stderr) appendInstallConsole(chunk.stderr);
+    if (!chunk.alive) return (chunk.code === null || chunk.code === undefined) ? 0 : chunk.code;
+    await new Promise(r => setTimeout(r, 150));
+  }
+}
+
+function cancelModuleInstall() {
+  const id = installJobId;
+  if (!id) return;
+  appendInstallConsole('\n=== 已请求中止 ===\n');
+  api('/api/module/spawn/close', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id }),
+  }).catch(() => {});
+}
+
+async function installModulePaths(paths) {
+  const list = (paths || []).map(p => String(p || '').trim()).filter(Boolean);
+  if (!list.length) {
+    showToast('没有选中文件');
+    return;
+  }
+
+  const progress = document.getElementById('installProgress');
+  const titleEl = document.getElementById('installProgressTitle');
+  const barFill = document.getElementById('installBarFill');
+  const progressText = document.getElementById('installProgressText');
+  const consoleEl = document.getElementById('installConsole');
+  const cancelBtn = document.getElementById('installCancel');
+  progress.classList.add('active', 'with-console');
+  document.body.classList.add('modal-open');
+  consoleEl.classList.add('active');
+  consoleEl.textContent = '';
+  barFill.style.width = '0%';
+
+  let ok = 0;
+  const failed = [];
+  for (let i = 0; i < list.length; i++) {
+    const base = list[i].split('/').pop() || list[i];
+    barFill.style.width = Math.round((i / list.length) * 100) + '%';
+    titleEl.textContent = list.length > 1 ? `正在安装 (${i + 1}/${list.length})` : '正在安装模块...';
+    progressText.textContent = '正在安装：' + base;
+    appendInstallConsole(`\n=== ${base} ===\n`);
+    cancelBtn.classList.add('active');
+    try {
+      const started = Date.now();
+      const code = await installModuleStreamed(list[i]);
+      const seconds = ((Date.now() - started) / 1000).toFixed(1);
+      if (code !== 0) throw new Error(`退出码 ${code}`);
+      ok++;
+      justInstalledIds.add(base.replace(/\.zip$/i, ''));
+      appendInstallConsole(`\n=== 完成 · ${seconds}s ===\n`);
+    } catch (e) {
+      failed.push(base + '：' + e.message);
+      appendInstallConsole(`\n=== 失败：${e.message} ===\n`);
+    }
+    cancelBtn.classList.remove('active');
+    installJobId = null;
+  }
+
+  barFill.style.width = '100%';
+  titleEl.textContent = failed.length ? '安装结束' : '刷写完成';
+  progressText.textContent = (failed.length
+    ? `成功 ${ok} 个，失败 ${failed.length} 个`
+    : (list.length > 1 ? `已刷入 ${ok} 个模块` : '安装完成')) + ' · 点按关闭';
+
+  await new Promise(resolve => {
+    const done = () => {
+      progress.removeEventListener('click', done);
+      consoleEl.removeEventListener('click', stop);
+      resolve();
+    };
+    const stop = e => e.stopPropagation();
+    progress.addEventListener('click', done);
+    consoleEl.addEventListener('click', stop);
+  });
+  progress.classList.remove('active', 'with-console');
+  consoleEl.classList.remove('active');
+  document.body.classList.remove('modal-open');
+
+  if (failed.length) {
+    showToast(`安装完成：成功 ${ok} 个，失败 ${failed.length} 个`);
+    alert('以下模块安装失败：\n\n' + failed.join('\n'));
+  } else if (list.length > 1) {
+    showToast(`已刷入 ${ok} 个模块，重启后生效`);
+  } else {
+    showToast('安装完成，重启后生效');
+  }
+  loadModules();
+}
+
+
+
+let touchStartY = 0;
+let pullDistance = 0;
+let isPulling = false;
+let isRefreshing = false;
+const PULL_THRESHOLD = 55;
+const contentEl = document.getElementById('content');
+const pullRefreshEl = document.getElementById('pullRefresh');
+const pullLabel = pullRefreshEl.querySelector('span');
+
+function resetPull() {
+  pullRefreshEl.style.transition = 'height 0.25s ease';
+  pullRefreshEl.style.height = '0px';
+  pullRefreshEl.classList.remove('active', 'ready');
+  pullDistance = 0;
+  isPulling = false;
+}
+
+contentEl.addEventListener('touchstart', (e) => {
+  if (isRefreshing) return;
+  if (document.body.classList.contains('fm-mode')) return;
+  if (e.target.closest && e.target.closest('.fm-list, .fm-term-out, .fm-editor, .modal-overlay')) return;
+  if (contentEl.scrollTop <= 0) {
+    touchStartY = e.touches[0].clientY;
+    isPulling = true;
+    pullRefreshEl.style.transition = 'none';
+  }
+}, { passive: true });
+
+contentEl.addEventListener('touchmove', (e) => {
+  if (!isPulling || isRefreshing) return;
+  if (document.body.classList.contains('modal-open')) { resetPull(); return; }
+  const dy = e.touches[0].clientY - touchStartY;
+  if (dy > 0 && contentEl.scrollTop <= 0) {
+    e.preventDefault();
+    pullDistance = Math.min(dy * 0.5, 110);
+    pullRefreshEl.style.height = pullDistance + 'px';
+    pullRefreshEl.classList.add('active');
+    if (pullDistance >= PULL_THRESHOLD) {
+      pullRefreshEl.classList.add('ready');
+      pullLabel.textContent = '松开刷新';
+    } else {
+      pullRefreshEl.classList.remove('ready');
+      pullLabel.textContent = '下拉刷新';
+    }
+  } else {
+    pullDistance = 0;
+  }
+}, { passive: false });
+
+contentEl.addEventListener('touchend', async () => {
+  if (!isPulling) return;
+  if (pullDistance >= PULL_THRESHOLD && !isRefreshing) {
+    isRefreshing = true;
+    pullRefreshEl.style.transition = 'height 0.2s ease';
+    pullRefreshEl.style.height = '46px';
+    pullRefreshEl.classList.add('spinning');
+    pullLabel.textContent = '刷新中...';
+    try { await refreshCurrentPage(); } catch (err) { console.error(err); }
+    pullRefreshEl.classList.remove('spinning');
+    isRefreshing = false;
+  }
+  pullLabel.textContent = '下拉刷新';
+  resetPull();
+});
+
+contentEl.addEventListener('touchcancel', resetPull);
+
+async function refreshCurrentPage() {
+  const activePage = document.querySelector('.page.active');
+  if (activePage) {
+    const pageId = activePage.id;
+    if (pageId === 'page-home') await loadHome();
+    else if (pageId === 'page-superuser') await loadApps();
+    else if (pageId === 'page-modules') await loadModules();
+    else if (pageId === 'page-settings') await loadSettings();
+    else if (pageId === 'page-keymint') await kmLoad();
+  }
+}
+
+setInterval(pingServer, 5000);
+
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) pingServer();
+});
+
+let heartbeatFails = 0;
+
+function pingServer() {
+  return fetch('/api/heartbeat', { cache: 'no-store' })
+    .then(res => {
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      heartbeatFails = 0;
+      document.getElementById('serverDown').classList.remove('active');
+      return true;
+    })
+    .catch(() => {
+      heartbeatFails++;
+      if (heartbeatFails >= 2) document.getElementById('serverDown').classList.add('active');
+      return false;
+    });
+}
+
+window.addEventListener('message', (event) => {
+  const data = event.data;
+  if (!data || typeof data !== 'object' || !data.ksu) return;
+  const iframe = document.getElementById('webuiIframe');
+  if (!iframe || event.source !== iframe.contentWindow) return;
+
+  switch (data.ksu) {
+    case 'exit':
+      closeModuleWeb();
+      break;
+    case 'title':
+      if (data.title) document.getElementById('webuiTitle').textContent = data.title;
+      break;
+    case 'toast':
+      showToast(String(data.message || ''));
+      break;
+    case 'fullScreen':
+      setFrameFullscreen(data.enable !== false);
+      break;
+  }
+});
+
+function setFrameFullscreen(enable) {
+  const frame = document.getElementById('webuiFrame');
+  try {
+    if (enable && !document.fullscreenElement) {
+      const request = frame.requestFullscreen || frame.webkitRequestFullscreen;
+      if (request) {
+        const asked = request.call(frame);
+        if (asked && asked.catch) asked.catch(() => {});
+      }
+    } else if (!enable && document.fullscreenElement) {
+      const left = document.exitFullscreen();
+      if (left && left.catch) left.catch(() => {});
+    }
+  } catch (e) {
+    console.warn('全屏切换失败：', e);
+  }
+}
+
+function loadSettings() {
+  const status = document.getElementById('webuiStatus');
+  if (status) status.textContent = '运行中';
+  loadFeatures();
+  loadSusfs();
+  loadShizuku();
+}
+
+function escapeHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+/** 内核特性开关：状态来自内核（/api/features），写入也走同一条 supercall。 */
+async function loadFeatures() {
+  const card = document.getElementById('featureCard');
+  if (!card) return;
+  try {
+    const features = await api('/api/features');
+    if (!features || !features.length) {
+      card.innerHTML = '<div class="pref-item"><div class="pref-content">' +
+        '<div class="pref-title">没有可调的特性</div>' +
+        '<div class="pref-subtitle">内核没有返回任何特性，通常是模块未加载</div>' +
+        '</div></div>';
+      return;
+    }
+    card.innerHTML = features.map(f => {
+      const on = !!f.value;
+      const supported = !!f.enabled;
+      const style = supported ? '' : 'opacity:.45;';
+      const subtitle = supported ? f.description : (f.description + '（当前内核不支持）');
+      return '<div class="pref-item" style="' + style + '" onclick="toggleFeature(' + f.id + ',' + (on ? 0 : 1) + ',' + supported + ')">' +
+        '<div class="pref-content">' +
+        '<div class="pref-title">' + escapeHtml(f.name) + '</div>' +
+        '<div class="pref-subtitle">' + escapeHtml(subtitle) + '</div>' +
+        '</div>' +
+        '<div class="switch ' + (on ? 'active' : '') + '"><div class="switch-knob"></div></div>' +
+        '</div>';
+    }).join('');
+  } catch (e) {
+    card.innerHTML = '<div class="pref-item"><div class="pref-content">' +
+      '<div class="pref-title">加载失败</div>' +
+      '<div class="pref-subtitle">' + escapeHtml(e.message) + '</div>' +
+      '</div></div>';
+  }
+}
+
+async function toggleFeature(id, value, supported) {
+  if (!supported) { showToast('当前内核不支持这个特性'); return; }
+  try {
+    await api('/api/features', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: id, value: value }),
+    });
+    showToast(value ? '已开启' : '已关闭');
+    await loadFeatures();
+  } catch (e) {
+    showToast('设置失败：' + e.message);
+  }
+}
+
+async function reloadModules() {
+  showToast('正在重载模块…');
+  try {
+    const msg = await api('/api/tools/reload-modules', { method: 'POST' });
+    showToast('重载完成：' + msg);
+  } catch (e) {
+    showToast('重载失败：' + e.message);
+  }
+}
+
+async function softReboot() {
+  if (!confirm('软重启会重启系统界面与 zygote，当前 root 会话保留。继续？')) return;
+  try {
+    await api('/api/reboot', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: 'soft_reboot' }),
+    });
+    showToast('正在软重启…');
+  } catch (e) {
+    showToast('软重启失败：' + e.message);
+  }
+}
+
+// ── SuSFS ────────────────────────────────────────────────────────────────────
+// 只显示内核真值：状态/版本/变体/特性都来自 /api/susfs/status 的 supercall 结果。
+// 内核没有「查询开关当前值」和「枚举规则」的命令，所以开关初始一律显示「未知」，
+// 点了只显示「已下发」，绝不画成「已开启」；删除也只如实显示内核的答复。
+
+const SUSFS_TOGGLES = [
+  { key: 'log', title: '内核日志', sub: 'enable_log：把 SuSFS 的隐藏动作写进内核日志' },
+  { key: 'avc', title: 'AVC 日志伪造', sub: 'enable_avc_log_spoofing：改写 AVC 审计里的路径' },
+  { key: 'hide_mnts', title: '对非 su 进程隐藏挂载点', sub: 'hide_sus_mnts_for_non_su_procs：普通进程看不到 SuSFS 的挂载' },
+];
+
+const SUSFS_KINDS = [
+  { id: 'path', label: '隐藏路径（add-sus-path）' },
+  { id: 'path_loop', label: '隐藏路径·跟随挂载（add-sus-path-loop）' },
+  { id: 'map', label: 'sus map（add-sus-map）' },
+  { id: 'kstat', label: 'kstat（add-sus-kstat）' },
+  { id: 'redirect', label: 'open redirect（add-open-redirect）' },
+];
+
+const SUSFS = { status: null, sent: {}, featuresOpen: false };
+
+async function loadSusfs() {
+  const card = document.getElementById('susfsCard');
+  if (!card) return;
+  card.innerHTML = '<div class="loading">加载中...</div>';
+  try {
+    SUSFS.status = await api('/api/susfs/status');
+  } catch (e) {
+    card.innerHTML = '<div class="pref-item" style="cursor:default;">' +
+      '<div class="pref-content"><div class="pref-title">读取失败</div>' +
+      '<div class="pref-subtitle">' + escapeHtml(e.message) + '</div></div></div>';
+    return;
+  }
+  renderSusfs();
+}
+
+function renderSusfs() {
+  const card = document.getElementById('susfsCard');
+  if (!card) return;
+  const st = SUSFS.status || {};
+  const loaded = !!st.loaded;
+  const features = Array.isArray(st.features) ? st.features : [];
+  const dim = loaded ? '' : 'opacity:.45;';
+
+  const statusRow = `
+    <div class="pref-item" style="cursor:default;">
+      <div class="pref-icon">${uiIcon('shield')}</div>
+      <div class="pref-content">
+        <div class="pref-title">${loaded ? 'SuSFS 已加载' : 'SuSFS 未加载'}</div>
+        <div class="pref-subtitle">${loaded
+          ? `${escapeHtml(st.version || '')} · ${escapeHtml(st.variant || '未知变体')} · ${features.length} 个特性`
+          : '内核没有应答 SuSFS supercall（模块没加载，或当前内核没编译 SuSFS）'}</div>
+      </div>
+    </div>`;
+
+  const featureRow = loaded && features.length ? `
+    <div class="pref-item" onclick="susfsToggleFeatures()">
+      <div class="pref-content">
+        <div class="pref-title">特性清单（${features.length}）</div>
+        <div class="pref-subtitle" id="susfsFeaturesHint">${SUSFS.featuresOpen ? '点击收起' : '点击展开，内容来自内核 supercall'}</div>
+      </div>
+      <div class="pref-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></div>
+    </div>
+    <div id="susfsFeatures" style="display:${SUSFS.featuresOpen ? 'block' : 'none'};padding:0 16px 14px;">
+      <div class="fm-props">${features.map(f => '· ' + escapeHtml(f)).join('<br>')}</div>
+    </div>` : '';
+
+  const toggleRows = SUSFS_TOGGLES.map(t => {
+    const sent = SUSFS.sent[t.key];
+    const state = sent === undefined
+      ? '<span style="color:var(--text-tertiary);">当前值未知（内核不提供查询）</span>'
+      : `<span style="color:var(--accent);">已下发：${sent ? '开' : '关'}（内核不回报结果）</span>`;
+    const buttons = loaded ? `
+      <div class="fm-btns" style="flex-wrap:nowrap;">
+        <button class="fm-btn" style="min-height:32px;padding:0 12px;font-size:13px;" onclick="susfsToggle('${t.key}', true)">开</button>
+        <button class="fm-btn" style="min-height:32px;padding:0 12px;font-size:13px;" onclick="susfsToggle('${t.key}', false)">关</button>
+      </div>` : '';
+    return `
+      <div class="pref-item" style="cursor:default;${dim}">
+        <div class="pref-content">
+          <div class="pref-title">${t.title}</div>
+          <div class="pref-subtitle">${t.sub}<br><span id="susfsState-${t.key}">${state}</span></div>
+        </div>
+        ${buttons}
+      </div>`;
+  }).join('');
+
+  const notLoaded = loaded ? '' : `
+    <div class="pref-item" style="cursor:default;opacity:.45;">
+      <div class="pref-content">
+        <div class="pref-title">面板不可用</div>
+        <div class="pref-subtitle">SuSFS 没加载时，开关和规则都没有地方写。先在首页完成提权/安装（或刷入带 SuSFS 的内核），再回来重新检测。</div>
+      </div>
+    </div>
+    <div class="fm-btns" style="padding:0 16px 14px;">
+      <button class="fm-btn primary" onclick="switchPage('home')">去首页提权/安装</button>
+      <button class="fm-btn" onclick="loadSusfs()">重新检测</button>
+    </div>`;
+
+  const kindOptions = SUSFS_KINDS.map(k => `<option value="${k.id}">${k.label}</option>`).join('');
+  const addForm = `
+    <div style="padding:12px 16px 4px;border-top:0.5px solid var(--border);${dim}${loaded ? '' : 'pointer-events:none;'}">
+      <div class="pref-title" style="margin-bottom:10px;">添加规则</div>
+      <div class="fm-field"><label>类型</label><select id="susfsKind" onchange="susfsKindChange()">${kindOptions}</select></div>
+      <div class="fm-field"><label>路径</label><input type="text" id="susfsPath" placeholder="/data/local/tmp/foo" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
+      <div class="fm-field" id="susfsRedirectRow" style="display:none;"><label>目标路径</label><input type="text" id="susfsRedirected" placeholder="/data/local/tmp/bar" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
+      <div class="fm-field" id="susfsUidRow" style="display:none;"><label>uid scheme</label><input type="number" id="susfsUidScheme" value="0" min="0" step="1"></div>
+      <div class="fm-btns"><button class="fm-btn primary" onclick="susfsAdd()">添加并下发</button></div>
+      <div class="fm-props" style="margin-top:8px;">只对本次开机有效：网页端不保存规则，重启后要它继续生效，请把同样的规则加进 App 面板的清单。</div>
+    </div>`;
+
+  const removeRow = `
+    <div class="pref-item" style="cursor:default;${dim}"${loaded ? ' onclick="susfsRemove()"' : ''}>
+      <div class="pref-content">
+        <div class="pref-title">删除规则</div>
+        <div class="pref-subtitle">内核没有删除命令：已添加的规则无法在运行时撤销，点这里看内核的答复。</div>
+      </div>
+    </div>`;
+
+  const footer = `<div class="fm-props" style="padding:0 16px 14px;">${escapeHtml(st.note || '')}</div>`;
+
+  card.innerHTML = statusRow + featureRow + toggleRows + notLoaded + addForm + removeRow + footer;
+}
+
+function susfsToggleFeatures() {
+  SUSFS.featuresOpen = !SUSFS.featuresOpen;
+  const box = document.getElementById('susfsFeatures');
+  const hint = document.getElementById('susfsFeaturesHint');
+  if (box) box.style.display = SUSFS.featuresOpen ? 'block' : 'none';
+  if (hint) hint.textContent = SUSFS.featuresOpen ? '点击收起' : '点击展开，内容来自内核 supercall';
+}
+
+function susfsKindChange() {
+  const kindEl = document.getElementById('susfsKind');
+  const isRedirect = !!kindEl && kindEl.value === 'redirect';
+  const redirectRow = document.getElementById('susfsRedirectRow');
+  const uidRow = document.getElementById('susfsUidRow');
+  if (redirectRow) redirectRow.style.display = isRedirect ? 'flex' : 'none';
+  if (uidRow) uidRow.style.display = isRedirect ? 'flex' : 'none';
+}
+
+async function susfsToggle(key, value) {
+  if (!SUSFS.status || !SUSFS.status.loaded) {
+    showToast('SuSFS 未加载，先在首页完成提权/安装');
+    return;
+  }
+  try {
+    await api('/api/susfs/toggle', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: key, value: !!value }),
+    });
+    SUSFS.sent[key] = !!value;
+    const el = document.getElementById('susfsState-' + key);
+    if (el) {
+      el.innerHTML = `<span style="color:var(--accent);">已下发：${value ? '开' : '关'}（内核不回报结果）</span>`;
+    }
+    showToast('已下发：' + key + ' = ' + (value ? '开' : '关'));
+  } catch (e) {
+    showToast('下发失败：' + e.message);
+  }
+}
+
+async function susfsAdd() {
+  if (!SUSFS.status || !SUSFS.status.loaded) {
+    showToast('SuSFS 未加载，先在首页完成提权/安装');
+    return;
+  }
+  const kindEl = document.getElementById('susfsKind');
+  const pathEl = document.getElementById('susfsPath');
+  const redirectEl = document.getElementById('susfsRedirected');
+  const uidEl = document.getElementById('susfsUidScheme');
+  const kind = kindEl ? kindEl.value : 'path';
+  const path = pathEl ? pathEl.value.trim() : '';
+  if (!path.startsWith('/')) {
+    showToast('路径必须是以 / 开头的绝对路径');
+    return;
+  }
+  const body = { kind: kind, path: path };
+  if (kind === 'redirect') {
+    const redirected = redirectEl ? redirectEl.value.trim() : '';
+    if (!redirected.startsWith('/')) {
+      showToast('目标路径必须是以 / 开头的绝对路径');
+      return;
+    }
+    body.redirected = redirected;
+    body.uid_scheme = parseInt(uidEl && uidEl.value ? uidEl.value : '0', 10) || 0;
+  }
+  try {
+    const res = await api('/api/susfs/add', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    showToast('已下发：' + (res.kind || kind) + ' ' + (res.path || path));
+    if (pathEl) pathEl.value = '';
+    if (redirectEl) redirectEl.value = '';
+  } catch (e) {
+    showToast('添加失败：' + e.message);
+  }
+}
+
+async function susfsRemove() {
+  try {
+    const res = await api('/api/susfs/remove', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    fmDialog('删除规则',
+      '<div class="fm-props">' + escapeHtml(res.note || '内核没有删除命令：已添加的规则无法在运行时撤销。') + '</div>' +
+      '<div class="fm-btns" style="margin-top:14px;justify-content:flex-end;">' +
+      '<button class="fm-btn" onclick="fmDialogClose()">知道了</button></div>');
+  } catch (e) {
+    showToast('请求失败：' + e.message);
+  }
+}
+
+// ── 内置 Shizuku ─────────────────────────────────────────────────────────────
+// ksud 只能看到 shizuku_server 进程；binder 是否可用仍以 App 面板为准。
+// 授权文件只读：只展示条数与权限，不展示任何 uid/包名明细。
+
+const SHIZUKU = { status: null, busy: false, actionError: '' };
+
+function shizukuAutostartText(a) {
+  if (!a || !a.readable) return '无法读取（需在 App 内查看）';
+  const enabled = a.enabled ? '已开启' : '已关闭（在 App 内修改）';
+  if (a.lastResult === 'never') return enabled + ' · 本次安装后尚未尝试过自启';
+  if (a.lastResult === 'unknown') return enabled + ' · 上次结果无法读取';
+  const when = a.lastTime ? new Date(a.lastTime).toLocaleString('zh-CN', { hour12: false }) : '未知时间';
+  const sources = { boot: '开机', 'package-replaced': '应用更新', manual: '手动', 'enable-toggle': '打开开关时' };
+  const source = sources[a.lastSource] || a.lastSource || '未知';
+  if (a.lastResult === 'success') {
+    return enabled + ' · 上次自启成功 · ' + escapeHtml(when) + ' · ' + escapeHtml(source);
+  }
+  const detail = a.lastDetail ? '<br>' + escapeHtml(a.lastDetail) : '';
+  return enabled + ' · 上次自启失败 · ' + escapeHtml(when) + ' · ' + escapeHtml(source) + detail;
+}
+
+async function loadShizuku() {
+  const card = document.getElementById('shizukuCard');
+  if (!card) return;
+  if (!SHIZUKU.status) card.innerHTML = '<div class="loading">加载中...</div>';
+  try {
+    SHIZUKU.status = await api('/api/shizuku/status');
+  } catch (e) {
+    card.innerHTML = '<div class="pref-item" style="cursor:default;">' +
+      '<div class="pref-content"><div class="pref-title">读取失败</div>' +
+      '<div class="pref-subtitle">' + escapeHtml(e.message) + '</div></div></div>';
+    return;
+  }
+  renderShizuku();
+}
+
+function renderShizuku() {
+  const card = document.getElementById('shizukuCard');
+  if (!card) return;
+  const st = SHIZUKU.status || {};
+  const running = !!st.running;
+  const pid = st.pid == null ? '—' : st.pid;
+  const identity = st.serverIsRoot ? 'root' : (st.uid == null ? '身份未知' : 'uid ' + st.uid);
+  const statusSub = running
+    ? 'pid ' + pid + ' · ' + identity + '；binder 可用性请在 App 内确认'
+    : 'shizuku_server 未运行';
+
+  const statusRow = '<div class="pref-item" style="cursor:default;">' +
+    '<div class="pref-icon">' + uiIcon('shield') + '</div>' +
+    '<div class="pref-content">' +
+    '<div class="pref-title"><span class="shizuku-dot ' + (running ? 'running' : '') + '"></span>' +
+    (running ? '运行中' : '已停止') + '</div>' +
+    '<div class="pref-subtitle">' + escapeHtml(statusSub) + '</div>' +
+    '</div></div>';
+
+  const actions = '<div class="shizuku-actions">' +
+    '<button class="fm-btn primary" id="shizukuStartBtn" onclick="shizukuStart()">启动</button>' +
+    '<button class="fm-btn danger" id="shizukuStopBtn" onclick="shizukuStop()">停止</button>' +
+    '<button class="fm-btn" id="shizukuRefreshBtn" onclick="loadShizuku()">刷新</button>' +
+    '</div>';
+
+  const errorRow = '<div class="shizuku-error" id="shizukuActionError" style="display:' +
+    (SHIZUKU.actionError ? 'block' : 'none') + ';">' + escapeHtml(SHIZUKU.actionError || '') + '</div>';
+
+  const autostartRow = '<div class="pref-item" style="cursor:default;">' +
+    '<div class="pref-content"><div class="pref-title">开机自启</div>' +
+    '<div class="pref-subtitle">' + shizukuAutostartText(st.autostart) + '</div></div></div>';
+
+  const auth = st.authorization || {};
+  const count = Number(st.authorizedCount || 0);
+  let authText;
+  if (!auth.exists) {
+    authText = '授权文件不存在（尚未授权任何应用）';
+  } else if (!auth.readable) {
+    authText = '授权文件不可读或格式异常（需要 root）';
+  } else {
+    authText = '允许 ' + (auth.allowedCount || 0) + ' · 拒绝 ' + (auth.deniedCount || 0) +
+      ' · 仅 Shell ' + (auth.shellOnlyCount || 0);
+    if (auth.mode !== '0600' || auth.ownerUid !== 2000) {
+      authText += ' <span style="color:var(--danger);">权限异常：' +
+        escapeHtml(auth.mode || '?') + ' / uid ' +
+        escapeHtml(String(auth.ownerUid == null ? '?' : auth.ownerUid)) + '</span>';
+    }
+  }
+  const authRow = '<div class="pref-item" style="cursor:default;">' +
+    '<div class="pref-content"><div class="pref-title">授权应用 ' + count + ' 个</div>' +
+    '<div class="pref-subtitle">' + authText + '</div></div></div>';
+
+  const noteRow = '<div class="pref-item" style="cursor:default;">' +
+    '<div class="pref-content"><div class="pref-subtitle">授权请在 App 内修改；网页端只读展示，不写入授权文件。</div></div></div>';
+
+  const managerText = escapeHtml(st.packageName || '—') +
+    (st.apkPath ? '<br><span class="shizuku-mono">' + escapeHtml(st.apkPath) + '</span>' : '');
+  const managerRow = '<div class="pref-item" style="cursor:default;">' +
+    '<div class="pref-content"><div class="pref-title">管理器</div>' +
+    '<div class="pref-subtitle">' + managerText + '</div></div></div>';
+
+  card.innerHTML = statusRow + actions + errorRow + autostartRow + authRow + noteRow + managerRow;
+  shizukuApplyBusy();
+}
+
+function shizukuApplyBusy() {
+  const start = document.getElementById('shizukuStartBtn');
+  const stop = document.getElementById('shizukuStopBtn');
+  const refresh = document.getElementById('shizukuRefreshBtn');
+  if (!start || !stop || !refresh) return;
+  const running = !!(SHIZUKU.status && SHIZUKU.status.running);
+  start.disabled = SHIZUKU.busy || running;
+  stop.disabled = SHIZUKU.busy || !running;
+  refresh.disabled = SHIZUKU.busy;
+  start.textContent = SHIZUKU.busy ? '处理中…' : '启动';
+  stop.textContent = SHIZUKU.busy ? '处理中…' : '停止';
+}
+
+function shizukuSetError(text) {
+  SHIZUKU.actionError = text || '';
+  const el = document.getElementById('shizukuActionError');
+  if (el) {
+    el.textContent = SHIZUKU.actionError;
+    el.style.display = SHIZUKU.actionError ? 'block' : 'none';
+  }
+}
+
+async function shizukuStart() {
+  if (SHIZUKU.busy) return;
+  SHIZUKU.busy = true;
+  shizukuSetError('');
+  shizukuApplyBusy();
+  try {
+    const res = await api('/api/shizuku/start', { method: 'POST' });
+    const pid = res.pid == null ? '—' : res.pid;
+    showToast(res.alreadyRunning ? ('服务已在运行（pid ' + pid + '）') : ('已启动（pid ' + pid + '）'));
+    setTimeout(() => { if (!SHIZUKU.busy) loadShizuku(); }, 3000);
+  } catch (e) {
+    const raw = e && e.message ? e.message : String(e);
+    const message = raw.indexOf('启动失败：') === 0 ? raw : ('启动失败：' + raw);
+    shizukuSetError(message);
+    showToast(message);
+  } finally {
+    SHIZUKU.busy = false;
+    await loadShizuku();
+  }
+}
+
+async function shizukuStop() {
+  if (SHIZUKU.busy) return;
+  if (!confirm('停止 Shizuku 会中断正在使用它的应用，继续？')) return;
+  SHIZUKU.busy = true;
+  shizukuSetError('');
+  shizukuApplyBusy();
+  try {
+    const res = await api('/api/shizuku/stop', { method: 'POST' });
+    const killed = Array.isArray(res.killedPids) && res.killedPids.length
+      ? ('（pid ' + res.killedPids.join(', ') + '）')
+      : '';
+    showToast(res.alreadyStopped ? '服务已经停止' : ('已停止' + killed));
+  } catch (e) {
+    const raw = e && e.message ? e.message : String(e);
+    const message = raw.indexOf('停止失败：') === 0 ? raw : ('停止失败：' + raw);
+    shizukuSetError(message);
+    showToast(message);
+  } finally {
+    SHIZUKU.busy = false;
+    await loadShizuku();
+  }
+}
+
+const FM_JSON = { 'Content-Type': 'application/json' };
+
+const FM_HOME = '/sdcard';
+
+const FM = {
+  panes: [
+    { path: FM_HOME, entries: [], arc: null },
+    { path: FM_HOME, entries: [], arc: null },
+  ],
+  builtinRoots: [],
+  customRoots: [],
+  quickRun: [],
+  lastPane: 0,
+  owner: -1,
+  sel: new Set(),
+  selecting: false,
+  pick: null,
+  drag: null,
+  suppressClick: false,
+  editorPath: '',
+  editorArc: null,
+};
+
+function fmEsc(p) { return encodeURIComponent(p); }
+
+function fmHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function fmSize(n) {
+  if (n < 1024) return n + 'B';
+  const units = ['K', 'M', 'G', 'T'];
+  let i = -1;
+  do { n /= 1024; i++; } while (n >= 1024 && i < units.length - 1);
+  return (n < 10 ? n.toFixed(1) : Math.round(n)) + units[i];
+}
+
+function appRow({ id, label, sub, bg = '#8e8e93', attrs = '', onclick = '', right = '' }) {
+  const name = label || '?';
+  return `<div class="app-item"${attrs}${onclick ? ` onclick="${onclick}"` : ''}>` +
+    `<div class="app-icon app-icon-letter" id="${id}" style="background:${bg};">` +
+    `${fmHtml(String(name).charAt(0).toUpperCase())}</div>` +
+    `<div class="app-info"><div class="app-name">${fmHtml(name)}</div>` +
+    `<div class="app-pkg">${sub}</div></div>${right}</div>`;
+}
+
+function fmTime(sec) {
+  if (!sec) return '';
+  const d = new Date(sec * 1000), pad = x => String(x).padStart(2, '0');
+  return `${d.getMonth() + 1}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+const UI_ICONS = {
+  'folder': '<svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h3.6l2 2H19a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  'file': '<svg viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 3v5h5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  'image': '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8.5" cy="10" r="1.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="m20.5 15-4.5-4.5L5.5 21" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  'video': '<svg viewBox="0 0 24 24"><rect x="3" y="6" width="13" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 12l5-3v6z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  'audio': '<svg viewBox="0 0 24 24"><path d="M9 18V6l10-2v12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="6.5" cy="18" r="2.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="16.5" cy="16" r="2.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  'archive': '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="4" rx="1" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 12h4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  'apk': '<svg viewBox="0 0 24 24"><path d="M21 16V8l-9-5-9 5v8l9 5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 8l9 5 9-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 13v8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  'link': '<svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  'up': '<svg viewBox="0 0 24 24"><path d="M12 19V5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="m5 12 7-7 7 7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  'shield': '<svg viewBox="0 0 24 24"><path d="M12 3l7 3v6c0 5-3 8-7 9-4-1-7-4-7-9V6z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="m9 12 2 2 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  'grid': '<svg viewBox="0 0 24 24"><rect x="4" y="4" width="6" height="6" rx="1" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><rect x="14" y="4" width="6" height="6" rx="1" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><rect x="4" y="14" width="6" height="6" rx="1" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><rect x="14" y="14" width="6" height="6" rx="1" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  'text': '<svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 9h8M8 13h8M8 17h5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  'key': '<svg viewBox="0 0 24 24"><circle cx="8" cy="15" r="4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M11 12l9-9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="m17 6 2 2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  'chip': '<svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 3v3M15 3v3M9 18v3M15 18v3M3 9h3M3 15h3M18 9h3M18 15h3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  'lock': '<svg viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 10V7a4 4 0 0 1 8 0v3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  'compass': '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="m15 9-2 6-4 2 2-6z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  'package': '<svg viewBox="0 0 24 24"><path d="M12 3l8 4v10l-8 4-8-4V7z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 7l8 4 8-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+};
+
+function uiIcon(name) { return (UI_ICONS[name] || UI_ICONS.file).replace(/\n/g, ''); }
+
+function fmApkIcon(entry) {
+  const src = API_BASE + '/api/fs/apkicon?path=' + encodeURIComponent(entry.path) +
+    '&t=' + encodeURIComponent(entry.mtime || 0);
+  return '<img class="fm-apk-icon" loading="lazy" alt="" src="' + src +
+    '" onerror="fmApkIconFallback(this)">';
+}
+
+function fmApkIconFallback(img) {
+  const holder = document.createElement('span');
+  holder.innerHTML = fmIcon({ name: '.apk', is_dir: false, path: '' });
+  if (holder.firstChild) img.replaceWith(holder.firstChild);
+}
+
+function fmRowIcon(entry) {
+  if (!entry.is_dir && fmKindOf(entry.name) === 'apk') return fmApkIcon(entry);
+  if (entry.is_dir || fmKindOf(entry.name) !== 'image') return fmIcon(entry);
+  const src = API_BASE + '/api/fs/raw?path=' + encodeURIComponent(entry.path);
+  return '<img class="fm-thumb" loading="lazy" alt="" src="' + src + '">';
+}
+
+function fmImageZoom(src, name) {
+  const box = document.createElement('div');
+  box.id = 'fmZoom';
+  box.innerHTML = '<img src="' + src + '" alt="' + fmHtml(name) + '"><div class="fm-zoom-hint">点任意处关闭</div>';
+  box.addEventListener('click', function () { box.remove(); }, { once: true });
+  document.body.appendChild(box);
+}
+
+function fmBaseName(name) { return String(name).toLowerCase().replace(/\.\d+$/, ''); }
+
+const FM_KINDS = [
+  { id: 'image', label: '图片', test: /\.(png|jpe?g|gif|webp|bmp|svg|ico)$/ },
+  { id: 'video', label: '视频', test: /\.(mp4|m4v|webm|mov|3gp|mkv)$/ },
+  { id: 'apk', label: 'APK', test: /\.(apk|apks)$/ },
+  { id: 'script', label: 'SH 脚本', test: /\.sh$/ },
+  { id: 'text', label: '文本', test: /$^/ },
+];
+
+function fmKindOf(name) {
+  const base = fmBaseName(name);
+  const hit = FM_KINDS.find(k => k.test.test(base));
+  return hit ? hit.id : 'text';
+}
+
+function fmKindLabel(kind) {
+  const hit = FM_KINDS.find(k => k.id === kind);
+  return hit ? hit.label : '文本';
+}
+
+function fmIsArchive(name) { return /\.zip$/.test(fmBaseName(name)); }
+
+function fmIcon(e) {
+  if (e.is_symlink) return uiIcon('link');
+  if (e.is_dir) return uiIcon('folder');
+  const n = fmBaseName(e.name);
+  if (/\.(png|jpe?g|gif|webp|bmp|svg|ico)$/.test(n)) return uiIcon('image');
+  if (/\.(apk|apks)$/.test(n)) return uiIcon('apk');
+  if (/\.(mp4|m4v|webm|mov|3gp|mkv)$/.test(n)) return uiIcon('video');
+  if (/\.(zip|tar|gz|tgz|xz|bz2|7z|rar)$/.test(n)) return uiIcon('archive');
+  if (/\.(mp3|wav|flac|m4a|ogg|aac)$/.test(n)) return uiIcon('audio');
+  return uiIcon('file');
+}
+
+function fmSkeleton() {
+  return ('<div class="fm-skel"><div class="fm-skel-icon"></div>' +
+    '<div class="fm-skel-bar" style="flex:1 1 auto;max-width:58%"></div>' +
+    '<div class="fm-skel-bar" style="flex:0 0 auto;width:38px"></div></div>').repeat(6);
+}
+
+const fmEnterTimers = [0, 0];
+
+function fmEnter(i) {
+  const list = document.getElementById('fmList' + i);
+  list.classList.add('enter');
+  clearTimeout(fmEnterTimers[i]);
+  fmEnterTimers[i] = setTimeout(() => list.classList.remove('enter'), 900);
+}
+
+function fmLoad(i) {
+  const pane = FM.panes[i];
+  const input = document.getElementById('fmPath' + i);
+  const list = document.getElementById('fmList' + i);
+  list.innerHTML = fmSkeleton();
+  document.getElementById('fmCount' + i).textContent = '';
+  if (pane.arc) {
+    input.readOnly = true;
+    input.value = '压缩包：' + pane.arc.path +
+      (pane.arc.sub ? ' / ' + pane.arc.sub.replace(/\/$/, '') : '');
+    return fmApi('/api/fs/archive?path=' + fmEsc(pane.arc.path) + '&sub=' + fmEsc(pane.arc.sub))
+      .then(entries => { pane.entries = entries; fmEnter(i); fmRender(i); })
+      .catch(e => { list.innerHTML = '<div class="fm-empty">' + fmHtml(fmExplain(e)) + '</div>'; });
+  }
+  input.readOnly = false;
+  input.value = pane.path;
+  return fmApi('/api/fs/list?path=' + fmEsc(pane.path))
+    .then(entries => { pane.entries = entries; fmEnter(i); fmRender(i); })
+    .catch(e => { list.innerHTML = '<div class="fm-empty">' + fmHtml(fmExplain(e)) + '</div>'; });
+}
+
+function fmExplain(e) {
+  const msg = String((e && e.message) || e);
+  if (msg === 'Failed to fetch' || msg === 'NetworkError when attempting to fetch resource.') {
+    return '服务已退出（浏览器切到后台时计时器被冻结，空闲超时后服务会自动关闭）。\n请点桌面图标重新启动。';
+  }
+  return msg;
+}
+
+async function fmApi(path, options) {
+  const res = await fetch(API_BASE + path, options);
+  const data = await res.json();
+  if (data.success) return data.data;
+  throw new Error(data.error || '请求失败');
+}
+
+function fmRender(i) {
+  const pane = FM.panes[i];
+  const rows = [];
+  if (pane.arc || pane.path !== '/') {
+    const label = pane.arc && !pane.arc.sub ? '.. · 退出压缩包' : '..';
+    rows.push(`<div class="fm-row" data-pane="${i}" data-i="-1"><div class="fm-icon">${uiIcon('up')}</div><div class="fm-name">${label}</div></div>`);
+  }
+  pane.entries.forEach((e, idx) => {
+    const sel = FM.owner === i && FM.sel.has(e.path) ? ' sel' : '';
+    const pickable = FM.pick && !e.is_dir && FM.pick.filter.test(e.name) ? ' pickable' : '';
+    const link = e.is_symlink ? ' → ' + fmHtml(e.symlink_target || '') : '';
+    rows.push(
+      `<div class="fm-row${sel}${pickable}" data-pane="${i}" data-i="${idx}" style="--i:${Math.min(idx, 10) * 14}ms">` +
+      `<div class="fm-icon${e.is_dir ? ' fm-icon-dir' : ''}">${fmRowIcon(e)}</div>` +
+      `<div class="fm-name">${fmHtml(e.name)}${link}</div>` +
+      `<div class="fm-meta">${e.is_dir ? '' : fmSize(e.size)}<span class="fm-time">${e.is_dir ? '' : '<br>'}${fmTime(e.mtime)}</span></div>` +
+      `</div>`);
+  });
+  document.getElementById('fmList' + i).innerHTML = rows.length ? rows.join('') :
+    '<div class="fm-empty"><div class="fm-empty-icon">' + uiIcon('folder') + '</div>这个目录是空的</div>';
+  document.getElementById('fmCount' + i).textContent =
+    pane.entries.length ? String(pane.entries.length) : '';
+  document.getElementById('fmPane' + i).classList.toggle('active', FM.owner === i);
+  document.getElementById('fmPane' + i).classList.toggle('arc', !!pane.arc);
+}
+
+function fmRenderAll() { fmRender(0); fmRender(1); }
+
+function fmToggleFab() {
+  document.getElementById('fmFab')?.classList.toggle('open');
+}
+
+function fmCloseFab() {
+  document.getElementById('fmFab')?.classList.remove('open');
+}
+
+function fmSyncActions() {
+  document.getElementById('fmSel').textContent = `已选 ${FM.sel.size} 项`;
+  const actions = document.getElementById('fmActions');
+  const showCard = FM.sel.size > 0 && !FM.pick;
+  actions.classList.toggle('show', showCard && !fmCardHidden);
+  if (showCard) fmCloseFab();
+
+  const has = FM.sel.size > 0;
+  const selected = Array.from(FM.sel).map(p => p.toLowerCase());
+  const inArc = fmOwnerIsArchive();
+  const other = FM.owner >= 0 ? 1 - FM.owner : -1;
+  const otherArc = other >= 0 && !!FM.panes[other].arc;
+  actions.classList.toggle('arc', inArc);
+
+  const runBtn = document.getElementById('fmRunBtn');
+  if (runBtn) runBtn.style.display = has && !inArc && selected.every(p => fmKindOf(p) === 'script') ? '' : 'none';
+
+  const openAsBtn = document.getElementById('fmOpenAsBtn');
+  if (openAsBtn) openAsBtn.style.display = FM.sel.size === 1 && !FM.pick ? '' : 'none';
+
+  const copyBtn = document.getElementById('fmCopyBtn');
+  const moveBtn = document.getElementById('fmMoveBtn');
+  const transferable = has && !inArc && !otherArc;
+  const arrow = FM.owner === 1 ? '←' : '→';
+  if (copyBtn) {
+    copyBtn.style.display = transferable ? '' : 'none';
+    copyBtn.textContent = `复制 ${arrow} 对侧`;
+  }
+  if (moveBtn) {
+    moveBtn.style.display = transferable ? '' : 'none';
+    moveBtn.textContent = `移动 ${arrow} 对侧`;
+  }
+
+  const zipBtn = document.getElementById('fmExtractBtn');
+  if (zipBtn) {
+    const wholeZips = has && !inArc && selected.every(p => fmIsArchive(p));
+    const fromArchive = has && inArc;
+    zipBtn.style.display = (wholeZips || fromArchive) ? '' : 'none';
+    zipBtn.textContent = fromArchive ? '解压选中 → 对侧' : '解压 → 对侧';
+  }
+
+  const addArcBtn = document.getElementById('fmAddArcBtn');
+  if (addArcBtn) addArcBtn.style.display = has && !inArc && otherArc ? '' : 'none';
+
+  const exitArcBtn = document.getElementById('fmArcExitBtn');
+  if (exitArcBtn) exitArcBtn.style.display = inArc ? '' : 'none';
+
+  const installBtn = document.getElementById('fmInstallBtn');
+  if (installBtn) installBtn.style.display = has && !inArc && selected.every(p => fmIsArchive(p)) ? '' : 'none';
+
+  const rootBtn = document.getElementById('fmRootBtn');
+  if (rootBtn) {
+    let single = false;
+    if (has && !inArc && FM.owner >= 0) {
+      const only = Array.from(FM.sel)[0];
+      const entry = FM.panes[FM.owner].entries.find(e => e.path === only);
+      single = !!entry && entry.is_dir && FM.sel.size === 1;
+    }
+    rootBtn.style.display = single ? '' : 'none';
+  }
+
+  const quickBtn = document.getElementById('fmQuickAddBtn');
+  if (quickBtn) {
+    const scripts = has && !inArc && selected.every(p => fmKindOf(p) === 'script');
+    quickBtn.style.display = scripts ? '' : 'none';
+    if (scripts) {
+      quickBtn.textContent = Array.from(FM.sel).every(fmQuickHas) ? '移出便捷执行' : '加入便捷执行';
+    }
+  }
+  fmSyncPick();
+}
+
+function fmGo(i, path) {
+  const clean = (path || '/').trim() || '/';
+  const pane = FM.panes[i];
+  pane.arc = null;
+  pane.path = clean;
+  FM.lastPane = i;
+  FM.owner = -1; FM.sel.clear(); FM.selecting = false; fmSyncActions();
+  return fmLoad(i);
+}
+
+let fmPathCommitted = { pane: -1, value: null };
+
+function fmPathSubmit(paneIndex) {
+  const input = document.getElementById('fmPath' + paneIndex);
+  if (!input) return;
+  const typed = input.value.trim() || '/';
+  if (fmPathCommitted.pane === paneIndex && fmPathCommitted.value === typed) return;
+  fmPathCommitted = { pane: paneIndex, value: typed };
+  fmGo(paneIndex, typed);
+}
+
+function fmPathCommit(ev, paneIndex) {
+  if (ev.key !== 'Enter' && ev.keyCode !== 13) return true;
+  fmPathSubmit(paneIndex);
+  ev.target.blur();
+  return false;
+}
+
+function fmPathFocus(paneIndex) {
+  fmPathCommitted = { pane: -1, value: null };
+}
+
+function fmResetPanes() {
+  FM.panes[0].path = FM_HOME;
+  FM.panes[1].path = FM_HOME;
+  FM.panes[0].arc = null;
+  FM.panes[1].arc = null;
+  FM.lastPane = 0;
+  FM.owner = -1; FM.sel.clear(); FM.selecting = false;
+  fmSyncActions();
+  fmLoad(0); fmLoad(1);
+}
+
+function fmUp(i) {
+  const pane = FM.panes[i];
+  if (pane.arc) {
+    const sub = pane.arc.sub.replace(/\/$/, '');
+    if (!sub) { fmArcExit(i); return; }
+    const parts = sub.split('/');
+    parts.pop();
+    fmArcEnter(i, parts.length ? parts.join('/') + '/' : '');
+    return;
+  }
+  const p = pane.path.replace(/\/+$/, '');
+  const parent = p.split('/').slice(0, -1).join('/') || '/';
+  fmGo(i, parent);
+}
+
+
+function fmArcOpen(i, zipPath) {
+  const other = 1 - i;
+  FM.panes[other].arc = null;
+  FM.panes[i].arc = { path: zipPath, sub: '' };
+  FM.lastPane = i;
+  FM.owner = -1; FM.sel.clear(); FM.selecting = false;
+  fmSyncActions();
+  fmLoad(i);
+  fmLoad(other);
+}
+
+function fmArcEnter(i, sub) {
+  if (!FM.panes[i].arc) return;
+  FM.panes[i].arc.sub = sub || '';
+  FM.owner = -1; FM.sel.clear(); FM.selecting = false;
+  fmSyncActions();
+  fmLoad(i);
+}
+
+function fmArcExit(i) {
+  FM.panes[i].arc = null;
+  FM.owner = -1; FM.sel.clear(); FM.selecting = false;
+  fmSyncActions();
+  fmLoad(i);
+}
+
+function fmOwnerIsArchive() {
+  return FM.owner >= 0 && !!FM.panes[FM.owner].arc;
+}
+
+function fmFsOnly() {
+  if (fmOwnerIsArchive()) {
+    showToast('压缩包内不支持这个操作');
+    return false;
+  }
+  return true;
+}
+
+function fmOpenFileManager() {
+  switchPage('files');
+  fmBoot();
+  fmResetPanes();
+}
+
+function fmStartPick(title, filter, onPick, options) {
+  const opts = options || {};
+  FM.pick = { filter: filter, onPick: onPick, back: opts.back || 'modules', hint: opts.hint || '' };
+  document.getElementById('fmPickText').textContent = title;
+  document.getElementById('fmPick').classList.add('show');
+  switchPage('files');
+  document.getElementById('topbarTitle').textContent = title;
+  fmBoot();
+  fmResetPanes();
+  fmSyncPick();
+}
+
+function fmSyncPick() {
+  const bar = document.getElementById('fmPickActions');
+  if (!bar) return;
+  bar.classList.toggle('show', !!FM.pick && FM.sel.size > 0 && !fmCardHidden);
+  document.getElementById('fmPickSel').textContent = `已选 ${FM.sel.size} 项`;
+}
+
+function fmPickEnd() {
+  FM.pick = null;
+  document.getElementById('fmPick').classList.remove('show');
+  FM.sel.clear(); FM.selecting = false; FM.owner = -1;
+  fmSyncActions();
+  fmSyncPick();
+  fmRenderAll();
+}
+
+function fmPickCancel() {
+  const back = (FM.pick && FM.pick.back) || 'modules';
+  fmPickEnd();
+  switchPage(back);
+}
+
+function fmPickChoose(entry) {
+  const pick = FM.pick;
+  if (!pick) return;
+  if (!pick.filter.test(entry.name)) {
+    showToast(pick.hint || '只能选 zip 或 apk 文件');
+    return;
+  }
+  const isApk = /\.(apk|apks)(\.\d+)?$/i.test(entry.name);
+  const isSplit = /\.apks(\.\d+)?$/i.test(entry.name);
+  const question = isApk
+    ? '安装 ' + entry.name + (isSplit ? '（拆分安装包，整套安装）' : '') + '？'
+    : '把 ' + entry.name + ' 作为模块安装？重启后生效。';
+  if (!confirm(question)) return;
+  const path = entry.path;
+  fmPickEnd();
+  pick.onPick([path]);
+}
+
+function fmPickInstall() {
+  const pick = FM.pick;
+  if (!pick) return;
+  const paths = fmSelPaths();
+  const zips = paths.filter(p => /\.zip(\.\d+)?$/i.test(p));
+  const apks = paths.filter(p => /\.(apk|apks)(\.\d+)?$/i.test(p));
+  if (!zips.length && !apks.length) {
+    showToast('选中的里面没有 zip 或 apk 文件');
+    return;
+  }
+  const skipped = paths.length - zips.length - apks.length;
+  const names = zips.concat(apks).map(p => p.split('/').pop() || p);
+  const question = (zips.length + apks.length === 1)
+    ? (apks.length ? '安装 ' + names[0] + '？'
+                   : '把 ' + names[0] + ' 作为模块安装？重启后生效。')
+    : '一次安装 ' + names.length + ' 个文件？' +
+      (zips.length ? '（' + zips.length + ' 个模块，重启后生效）' : '') +
+      (apks.length ? '（' + apks.length + ' 个应用）' : '') +
+      '\n\n' + names.join('\n') +
+      (skipped ? '\n\n（已跳过 ' + skipped + ' 个既不是 zip 也不是 apk 的文件）' : '');
+  if (!confirm(question)) return;
+  fmPickEnd();
+  pick.onPick(zips.concat(apks));
+}
+
+let fmBooted = false;
+function fmBoot() {
+  if (!fmBooted) { fmBooted = true; fmInit(); }
+  api('/api/fs/roots').then(info => {
+    FM.builtinRoots = info.roots || [];
+    fmReloadJumps();
+    fmReloadQuick();
+  }).catch(() => {});
+  fmLoad(0); fmLoad(1);
+}
+
+function fmReloadJumps() {
+  return fmApi('/api/fs/jumps')
+    .then(list => { FM.customRoots = Array.isArray(list) ? list : []; })
+    .catch(() => {});
+}
+
+function fmReloadQuick() {
+  return fmApi('/api/fs/quickrun')
+    .then(list => { FM.quickRun = Array.isArray(list) ? list : []; })
+    .catch(() => {});
+}
+
+function fmSaveQuick() {
+  return fmApi('/api/fs/quickrun', {
+    method: 'POST', headers: FM_JSON,
+    body: JSON.stringify({ quick_run: FM.quickRun || [] }),
+  }).then(() => fmReloadQuick(), (e) => {
+    showToast('保存便捷执行失败：' + e.message);
+    return fmReloadQuick();
+  });
+}
+
+function fmSaveCustomRoots() {
+  return fmApi('/api/fs/jumps', {
+    method: 'POST', headers: FM_JSON,
+    body: JSON.stringify({ jumps: FM.customRoots || [] }),
+  }).then(() => fmReloadJumps(), (e) => {
+    showToast('保存快速跳转失败：' + e.message);
+    return fmReloadJumps();
+  });
+}
+
+
+function fmSelectRange(paneIndex, anchor, current) {
+  const entries = FM.panes[paneIndex].entries;
+  const lo = Math.min(anchor, current), hi = Math.max(anchor, current);
+  FM.owner = paneIndex;
+  FM.sel.clear();
+  for (let i = lo; i <= hi; i++) { if (entries[i]) FM.sel.add(entries[i].path); }
+  fmSyncActions();
+  fmRender(paneIndex);
+}
+
+function fmBeginSelection(paneIndex, path) {
+  FM.selecting = true;
+  FM.owner = paneIndex;
+  FM.sel.clear();
+  FM.sel.add(path);
+  fmSyncActions();
+  fmRender(paneIndex);
+}
+
+const FM_SWIPE_SELECT = 40;
+const FM_SWIPE_START = 6;
+const FM_SWIPE_EATS_CLICK = 24;
+const FM_SWIPE_MAX = 88;
+
+let fmSwipeAnchor = null;
+
+let fmCardHidden = false;
+
+function fmSwipeSelect(paneIndex, idx) {
+  const entries = FM.panes[paneIndex].entries;
+  if (!entries[idx]) return;
+  fmCardHidden = true;
+  if (FM.owner !== paneIndex || FM.sel.size === 0) {
+    fmSwipeAnchor = idx;
+    fmBeginSelection(paneIndex, entries[idx].path);
+    return;
+  }
+  if (fmSwipeAnchor === null) fmSwipeAnchor = idx;
+  fmSelectRange(paneIndex, fmSwipeAnchor, idx);
+}
+
+function fmToggle(paneIndex, path) {
+  if (FM.owner !== paneIndex) { FM.owner = paneIndex; FM.sel.clear(); }
+  if (FM.sel.has(path)) FM.sel.delete(path); else FM.sel.add(path);
+  if (!FM.sel.size) { FM.selecting = false; FM.owner = -1; }
+  fmSyncActions();
+  fmRenderAll();
+}
+
+function fmClearSel() {
+  FM.sel.clear(); FM.selecting = false; FM.owner = -1;
+  fmSwipeAnchor = null;
+  fmCardHidden = false;
+  fmSyncActions(); fmRenderAll();
+}
+
+function fmSelectAll() {
+  const paneIndex = FM.owner >= 0 ? FM.owner : FM.lastPane;
+  FM.owner = paneIndex; FM.selecting = true;
+  FM.panes[paneIndex].entries.forEach(e => FM.sel.add(e.path));
+  fmSyncActions(); fmRenderAll();
+}
+
+function fmClick(ev, paneIndex) {
+  FM.lastPane = paneIndex;
+  if (FM.suppressClick) { FM.suppressClick = false; return; }
+  const row = ev.target.closest('.fm-row');
+  if (!row) return;
+  const idx = Number(row.dataset.i);
+  if (idx === -1) { fmUp(paneIndex); return; }
+  const pane = FM.panes[paneIndex];
+  const entry = pane.entries[idx];
+  if (!entry) return;
+  if (FM.selecting) { fmToggle(paneIndex, entry.path); return; }
+  if (pane.arc) {
+    if (entry.is_dir) { fmArcEnter(paneIndex, entry.path); return; }
+    if (fmIsArchive(entry.name)) {
+      showToast('包内的压缩包不能直接打开，先解压到对侧');
+      return;
+    }
+    fmOpenFile(entry, pane.arc);
+    return;
+  }
+  if (entry.is_dir) { fmGo(paneIndex, entry.path); return; }
+  if (FM.pick) { fmPickChoose(entry); return; }
+  if (fmIsArchive(entry.name)) { fmArcOpen(paneIndex, entry.path); return; }
+  fmOpenFile(entry, null);
+}
+
+function fmTouchStart(ev, paneIndex) {
+  FM.lastPane = paneIndex;
+  const row = ev.target.closest('.fm-row');
+  if (!row) return;
+  const idx = Number(row.dataset.i);
+  if (idx === -1) return;
+  const entry = FM.panes[paneIndex].entries[idx];
+  if (!entry) return;
+  const t = ev.touches[0];
+  const drag = {
+    paneIndex, anchor: idx, x: t.clientX, y: t.clientY,
+    long: false, moved: false, timer: null,
+    row, willSelect: false,
+  };
+  drag.timer = setTimeout(() => {
+    drag.long = true;
+    fmCardHidden = false;
+    if (FM.owner === paneIndex && FM.sel.has(entry.path)) {
+      if (fmSwipeAnchor !== null) drag.anchor = fmSwipeAnchor;
+      fmSyncActions();
+      fmRender(paneIndex);
+    } else {
+      fmSwipeAnchor = idx;
+      fmBeginSelection(paneIndex, entry.path);
+    }
+  }, 400);
+  FM.drag = drag;
+}
+
+function fmTouchMove(ev) {
+  const drag = FM.drag;
+  if (!drag) return;
+  const t = ev.touches[0];
+
+  if (!drag.long) {
+    const dx = t.clientX - drag.x;
+    const dy = t.clientY - drag.y;
+    if (dx < -FM_SWIPE_START && Math.abs(dy) < 24) {
+      drag.moved = true;
+      drag.dx = dx;
+      FM.suppressClick = dx <= -FM_SWIPE_EATS_CLICK;
+      clearTimeout(drag.timer);
+      if (drag.row) {
+        drag.row.classList.add('swiping');
+        drag.row.style.transform = `translateX(${Math.max(-FM_SWIPE_MAX, dx)}px)`;
+      }
+      drag.willSelect = dx <= -FM_SWIPE_SELECT;
+      return;
+    }
+    if (Math.abs(dy) > 10 || Math.abs(dx) > 10) fmTouchEnd();
+    return;
+  }
+  if (ev.cancelable) ev.preventDefault();
+  drag.moved = true;
+  FM.suppressClick = true;
+
+  const hit = document.elementFromPoint(t.clientX, t.clientY);
+  const row = hit && hit.closest ? hit.closest('.fm-row') : null;
+  if (!row || Number(row.dataset.pane) !== drag.paneIndex) return;
+  const idx = Number(row.dataset.i);
+  if (idx === -1) return;
+  fmSelectRange(drag.paneIndex, drag.anchor, idx);
+}
+
+function fmTouchEnd() {
+  const drag = FM.drag;
+  if (drag) clearTimeout(drag.timer);
+  const swiped = !!drag && drag.moved && (drag.dx || 0) <= -FM_SWIPE_EATS_CLICK;
+  if (drag && (drag.long || swiped)) fmSuppressClickUntil = Date.now() + 400;
+  if (drag && drag.row) {
+    drag.row.classList.remove('swiping');
+    drag.row.style.transform = '';
+  }
+  if (drag && drag.willSelect) fmSwipeSelect(drag.paneIndex, drag.anchor);
+  FM.drag = null;
+}
+
+let fmSuppressClickUntil = 0;
+
+document.addEventListener('click', ev => {
+  if (Date.now() >= fmSuppressClickUntil) return;
+  ev.stopPropagation();
+  ev.preventDefault();
+}, true);
+
+function fmInit() {
+  [0, 1].forEach(i => {
+    const list = document.getElementById('fmList' + i);
+    list.addEventListener('click', ev => fmClick(ev, i));
+    list.addEventListener('touchstart', ev => fmTouchStart(ev, i), { passive: true });
+    list.addEventListener('touchmove', fmTouchMove, { passive: false });
+    list.addEventListener('touchend', fmTouchEnd);
+    list.addEventListener('touchcancel', fmTouchEnd);
+    list.addEventListener('click', ev => {
+      const thumb = ev.target.closest ? ev.target.closest('.fm-thumb') : null;
+      if (!thumb) return;
+      ev.stopPropagation();
+      ev.preventDefault();
+      fmImageZoom(thumb.getAttribute('src'), thumb.getAttribute('alt') || '');
+    }, true);
+
+    list.addEventListener('contextmenu', ev => {
+      ev.preventDefault();
+      const row = ev.target.closest('.fm-row');
+      if (!row || Number(row.dataset.i) === -1) return;
+      fmCardHidden = false;
+      fmBeginSelection(i, FM.panes[i].entries[Number(row.dataset.i)].path);
+    });
+  });
+  document.getElementById('fmUpload').addEventListener('change', fmUpload);
+  const editorText = document.getElementById('fmEditorText');
+  editorText.addEventListener('input', () => fmEditorNumbers());
+  editorText.addEventListener('scroll', () => {
+    const gutter = document.getElementById('fmEditorGutter');
+    if (gutter) gutter.scrollTop = editorText.scrollTop;
+  });
+  const termInput = document.getElementById('fmTermInput');
+  termInput.addEventListener('keydown', ev => {
+    if (ev.key === 'Enter' || ev.keyCode === 13) {
+      ev.preventDefault();
+      fmTermSend();
+    }
+  });
+  fmInitPull(0);
+  fmInitPull(1);
+  ['fmActions', 'fmPickActions'].forEach(id => {
+    const overlay = document.getElementById(id);
+    overlay.addEventListener('click', ev => { if (ev.target === overlay) fmClearSel(); });
+  });
+  document.addEventListener('click', ev => {
+    const fab = document.getElementById('fmFab');
+    if (!fab || !fab.classList.contains('open')) return;
+    const onItem = ev.target.closest && ev.target.closest('.fm-fab-item');
+    if (!fab.contains(ev.target) || onItem) fmCloseFab();
+  });
+  document.getElementById('page-files').addEventListener('contextmenu', ev => {
+    const field = ev.target.closest && ev.target.closest('input, textarea');
+    if (field) return;
+    ev.preventDefault();
+  });
+}
+
+const FM_PULL_ARM = 30;
+const FM_PULL_RELEASE = 130;
+
+function fmInitPull(paneIndex) {
+  const list = document.getElementById('fmList' + paneIndex);
+  let startY = 0, armed = false, ready = false, shown = false;
+
+  list.addEventListener('touchstart', ev => {
+    armed = list.scrollTop <= 0;
+    ready = false; shown = false;
+    startY = ev.touches[0].clientY;
+    fmPullIndicator(paneIndex, false, false);
+  }, { passive: true });
+
+  list.addEventListener('touchmove', ev => {
+    if (!armed) return;
+    if (list.scrollTop > 0) {
+      armed = false; ready = false; shown = false;
+      fmPullIndicator(paneIndex, false, false);
+      return;
+    }
+    const dy = ev.touches[0].clientY - startY;
+    if (dy <= 0) { ready = false; fmPullIndicator(paneIndex, false, false); return; }
+    ready = dy >= FM_PULL_RELEASE;
+    if (dy >= FM_PULL_ARM) shown = true;
+    fmPullIndicator(paneIndex, shown, ready);
+  }, { passive: true });
+
+  list.addEventListener('touchend', () => {
+    fmPullIndicator(paneIndex, false, false);
+    const dragged = FM.drag === null && FM.suppressClick;
+    if (armed && ready && shown && !dragged) fmLoad(paneIndex);
+    armed = false;
+    ready = false; shown = false;
+  });
+
+  list.addEventListener('touchcancel', () => {
+    armed = false; ready = false; shown = false;
+    fmPullIndicator(paneIndex, false, false);
+  });
+}
+
+function fmPullIndicator(paneIndex, show, ready) {
+  const el = document.getElementById('fmPull' + paneIndex);
+  if (!el) return;
+  el.classList.toggle('show', !!show);
+  el.classList.toggle('spin', !!ready);
+  el.textContent = ready ? '↑ 松开刷新此目录' : '↓ 下拉刷新此目录';
+}
+
+
+const fmViewport = window.visualViewport;
+
+let fmTermAtBottom = true;
+
+let fmLastInset = 0;
+
+const FM_FIELD = 'input, textarea, select, [contenteditable]';
+
+function fmIsField(element) {
+  return !!element && typeof element.matches === 'function' && element.matches(FM_FIELD);
+}
+
+function fmMeasuredInset() {
+  if (!fmViewport) return 0;
+  return Math.max(0, window.innerHeight - fmViewport.height - fmViewport.offsetTop);
+}
+
+
+function fmTermKeepAtBottom() {
+  const out = document.getElementById('fmTermOut');
+  if (out && fmTermAtBottom) out.scrollTop = out.scrollHeight;
+}
+
+function fmApplyInset(covered) {
+  const wasCovered = fmLastInset;
+  fmLastInset = covered;
+
+  document.documentElement.style.setProperty('--keyboard-inset', covered + 'px');
+  document.body.classList.toggle('keyboard-open', covered > 0);
+
+  document.querySelectorAll('.modal-overlay.show .modal').forEach(sheet => {
+    sheet.style.maxHeight = covered ? Math.max(160, window.innerHeight - covered - 24) + 'px' : '';
+  });
+
+  if (covered < wasCovered) return;
+  if (!covered) return;
+
+  fmTermKeepAtBottom();
+  if (fmIsField(document.activeElement)) {
+    try { document.activeElement.scrollIntoView({ block: 'center' }); } catch (e) { }
+  }
+}
+
+function fmTrackKeyboard() {
+  if (!fmViewport) return;
+
+  fmApplyInset(fmMeasuredInset());
+}
+
+if (fmViewport) {
+  fmViewport.addEventListener('resize', fmTrackKeyboard);
+  fmViewport.addEventListener('scroll', fmTrackKeyboard);
+}
+
+const fmTermOutEl = document.getElementById('fmTermOut');
+if (fmTermOutEl) {
+  fmTermOutEl.addEventListener('scroll', () => {
+    fmTermAtBottom = fmTermOutEl.scrollHeight - fmTermOutEl.scrollTop - fmTermOutEl.clientHeight < 40;
+  });
+}
+
+document.addEventListener('focusin', event => {
+  const field = event.target;
+  if (!fmIsField(field)) return;
+
+  setTimeout(() => {
+    if (document.activeElement !== field) return;
+    try { field.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (e) { field.scrollIntoView(); }
+  }, 300);
+});
+
+
+let fmDialogOk = null;
+
+function fmFooter(okLabel) {
+  return `<div class="fm-btns" style="margin-top:14px;justify-content:flex-end;">` +
+    `<button class="fm-btn primary" onclick="fmDialogConfirm()">${okLabel || '确定'}</button>` +
+    `<button class="fm-btn" onclick="fmDialogClose()">取消</button></div>`;
+}
+
+function fmDialog(title, bodyHtml, onOk, okLabel) {
+  document.body.classList.add('modal-open');
+  document.getElementById('fmModalTitle').textContent = title;
+  document.getElementById('fmModalBody').innerHTML = bodyHtml;
+  fmDialogOk = onOk || null;
+  document.getElementById('fmModal').classList.add('show');
+  fmTrackKeyboard();
+}
+
+function fmDialogClose() {
+  document.getElementById('fmModal').classList.remove('show');
+  document.body.classList.remove('modal-open');
+  fmDialogOk = null;
+}
+
+async function fmDialogConfirm() {
+  const run = fmDialogOk;
+  fmDialogClose();
+  if (!run) return;
+  try { await run(); } catch (e) { showToast('失败：' + e.message); }
+}
+
+
+function fmSelPaths() { return Array.from(FM.sel); }
+
+async function fmZip() {
+  const paths = fmSelPaths();
+  if (!paths.length || !fmFsOnly()) return;
+
+  const owner = FM.owner >= 0 ? FM.owner : FM.lastPane;
+  const dir = FM.panes[owner].path;
+  const base = dir === '/' ? 'archive' : (dir.split('/').filter(Boolean).pop() || 'archive');
+  const suggested = base + '.zip';
+
+  fmDialog('压缩',
+    `<div class="fm-props">把选中的 ${paths.length} 项打包到 ${fmHtml(dir)} 下：</div>` +
+    `<div class="fm-field" style="margin-top:10px;"><label>压缩包名称</label>` +
+    `<input type="text" id="fmZipName" value="${fmHtml(suggested)}" placeholder="archive.zip"></div>` +
+    fmFooter('压缩'),
+    async () => {
+      const input = document.getElementById('fmZipName');
+      const name = ((input && input.value.trim()) || suggested).replace(/\//g, '_');
+      const target = (dir === '/' ? '' : dir) + '/' + name;
+      const added = await fmApi('/api/fs/archive/create', {
+        method: 'POST', headers: FM_JSON,
+        body: JSON.stringify({ archive: target, sources: paths, sub: '' }),
+      });
+      showToast(`已压缩 ${added.length} 项到 ${name}`);
+      fmClearSel();
+      fmLoad(owner);
+    }, '压缩');
+}
+
+async function fmInstallModule() {
+  const paths = fmSelPaths().filter(p => fmIsArchive(p));
+  if (!paths.length) {
+    showToast('请先选中 zip 文件');
+    return;
+  }
+  const names = paths.map(p => p.split('/').pop() || p);
+  const question = paths.length === 1
+    ? '把 ' + names[0] + ' 作为模块安装？重启后生效。'
+    : '一次刷入 ' + paths.length + ' 个模块？重启后生效。\n\n' + names.join('\n');
+  if (!confirm(question)) return;
+
+  await installModulePaths(paths);
+}
+
+async function fmTransfer(kind) {
+  const paths = fmSelPaths();
+  if (!paths.length || !fmFsOnly()) return;
+  const other = FM.owner === 0 ? 1 : 0;
+  const to = FM.panes[other].path;
+
+  const clashes = fmClashes(paths, other);
+  if (clashes.length) {
+    fmAskReplace(clashes, () => fmRunTransfer(kind, paths, to, true));
+    return;
+  }
+  await fmRunTransfer(kind, paths, to, false);
+}
+
+function fmClashes(paths, other) {
+  const names = new Set((FM.panes[other].entries || []).map(e => e.name));
+  return paths.map(p => p.split('/').pop() || p).filter(name => names.has(name));
+}
+
+function fmIsConflict(e) {
+  const msg = String((e && e.message) || e);
+  return msg.includes('目标已存在') || msg.includes('已存在');
+}
+
+function fmAskReplace(names, onReplace) {
+  const list = names
+    .map(name => `<div class="fm-props" style="word-break:break-all;">${fmHtml(name)}</div>`)
+    .join('');
+  fmDialog('目标已存在',
+    `<div class="fm-props">右栏已经有同名的项：</div>` + list +
+    `<div class="fm-props" style="margin-top:10px;">替换会先删掉右栏的同名项，再放入选中的内容。</div>` +
+    fmFooter('替换'),
+    onReplace);
+}
+
+async function fmRunTransfer(kind, paths, to, overwrite) {
+  const label = kind === 'copy' ? '复制' : '移动';
+  try {
+    await fmApi('/api/fs/' + kind, {
+      method: 'POST', headers: FM_JSON,
+      body: JSON.stringify({ paths, to, overwrite }),
+    });
+    showToast(overwrite ? `已替换 ${paths.length} 项 → ${to}` : `已${label} ${paths.length} 项 → ${to}`);
+    fmClearSel();
+    fmLoad(0); fmLoad(1);
+  } catch (e) {
+    if (!overwrite && fmIsConflict(e)) {
+      fmAskReplace(paths.map(p => p.split('/').pop() || p),
+        () => fmRunTransfer(kind, paths, to, true));
+      return;
+    }
+    showToast(label + '失败：' + e.message);
+  }
+}
+
+function fmDelete() {
+  const paths = fmSelPaths();
+  if (!paths.length) return;
+  const owner = FM.owner;
+  const arc = owner >= 0 ? FM.panes[owner].arc : null;
+  if (arc) {
+    fmDialog('从压缩包删除',
+      `<div class="fm-props">${paths.map(p => fmHtml(p)).join('<br>')}</div>` +
+      `<div class="fm-props" style="margin-top:10px;color:var(--text-tertiary);">` +
+      `会重写 ${fmHtml(arc.path.split('/').pop())}（先重建再替换，中途失败原压缩包不受影响）。</div>` +
+      fmFooter('删除'),
+      async () => {
+        const removed = await fmApi('/api/fs/archive/delete', {
+          method: 'POST', headers: FM_JSON,
+          body: JSON.stringify({ archive: arc.path, entries: paths }),
+        });
+        showToast(`已从压缩包删除 ${removed.length} 项`);
+        fmClearSel();
+        fmLoad(owner);
+      });
+    return;
+  }
+  if (!fmFsOnly()) return;
+  fmDialog('删除确认',
+    `<div class="fm-props">${paths.map(p => fmHtml(p)).join('<br>')}</div>` +
+    fmFooter('删除'),
+    async () => {
+      await fmApi('/api/fs/delete', {
+        method: 'POST', headers: FM_JSON, body: JSON.stringify({ paths, recursive: true }),
+      });
+      showToast('已删除'); fmClearSel(); fmLoad(0); fmLoad(1);
+    });
+}
+
+function fmRename() {
+  const paths = fmSelPaths();
+  if (!fmFsOnly()) return;
+  if (paths.length !== 1) { showToast('重命名只能选一项'); return; }
+  const path = paths[0];
+  const name = path.split('/').pop();
+  fmDialog('重命名',
+    `<div class="fm-field"><label>新名称</label><input type="text" id="fmNewName" value="${fmHtml(name)}"></div>` +
+    fmFooter('重命名'),
+    async () => {
+      const next = document.getElementById('fmNewName').value.trim();
+      if (!next || next === name) return;
+      const dir = path.slice(0, path.length - name.length);
+      await fmApi('/api/fs/rename', {
+        method: 'POST', headers: FM_JSON, body: JSON.stringify({ from: path, to: dir + next }),
+      });
+      showToast('已重命名'); fmClearSel(); fmLoad(0); fmLoad(1);
+    });
+}
+
+function fmMkdir() {
+  const paneIndex = FM.lastPane;
+  const dir = FM.panes[paneIndex].path;
+  fmDialog('新建文件夹',
+    `<div class="fm-props">位置：${fmHtml(dir)}</div>` +
+    `<div class="fm-field" style="margin-top:10px;"><label>名称</label><input type="text" id="fmNewDir" placeholder="新文件夹"></div>` +
+    fmFooter('创建'),
+    async () => {
+      const name = document.getElementById('fmNewDir').value.trim();
+      if (!name) return;
+      if (name.includes('/')) throw new Error('名称不能包含 /');
+      await fmApi('/api/fs/mkdir', {
+        method: 'POST', headers: FM_JSON,
+        body: JSON.stringify({ path: dir.replace(/\/$/, '') + '/' + name }),
+      });
+      showToast('已创建'); fmLoad(paneIndex);
+    });
+}
+
+function fmNewFile() {
+  const paneIndex = FM.lastPane;
+  const dir = FM.panes[paneIndex].path;
+  fmDialog('新建文件',
+    `<div class="fm-props">位置：${fmHtml(dir)}</div>` +
+    `<div class="fm-field" style="margin-top:10px;"><label>名称</label><input type="text" id="fmNewFileName" placeholder="新建文件.txt"></div>` +
+    fmFooter('创建'),
+    async () => {
+      const name = document.getElementById('fmNewFileName').value.trim();
+      if (!name) return;
+      if (name.includes('/')) throw new Error('名称不能包含 /');
+      const target = dir.replace(/\/$/, '') + '/' + name;
+      const exists = await fmApi('/api/fs/stat?path=' + fmEsc(target)).then(() => true).catch(() => false);
+      if (exists) throw new Error('已存在同名文件');
+      await fmApi('/api/fs/write', {
+        method: 'POST', headers: FM_JSON, body: JSON.stringify({ path: target, content: '' }),
+      });
+      showToast('已创建'); fmLoad(paneIndex);
+    });
+}
+
+function fmAttr() {
+  const paths = fmSelPaths();
+  if (!paths.length || !fmFsOnly()) return;
+  const single = paths.length === 1;
+  fmApi('/api/fs/stat?path=' + fmEsc(paths[0])).then(e => {
+    const info = single
+      ? `<div class="fm-props">路径：${fmHtml(e.path)}<br>类型：${e.is_dir ? '目录' : '文件'}${e.is_symlink ? '（软链接 → ' + fmHtml(e.symlink_target || '') + '）' : ''}` +
+        `<br>大小：${e.size} 字节<br>权限：${e.mode_text}（${(e.mode || 0).toString(8)}）` +
+        `<br>修改时间：${fmTime(e.mtime) || '—'}</div>`
+      : `<div class="fm-props">已选 ${paths.length} 项，将批量修改</div>`;
+
+    fmDialog('属性 / 权限',
+      info +
+      `<div class="fm-field" style="margin-top:12px;"><label>权限</label>` +
+      `<input type="text" id="fmMode" value="${single ? (e.mode || 0).toString(8) : '777'}" placeholder="777"></div>` +
+      `<div class="fm-presets">` +
+      ['777', '755', '644', '600', '700', '000'].map(m =>
+        `<button class="fm-btn" onclick="document.getElementById('fmMode').value='${m}'">${m}</button>`).join('') +
+      `</div>` +
+      `<div class="fm-field"><label>所有者</label>` +
+      `<input type="text" id="fmOwner" placeholder="留空不改，例如 1017:1017"></div>` +
+      `<div class="fm-field"><label>递归</label><input type="checkbox" id="fmAttrRecursive">` +
+      `<span style="font-size:12px;color:var(--text-secondary);">对目录内所有内容生效</span></div>` +
+      fmFooter('应用'),
+      async () => {
+        const recursive = document.getElementById('fmAttrRecursive').checked;
+        const mode = document.getElementById('fmMode').value.trim();
+        const owner = document.getElementById('fmOwner').value.trim();
+        const ids = owner.match(/^(\d+)\s*[:：]\s*(\d+)$/);
+        if (owner && !ids) {
+          showToast('所有者要写成 uid:gid，例如 1017:1017');
+          return;
+        }
+        if (mode) {
+          await fmApi('/api/fs/chmod', {
+            method: 'POST', headers: FM_JSON, body: JSON.stringify({ paths, mode, recursive }),
+          });
+        }
+        if (ids) {
+          await fmApi('/api/fs/chown', {
+            method: 'POST', headers: FM_JSON,
+            body: JSON.stringify({ paths, uid: Number(ids[1]), gid: Number(ids[2]), recursive }),
+          });
+        }
+        showToast('已应用'); fmClearSel(); fmLoad(0); fmLoad(1);
+      });
+  }).catch(e => showToast('读取属性失败：' + e.message));
+}
+
+function fmAllRoots() {
+  return (FM.builtinRoots || []).map(r => ({ name: r.label, path: r.path, builtin: true }))
+    .concat((FM.customRoots || []).map(r => ({ name: r.name, path: r.path, builtin: false })));
+}
+
+function fmRootsDialog() {
+  const roots = fmAllRoots();
+  const body = roots.map((r) =>
+      `<div class="pref-item" onclick="fmGoRoot('${encodeURIComponent(r.path)}')">` +
+      `<div class="pref-content"><div class="pref-title">${fmHtml(r.name)}</div>` +
+      `<div class="pref-subtitle">${fmHtml(r.path)}</div></div>` +
+      (r.builtin ? '' :
+        `<button class="fm-btn danger" onclick="event.stopPropagation();fmRemoveRoot('${encodeURIComponent(r.name)}','${encodeURIComponent(r.path)}')">删除</button>`) +
+      `</div>`).join('') +
+    `<div class="fm-field" style="margin-top:12px;"><label>名称</label>` +
+    `<input type="text" id="fmRootName" placeholder="例如 模块目录"></div>` +
+    `<div class="fm-field"><label>路径</label>` +
+    `<input type="text" id="fmRootPath" placeholder="/data/adb/modules"></div>` +
+    fmFooter('添加');
+  fmDialog('快速跳转', body, async () => {
+    const name = document.getElementById('fmRootName').value.trim();
+    const path = document.getElementById('fmRootPath').value.trim();
+    if (!name || !path) throw new Error('名称和路径都要填');
+    FM.customRoots = (FM.customRoots || []).concat([{ name, path }]);
+    await fmSaveCustomRoots();
+    if ((FM.customRoots || []).some(r => r.name === name && r.path === path)) {
+      showToast('已添加 "' + name + '"');
+    }
+  });
+}
+
+function fmGoRoot(path) {
+  if (path) { fmGo(FM.lastPane, decodeURIComponent(path)); fmDialogClose(); }
+}
+
+async function fmRemoveRoot(name, path) {
+  const wanted = { name: decodeURIComponent(name), path: decodeURIComponent(path) };
+  const before = (FM.customRoots || []).length;
+  FM.customRoots = (FM.customRoots || [])
+    .filter(r => !(r.name === wanted.name && r.path === wanted.path));
+  if (FM.customRoots.length === before) {
+    showToast('这条已经不在列表里了');
+    return fmReloadJumps().then(fmRootsDialog);
+  }
+  await fmSaveCustomRoots();
+  const stillThere = (FM.customRoots || []).some(r => r.name === wanted.name && r.path === wanted.path);
+  showToast(stillThere ? '删除没能保存，条目还在' : '已删除 "' + wanted.name + '"');
+  fmRootsDialog();
+}
+
+async function fmUpload() {
+  const input = document.getElementById('fmUpload');
+  const files = Array.from(input.files || []);
+  input.value = '';
+  if (!files.length) return;
+  const dir = FM.panes[0].path.replace(/\/$/, '');
+  let ok = 0;
+  for (const file of files) {
+    try {
+      await fmApi('/api/fs/upload?path=' + fmEsc(dir) + '&name=' + fmEsc(file.name), {
+        method: 'POST', body: file,
+      });
+      ok++;
+    } catch (e) {
+      showToast(`${file.name} 失败：${e.message}`);
+    }
+  }
+  if (ok) showToast(`已上传 ${ok} 个文件`);
+  fmLoad(0);
+}
+
+async function fmExtract() {
+  const paths = fmSelPaths();
+  if (!paths.length || FM.owner < 0) return;
+  const owner = FM.owner;
+  const other = 1 - owner;
+  const dest = FM.panes[other].path;
+  const openArc = FM.panes[owner].arc;
+
+  if (openArc) {
+    try {
+      const written = await fmApi('/api/fs/extract', {
+        method: 'POST', headers: FM_JSON,
+        body: JSON.stringify({ archive: openArc.path, dest, entries: paths }),
+      });
+      showToast(`已解压 ${written.length} 个文件到 ${dest}`);
+      fmClearSel();
+      fmLoad(other);
+    } catch (e) {
+      showToast('解压失败：' + e.message);
+    }
+    return;
+  }
+
+  let total = 0;
+  for (const archive of paths) {
+    try {
+      const written = await fmApi('/api/fs/extract', {
+        method: 'POST', headers: FM_JSON,
+        body: JSON.stringify({ archive, dest, entries: [] }),
+      });
+      total += written.length;
+    } catch (e) {
+      showToast(archive.split('/').pop() + ' 解压失败：' + e.message);
+    }
+  }
+  if (total) showToast(`已解压 ${total} 个文件到 ${dest}`);
+  fmClearSel();
+  fmLoad(0); fmLoad(1);
+}
+
+async function fmAddToArchive() {
+  const paths = fmSelPaths();
+  if (!paths.length || FM.owner < 0) return;
+  const other = 1 - FM.owner;
+  const arc = FM.panes[other].arc;
+  if (!arc) return;
+  const name = arc.path.split('/').pop();
+  try {
+    const written = await fmApi('/api/fs/archive/add', {
+      method: 'POST', headers: FM_JSON,
+      body: JSON.stringify({ archive: arc.path, sources: paths, sub: arc.sub || '' }),
+    });
+    showToast(`已加入 ${written.length} 项到 ${name}`);
+    fmClearSel();
+    fmLoad(other);
+  } catch (e) {
+    showToast('加入压缩包失败：' + e.message);
+  }
+}
+
+function fmAddToRoots() {
+  const paths = fmSelPaths();
+  if (paths.length !== 1) return;
+  const raw = paths[0];
+  const path = raw.length > 1 ? raw.replace(/\/+$/, '') : raw;
+  const base = path.split('/').pop() || path;
+
+  fmDialog('添加到快速跳转',
+    `<div class="fm-props">路径：${fmHtml(path)}</div>` +
+    `<div class="fm-field" style="margin-top:10px;"><label>名称</label>` +
+    `<input type="text" id="fmJumpName" value="${fmHtml(base)}"></div>` +
+    fmFooter('添加'),
+    () => {
+      const name = document.getElementById('fmJumpName').value.trim();
+      if (!name) throw new Error('名称不能为空');
+      FM.customRoots = (FM.customRoots || []).concat([{ name, path }]);
+      fmClearSel();
+      return fmSaveCustomRoots().then(() => {
+        showToast((FM.customRoots || []).some(r => r.name === name && r.path === path)
+          ? '已加入快速跳转：' + name
+          : '保存失败，未加入');
+      });
+    });
+}
+
+
+function fmQuickHas(path) { return (FM.quickRun || []).some(r => r.path === path); }
+
+function fmQuickName(path) { return path.split('/').pop() || path; }
+
+async function fmAddToQuick() {
+  const paths = fmSelPaths();
+  if (!paths.length) return;
+
+  const removing = paths.every(fmQuickHas);
+  if (removing) {
+    FM.quickRun = (FM.quickRun || []).filter(r => !paths.includes(r.path));
+  } else {
+    FM.quickRun = (FM.quickRun || []).concat(
+      paths.filter(p => !fmQuickHas(p)).map(p => ({ name: fmQuickName(p), path: p })));
+  }
+  fmClearSel();
+  await fmSaveQuick();
+  const names = paths.map(fmQuickName).join('、');
+  const settled = removing ? paths.every(p => !fmQuickHas(p)) : paths.every(fmQuickHas);
+  showToast(settled
+    ? (removing ? '已移出便捷执行：' + names : '已加入便捷执行：' + names)
+    : '保存失败，列表没有变');
+}
+
+function fmQuickDialog() {
+  const items = FM.quickRun || [];
+  const body = (items.length ? items.map((r) =>
+      `<div class="pref-item" onclick="fmQuickRun('${encodeURIComponent(r.path)}')">` +
+      `<div class="pref-content"><div class="pref-title">${fmHtml(r.name)}</div></div>` +
+      `<button class="fm-btn danger" onclick="event.stopPropagation();fmQuickRemove('${encodeURIComponent(r.path)}')">删除</button>` +
+      `</div>`).join('')
+    : `<div class="fm-props">还没有脚本。长按文件管理器里的 .sh 选中它，再点下面的「加入便捷执行」。</div>`) +
+    `<div class="fm-field" style="margin-top:12px;"><label>路径</label>` +
+    `<input type="text" id="fmQuickPath" placeholder="/data/adb/xxx.sh"></div>` +
+    fmFooter('添加');
+  fmDialog('便捷执行', body, async () => {
+    const path = document.getElementById('fmQuickPath').value.trim();
+    if (!path) throw new Error('路径不能为空');
+    if (fmQuickHas(path)) throw new Error('这个路径已经在列表里了');
+    FM.quickRun = (FM.quickRun || []).concat([{ name: fmQuickName(path), path }]);
+    await fmSaveQuick();
+    showToast(fmQuickHas(path) ? '已加入便捷执行：' + fmQuickName(path) : '保存失败，未加入');
+  });
+}
+
+function fmQuickRun(encoded) {
+  const path = decodeURIComponent(encoded);
+  fmDialogClose();
+  fmRunQuick(path);
+}
+
+async function fmRunQuick(path) {
+  const name = fmQuickName(path);
+  if (TERM.id) {
+    document.getElementById('fmTermTitle').textContent = name;
+    document.getElementById('fmTerm').classList.add('show');
+    fmTrackKeyboard();
+  } else {
+    await fmTermOpen(FM.panes[FM.lastPane].path, name);
+  }
+  if (!TERM.id) return;
+  const command = fmRunCommand(path) + '\n';
+  fmTermPrint('$ ' + command);
+  fmTermFollowTail();
+  await fmTermSendRaw(command);
+}
+
+async function fmQuickRemove(encoded) {
+  const path = decodeURIComponent(encoded);
+  if (!fmQuickHas(path)) {
+    showToast('这条已经不在列表里了');
+    return fmReloadQuick().then(fmQuickDialog);
+  }
+  FM.quickRun = (FM.quickRun || []).filter(r => r.path !== path);
+  await fmSaveQuick();
+  showToast(fmQuickHas(path) ? '删除没能保存，条目还在' : '已移出便捷执行：' + fmQuickName(path));
+  fmQuickDialog();
+}
+
+
+const FM_SEARCH = { pane: 0, root: '', query: '', results: null, error: '', running: false };
+
+function fmSearchOpen() {
+  FM_SEARCH.pane = FM.lastPane;
+  FM_SEARCH.root = FM.panes[FM.lastPane].path;
+  FM_SEARCH.results = null;
+  FM_SEARCH.error = '';
+  FM_SEARCH.running = false;
+  fmSearchDialog();
+}
+
+function fmSearchDialog() {
+  let body = `<div class="fm-props">在 ${fmHtml(FM_SEARCH.root)} 下找名字里含有它的东西` +
+    `（最多往下 6 层、最多 300 条）</div>` +
+    `<div class="fm-field" style="margin-top:10px;"><input type="text" id="fmSearchInput" ` +
+    `value="${fmHtml(FM_SEARCH.query)}" enterkeyhint="search" ` +
+    `autocomplete="off" autocapitalize="off" spellcheck="false" ` +
+    `onkeydown="return fmSearchKey(event)"></div>` +
+    `<div class="fm-btns" style="margin-top:10px;">` +
+    `<button class="fm-btn primary" onclick="fmSearchRun()">搜索</button>` +
+    `<button class="fm-btn" onclick="fmDialogClose()">关闭</button></div>`;
+
+  if (FM_SEARCH.running) {
+    body += `<div class="fm-props" style="margin-top:12px;">搜索中…</div>`;
+  } else if (FM_SEARCH.error) {
+    body += `<div class="fm-props" style="margin-top:12px;">出错：${fmHtml(FM_SEARCH.error)}</div>`;
+  } else if (FM_SEARCH.results) {
+    const rows = FM_SEARCH.results.map(r =>
+      `<div class="pref-item" onclick="fmSearchJump('${encodeURIComponent(r.path)}', ${r.is_dir ? 1 : 0})">` +
+      `<div class="pref-icon">${fmRowIcon(r)}</div>` +
+      `<div class="pref-content"><div class="pref-title">${fmHtml(r.name)}</div>` +
+      `<div class="pref-subtitle">${fmHtml(fmParentOf(r.path))}${r.is_dir ? '' : ' · ' + fmSize(r.size)}</div>` +
+      `</div></div>`).join('');
+    body += `<div class="section-title" style="margin-top:14px;">结果 ${FM_SEARCH.results.length} 条</div>` +
+      (rows || `<div class="fm-props">这个目录下没有名字含有「${fmHtml(FM_SEARCH.query)}」的东西。</div>`);
+  }
+
+  fmDialog('搜索', body, () => {});
+}
+
+function fmSearchKey(event) {
+  if (event.key === 'Enter' || event.keyCode === 13) {
+    event.preventDefault();
+    fmSearchRun();
+    return false;
+  }
+  return true;
+}
+
+async function fmSearchRun() {
+  const box = document.getElementById('fmSearchInput');
+  const query = (box ? box.value : FM_SEARCH.query).trim();
+  if (!query) { showToast('先输入要搜索的名字'); return; }
+  FM_SEARCH.query = query;
+  FM_SEARCH.running = true;
+  FM_SEARCH.error = '';
+  fmSearchDialog();
+  try {
+    const found = await fmApi('/api/fs/search', {
+      method: 'POST', headers: FM_JSON,
+      body: JSON.stringify({ path: FM_SEARCH.root, query }),
+    });
+    FM_SEARCH.results = Array.isArray(found) ? found : [];
+  } catch (e) {
+    FM_SEARCH.results = null;
+    FM_SEARCH.error = e.message;
+  }
+  FM_SEARCH.running = false;
+  fmSearchDialog();
+}
+
+function fmParentOf(path) {
+  const cut = String(path).replace(/[\\/][^\\/]*$/, '');
+  return cut || '/';
+}
+
+function fmSelectOne(paneIndex, path) {
+  const pane = FM.panes[paneIndex];
+  const index = pane.entries.findIndex(e => e.path === path);
+  if (index < 0) return;
+  FM.owner = paneIndex;
+  FM.lastPane = paneIndex;
+  FM.sel = new Set([path]);
+  fmRender(paneIndex);
+  fmSyncActions();
+  const row = document.querySelector('#fmList' + paneIndex + ' .fm-row[data-i="' + index + '"]');
+  if (row && row.scrollIntoView) row.scrollIntoView({ block: 'center' });
+}
+
+async function fmSearchJump(encoded, isDir) {
+  const path = decodeURIComponent(encoded);
+  const pane = FM_SEARCH.pane;
+  fmDialogClose();
+  if (isDir) {
+    await fmGo(pane, path);
+    return;
+  }
+  await fmGo(pane, fmParentOf(path));
+  fmSelectOne(pane, path);
+}
+
+
+async function fmApkPackage(arc, entry) {
+  const q = arc
+    ? `archive=${fmEsc(arc.path)}&entry=${fmEsc(entry.path)}`
+    : `path=${fmEsc(entry.path)}`;
+  try {
+    return (await fmApi('/api/fs/apkinfo?' + q)).package;
+  } catch (e) {
+    return '';
+  }
+}
+
+function fmOpenFile(entry, arc, kind) {
+  const how = kind || fmKindOf(entry.name);
+  const src = arc
+    ? `${API_BASE}/api/fs/archive/raw?archive=${fmEsc(arc.path)}&entry=${fmEsc(entry.path)}`
+    : `${API_BASE}/api/fs/raw?path=${fmEsc(entry.path)}`;
+  const where = arc ? `${arc.path.split('/').pop()} / ${entry.path}` : entry.path;
+  if (how === 'image') {
+    fmDialog('图片预览', `<img class="fm-preview" src="${src}" alt="">`);
+    return;
+  }
+  if (how === 'video') {
+    fmDialog('视频预览',
+      `<video class="fm-preview" controls playsinline preload="metadata" src="${src}"></video>`);
+    return;
+  }
+  if (how === 'apk') {
+    const split = /\.apks$/i.test(fmBaseName(entry.name));
+    fmDialog('安装应用',
+      `<div class="fm-props">名称：${fmHtml(entry.name)}<br>` +
+      (split
+        ? `类型：拆分安装包（.apks，整套安装）<br>`
+        : `包名：<span id="fmApkPkg">读取中…</span><br>`) +
+      `大小：${fmSize(entry.size)}<br>路径：${fmHtml(where)}</div>` +
+      `<div class="fm-props" style="margin-top:8px;color:var(--text-tertiary);">` +
+      (split
+        ? `会用 pm install-multiple 把 base 和各个 split 一起装上，系统可能再弹一次确认。</div>`
+        : `会用 pm install -r 覆盖安装，系统可能再弹一次确认。</div>`) +
+      fmFooter('安装'),
+      async () => {
+        showToast('正在安装…');
+        await fmApi('/api/fs/install', {
+          method: 'POST', headers: FM_JSON,
+          body: JSON.stringify(arc
+            ? { archive: arc.path, entry: entry.path }
+            : { path: entry.path }),
+        });
+        showToast('安装完成');
+      });
+    if (!split) {
+      fmApkPackage(arc, entry).then(pkg => {
+        const box = document.getElementById('fmApkPkg');
+        if (box) box.textContent = pkg || '读不出来';
+      });
+    }
+    return;
+  }
+  if (how === 'script') {
+    if (arc) { showToast('包内的脚本不能直接执行，先解压到对侧'); return; }
+    fmRunAs(entry);
+    return;
+  }
+  if (arc) { fmEditorOpen(entry, arc); return; }
+  if (fmIsArchive(entry.name)) { fmArcOpen(FM.lastPane, entry.path); return; }
+  fmEditorOpen(entry, null);
+}
+
+function fmRunCommand(path) {
+  return `if [ -x "${path}" ]; then "${path}"; else sh "${path}"; fi`;
+}
+
+async function fmRunAs(entry) {
+  const dir = entry.path.replace(/[\\/][^\\/]*$/, '') || '/';
+  fmClearSel();
+  await fmTermOpen(dir);
+  if (!TERM.id) return;
+  const command = fmRunCommand(entry.path) + '\n';
+  fmTermPrint('$ ' + command);
+  await fmTermSendRaw(command);
+}
+
+
+const KM = { status: null, apps: null, scoop: new Set(), query: '' };
+
+async function kmOpen() {
+  switchPage('keymint');
+  await kmLoad();
+}
+
+async function kmLoad() {
+  const page = document.getElementById('page-keymint');
+  page.innerHTML = '<div class="card"><div class="pref-item"><div class="pref-content">' +
+    '<div class="pref-title">读取中…</div></div></div></div>';
+  try {
+    KM.status = await fmApi('/api/keymint/status');
+  } catch (e) {
+    page.innerHTML = `<div class="card"><div class="pref-item"><div class="pref-content">` +
+      `<div class="pref-title">读取失败</div><div class="pref-subtitle">${fmHtml(e.message)}</div>` +
+      `</div></div></div>`;
+    return;
+  }
+  KM.scoop = new Set(KM.status.scoop || []);
+  kmRender();
+}
+
+function kmRender() {
+  const st = KM.status || {};
+  const page = document.getElementById('page-keymint');
+  const row = (title, subtitle, icon, onclick, right) =>
+    `<div class="pref-item"${onclick ? ` onclick="${onclick}"` : ''}>` +
+    `<div class="pref-icon">${right || ''}</div>` +
+    `<div class="pref-content"><div class="pref-title">${title}</div>` +
+    (subtitle ? `<div class="pref-subtitle">${subtitle}</div>` : '') +
+    `</div></div>`;
+
+  const toggleRow = (title, subtitle, on, handler) =>
+    `<div class="pref-item" onclick="${handler}">` +
+    `<div class="pref-icon">${uiIcon('shield')}</div>` +
+    `<div class="pref-content"><div class="pref-title">${title}</div>` +
+    `<div class="pref-subtitle">${subtitle}</div></div>` +
+    `<div class="switch${on ? ' active' : ''}"><div class="switch-knob"></div></div></div>`;
+
+  const dot = (ok) => ok
+    ? '<span style="color:var(--success);">● 运行中</span>'
+    : '<span style="color:var(--text-tertiary);">● 未运行</span>';
+  const file = (state, sub) => {
+    if (!state) return '<span style="color:var(--text-tertiary);">● 状态未知</span>';
+    if (state.error) return `<span style="color:var(--danger);">● 读不到：${fmHtml(state.error)}</span>`;
+    if (!state.exists) return '<span style="color:var(--text-tertiary);">● 还没有这个文件</span>';
+    return `<span style="color:var(--success);">●</span> ${sub}`;
+  };
+
+  if (!st.installed) {
+    page.innerHTML = `<div class="card">` +
+      row('没有安装 Oh My Keymint', '模块 id：oh_my_keymint。装好并重启一次后这里会出现配置项。', '', null, uiIcon('package')) +
+      `</div><div class="fm-btns" style="margin-top:12px;">` +
+      `<button class="fm-btn" onclick="kmLoad()">重新检测</button></div>`;
+    return;
+  }
+
+  page.innerHTML =
+    `<div class="card">` +
+      `<div class="pref-item">` +
+      `<div class="pref-icon">${uiIcon('chip')}</div>` +
+      `<div class="pref-content"><div class="pref-title">Oh My Keymint</div>` +
+      `<div class="pref-subtitle">${fmHtml(st.version || '')} · ${st.enabled ? '已启用' : '已禁用'}</div></div>` +
+      `</div></div>` +
+
+    `<div class="section-title">状态</div>` +
+    `<div class="card">` +
+      row('keymint 守护进程', dot(st.keymintRunning), '', null, uiIcon('lock')) +
+      row('injector 守护进程', dot(st.injectorRunning), '', null, uiIcon('compass')) +
+    `</div>` +
+
+    `<div class="section-title">功能</div>` +
+    `<div class="card">` +
+      toggleRow('修正系统属性',
+        st.fixProps ? '已装到 /data/adb/service.d，开机自动校正属性' : '开机时把已解锁/可调试那面的属性改回正常机器的样子',
+        !!st.fixProps, 'kmToggleFixProps()') +
+      row('选择软件', `${st.scoopCount || 0} 个应用走 OMK；改动对新请求立即生效，无需重启`,
+        '', 'kmEditApps()', uiIcon('grid')) +
+      row('日志输出级别',
+        `keymint ${fmHtml(st.logLevel || '未知')} · injector ${fmHtml(st.injectorLogLevel || '未知')}`,
+        '', 'kmEditLevel()', uiIcon('text')) +
+      row('keybox', file(st.keyboxFile,
+        st.keyboxSize ? fmSize(st.keyboxSize) : '还没有 keybox.xml'),
+        '', 'kmKeybox()', uiIcon('key')) +
+    `</div>` +
+
+    `<div class="section-title">重启</div>` +
+    `<div class="fm-btns">` +
+      `<button class="fm-btn" onclick="kmRestart('keymint')">重启 keymint</button>` +
+      `<button class="fm-btn" onclick="kmRestart('injector')">重启 injector</button>` +
+      `<button class="fm-btn primary" onclick="kmRestart('all')">全部重启</button>` +
+    `</div>` +
+
+    `<div class="toolbar-space"></div>`;
+}
+
+async function kmEditApps() {
+  if (!KM.apps) {
+    try {
+      KM.apps = await fmApi('/api/apps/all');
+    } catch (e) {
+      showToast('读取应用列表失败：' + e.message);
+      return;
+    }
+  }
+  kmRenderApps();
+}
+
+function kmAppSearch(value) { KM.query = value.trim().toLowerCase(); kmRenderApps(true); }
+
+function kmRenderApps(keepFocus) {
+  const q = KM.query;
+  const hidden = new Set((KM.status && KM.status.defaultGoogleScoop) || []);
+  const apps = (KM.apps || [])
+    .filter(a => !hidden.has(a.package))
+    .filter(a => !a.isSystem || KM.scoop.has(a.package) || q)
+    .filter(a => !q || (a.label || '').toLowerCase().includes(q) || (a.package || '').toLowerCase().includes(q))
+    .sort((a, b) => (KM.scoop.has(b.package) ? 1 : 0) - (KM.scoop.has(a.package) ? 1 : 0));
+
+  const rows = apps.map((app, idx) => appRow({
+    id: `kmapp-icon-${idx}`,
+    label: app.label || app.package,
+    sub: fmHtml(app.package),
+    onclick: `kmToggleApp('${fmHtml(app.package)}', ${idx})`,
+    right: `<div class="switch${KM.scoop.has(app.package) ? ' active' : ''}"><div class="switch-knob"></div></div>`,
+  })).join('');
+
+  fmDialog('路由到 OMK 的应用',
+    `<div class="fm-props" style="color:var(--text-tertiary);">` +
+    `勾选要走 OMK 的应用（写进 injector.toml 的 scoop）。injector 会在新请求上立即生效。</div>` +
+    `<div class="fm-field" style="margin-top:10px;"><input type="text" id="kmAppQuery" ` +
+    `placeholder="搜索名称或包名" value="${fmHtml(KM.query)}" oninput="kmAppSearch(this.value)"></div>` +
+    `<div class="fm-props" style="margin-top:8px;">已选 ${KM.scoop.size} 个` +
+    (hidden.size ? `（另有 ${hidden.size} 个模块内置的 Google 默认项，已隐藏但仍在路由里）` : '') +
+    `</div>` +
+    `<div style="max-height:46vh;overflow-y:auto;margin-top:6px;">` +
+    (rows || '<div class="fm-empty">没有匹配的应用</div>') +
+    `</div>` +
+    `<div class="fm-btns" style="margin-top:12px;">` +
+    `<button class="fm-btn primary" onclick="kmSaveScoop()">保存</button>` +
+    `<button class="fm-btn" onclick="kmSelectAll()" title="全选">✓ 全选</button>` +
+    `<button class="fm-btn" onclick="kmLoad()">取消</button></div>`);
+
+  apps.forEach((app, idx) => {
+    if (!app.isSystem) fmAppIconInto(app.package, 'kmapp-icon-' + idx);
+  });
+  if (keepFocus) {
+    const box = document.getElementById('kmAppQuery');
+    if (box) { box.focus(); box.setSelectionRange(box.value.length, box.value.length); }
+  }
+}
+
+function kmSelectAll() {
+  const q = KM.query;
+  const hidden = new Set((KM.status && KM.status.defaultGoogleScoop) || []);
+  (KM.apps || [])
+    .filter(a => !hidden.has(a.package))
+    .filter(a => !a.isSystem || KM.scoop.has(a.package) || q)
+    .filter(a => !q || (a.label || '').toLowerCase().includes(q) || (a.package || '').toLowerCase().includes(q))
+    .forEach(a => KM.scoop.add(a.package));
+  kmRenderApps();
+}
+
+function kmToggleApp(pkg, idx) {
+  if (KM.scoop.has(pkg)) KM.scoop.delete(pkg); else KM.scoop.add(pkg);
+  kmRenderApps();
+}
+
+async function kmSaveScoop() {
+  try {
+    await fmApi('/api/keymint/scoop', {
+      method: 'POST', headers: FM_JSON,
+      body: JSON.stringify({ packages: Array.from(KM.scoop) }),
+    });
+    showToast(`已保存 ${KM.scoop.size} 个应用`);
+    fmDialogClose();
+    kmLoad();
+  } catch (e) {
+    showToast('保存失败：' + e.message);
+  }
+}
+
+async function kmToggleFixProps() {
+  const st = KM.status || {};
+  const next = !st.fixProps;
+  try {
+    const enabled = await fmApi('/api/keymint/fix-props', {
+      method: 'POST', headers: FM_JSON, body: JSON.stringify({ enable: next }),
+    });
+    showToast(enabled ? '已启用：开机时校正系统属性' : '已关闭并删除该脚本');
+    kmLoad();
+  } catch (e) {
+    showToast('切换失败：' + e.message);
+  }
+}
+
+async function kmEditLevel() {
+  const st = KM.status || {};
+  const levels = st.logLevels || ['off', 'error', 'warn', 'info', 'debug', 'trace'];
+  const injectorLevels = st.injectorLogLevels || ['off', 'error', 'warn', 'warning', 'info', 'debug', 'trace'];
+  const current = st.logLevel || '';
+  const currentInjector = st.injectorLogLevel || '';
+  const note = {
+    off: '不写日志：最安静，但出问题时也不留线索',
+    error: '只记录错误',
+    warn: '记录错误和警告',
+    info: '记录常规信息（关键流程）',
+    debug: '调试信息：模块默认值，反馈问题时最有用',
+    trace: '最详细，日志量最大',
+  };
+  const group = (target, title, hint, list, active) =>
+    `<div class="section-title">${title}</div>` +
+    `<div class="fm-props" style="color:var(--text-tertiary);margin:0 4px 6px;">${hint}</div>` +
+    `<div class="card">` +
+    list.map(level =>
+      `<div class="pref-item" onclick="kmSaveLevel('${target}', '${level}')">` +
+      `<div class="pref-content">` +
+      `<div class="pref-title">${level}${level === active ? '（当前）' : ''}` +
+      `${level === 'warning' ? '（等同于 warn）' : ''}</div>` +
+      `<div class="pref-subtitle">${note[level] || ''}</div>` +
+      `</div>` +
+      `<div class="pref-arrow">${level === active ? '✓' : '›'}</div>` +
+      `</div>`).join('') +
+    `</div>`;
+
+  fmDialog('日志输出级别',
+    `<div class="fm-props" style="color:var(--text-tertiary);">` +
+    `两个文件各有一套：keymint 写在 config.toml，injector 写在 injector.toml。` +
+    `保存前都会校验，写错的值会被直接拒绝（模块自己会悄悄回落到 debug，这里不放过）。</div>` +
+    group('config', 'keymint（config.toml）', '改完需要重启 keymint 才完全生效。', levels, current) +
+    group('injector', 'injector（injector.toml）', '对新请求立即生效，不需要重启 injector。',
+      injectorLevels, currentInjector));
+}
+
+async function kmSaveLevel(which, level) {
+  try {
+    await fmApi('/api/keymint/log-level', {
+      method: 'POST', headers: FM_JSON, body: JSON.stringify({ which, level }),
+    });
+    showToast(which === 'injector'
+      ? `injector 日志级别已设为 ${level}，立即生效`
+      : `keymint 日志级别已设为 ${level}，重启 keymint 后完全生效`);
+    fmDialogClose();
+    kmLoad();
+  } catch (e) {
+    showToast('保存失败：' + e.message);
+  }
+}
+
+function kmKeybox() {
+  const st = KM.status || {};
+  fmDialog('keybox',
+    `<div class="fm-props" style="color:var(--text-tertiary);">` +
+    `当前：${st.keyboxFile && st.keyboxFile.exists ? fmSize(st.keyboxFile.size || 0) + ' 的 keybox.xml' : '还没有 keybox.xml'}` +
+    `<br>更新会按模块自己的权限（0600、keystore 用户）写回去。</div>` +
+    `<div class="fm-btns" style="margin-top:12px;">` +
+    `<button class="fm-btn primary" onclick="kmKeyboxLocal()">本地选择</button>` +
+    `<button class="fm-btn" onclick="kmKeyboxRemote()">远程更新</button>` +
+    `</div>`);
+}
+
+function kmKeyboxLocal() {
+  fmDialogClose();
+  fmStartPick('选择 keybox.xml', /\.xml$/i, (paths) => {
+    const path = paths[0];
+    if (path) kmApplyKeybox(path);
+    else kmOpen();
+  }, { back: 'keymint', hint: '只能选 xml 文件' });
+}
+
+async function kmApplyKeybox(path) {
+  try {
+    await fmApi('/api/keymint/keybox', {
+      method: 'POST', headers: FM_JSON, body: JSON.stringify({ path }),
+    });
+    showToast('已替换 keybox');
+  } catch (e) {
+    showToast('替换失败：' + e.message);
+  }
+  switchPage('keymint');
+  kmLoad();
+}
+
+const KM_REMOTE_KEYBOX_URL =
+  'https://gist.githubusercontent.com/wuhudiao/c3f7ee2cc3a10663fa53c719b567b2d8/raw/keybox.xml';
+
+function kmKeyboxRemote() {
+  fmDialog('远程更新 keybox',
+    `<div class="fm-props" style="color:var(--text-tertiary);">` +
+    `从下面的地址下载 keybox.xml，验证通过后替换当前密钥。</div>` +
+    `<div class="fm-field"><input type="text" id="kmRemoteUrl" placeholder="keybox.xml 的下载地址" ` +
+    `value="${fmHtml(KM_REMOTE_KEYBOX_URL)}"></div>` +
+    `<div class="fm-btns" style="margin-top:12px;">` +
+    `<button class="fm-btn primary" id="kmRemoteGo" onclick="kmKeyboxRemoteApply()">开始更新</button>` +
+    `</div>`);
+}
+
+async function kmKeyboxRemoteApply() {
+  const input = document.getElementById('kmRemoteUrl');
+  const btn = document.getElementById('kmRemoteGo');
+  const url = ((input ? input.value : '') || KM_REMOTE_KEYBOX_URL).trim();
+  if (!/^https:\/\//i.test(url)) {
+    showToast('地址需要以 https:// 开头，避免密钥明文传输');
+    return;
+  }
+  if (btn) { btn.disabled = true; btn.textContent = '正在下载…'; }
+  try {
+    const resp = await fetch(url, { redirect: 'follow' });
+    if (!resp.ok) throw new Error(`下载失败：HTTP ${resp.status}`);
+    const text = await resp.text();
+    if (btn) btn.textContent = '正在替换…';
+    await fmApi('/api/keymint/keybox-content', {
+      method: 'POST', headers: FM_JSON, body: JSON.stringify({ content: text }),
+    });
+    showToast('远程密钥已更新');
+    fmDialogClose();
+    kmLoad();
+  } catch (e) {
+    showToast('远程更新失败：' + e.message);
+    if (btn) { btn.disabled = false; btn.textContent = '开始更新'; }
+  }
+}
+
+async function kmRestart(what) {
+  try {
+    await fmApi('/api/keymint/restart', {
+      method: 'POST', headers: FM_JSON, body: JSON.stringify({ what }),
+    });
+    showToast(what === 'all' ? '已请求全部重启' : `已请求重启 ${what}`);
+    setTimeout(kmLoad, 1500);
+  } catch (e) {
+    showToast('重启失败：' + e.message);
+  }
+}
+
+
+const FM_APPS = { all: null, tab: 'user', query: '', detail: null };
+
+async function fmAppsDialog() {
+  fmDialog('提取APK · 选择应用', '<div class="fm-props">加载中…</div>');
+  try {
+    if (!FM_APPS.all) FM_APPS.all = await fmApi('/api/apps/all');
+  } catch (e) {
+    fmDialog('提取APK · 选择应用', `<div class="fm-props">读取应用列表失败：${fmHtml(e.message)}</div>`);
+    return;
+  }
+  fmRenderApps();
+}
+
+function fmAppsSetTab(tab) { FM_APPS.tab = tab; fmRenderApps(); }
+
+function fmAppsSearch(value) {
+  FM_APPS.query = value.trim().toLowerCase();
+  fmRenderApps(true);
+}
+
+function fmRenderApps(keepFocus) {
+  const apps = (FM_APPS.all || []).filter(a => (FM_APPS.tab === 'system') === !!a.isSystem);
+  const q = FM_APPS.query;
+  const shown = q
+    ? apps.filter(a => (a.label || '').toLowerCase().includes(q) || (a.package || '').toLowerCase().includes(q))
+    : apps;
+
+  const tabBtn = (id, label, count) =>
+    `<button class="fm-btn${FM_APPS.tab === id ? ' primary' : ''}" ` +
+    `onclick="fmAppsSetTab('${id}')">${label}（${count}）</button>`;
+  const userCount = (FM_APPS.all || []).filter(a => !a.isSystem).length;
+  const systemCount = (FM_APPS.all || []).filter(a => a.isSystem).length;
+
+  const rows = shown.map((app, idx) => appRow({
+    id: `fmapp-icon-${idx}`,
+    label: app.label || app.package,
+    sub: `${app.versionCode ? 'v' + app.versionCode + ' · ' : ''}${fmSize(app.size || 0)} · ${fmHtml(app.package)}`,
+    onclick: `fmAppDetail('${fmHtml(app.package)}')`,
+  })).join('');
+
+  fmDialog('提取APK · 选择应用',
+    `<div class="fm-btns" style="margin-bottom:10px;">` +
+    tabBtn('user', '用户应用', userCount) + tabBtn('system', '系统应用', systemCount) +
+    `</div>` +
+    `<div class="fm-field"><input type="text" id="fmAppsQuery" placeholder="搜索名称或包名" ` +
+    `value="${fmHtml(FM_APPS.query)}" oninput="fmAppsSearch(this.value)"></div>` +
+    `<div style="max-height:52vh;overflow-y:auto;margin-top:10px;">` +
+    (rows || '<div class="fm-empty">没有匹配的应用</div>') +
+    `</div>`);
+
+  shown.forEach((app, idx) => {
+    if (!app.isSystem) fmAppIconInto(app.package, 'fmapp-icon-' + idx);
+  });
+  if (keepFocus) {
+    const box = document.getElementById('fmAppsQuery');
+    if (box) { box.focus(); box.setSelectionRange(box.value.length, box.value.length); }
+  }
+}
+
+async function fmAppIconInto(pkg, elementId) {
+  const el = document.getElementById(elementId);
+  if (!el || !pkg) return;
+  const cached = appIconCache[pkg];
+  if (cached) {
+    el.classList.remove('app-icon-letter');
+    el.style.background = 'transparent';
+    el.innerHTML = `<img src="data:${cached.mime || 'image/png'};base64,${cached.b64}" style="width:100%;height:100%;object-fit:contain;border-radius:10px;">`;
+    return;
+  }
+  const icon = await appIconFetch(pkg);
+  if (icon) fmAppIconInto(pkg, elementId);
+}
+
+async function fmAppDetail(pkg) {
+  const known = (FM_APPS.all || []).find(a => a.package === pkg);
+  const title = (known && known.label) || pkg;
+  fmDialog('应用详情 · ' + title, '<div class="fm-props">读取中…</div>');
+  let detail;
+  try {
+    detail = await fmApi('/api/apps/detail?package=' + encodeURIComponent(pkg));
+  } catch (e) {
+    fmDialog('应用详情 · ' + title,
+      `<div class="fm-props">读取失败：${fmHtml(e.message)}</div>` +
+      `<div class="fm-btns" style="margin-top:12px;">` +
+      `<button class="fm-btn" onclick="fmAppsDialog()">返回列表</button></div>`);
+    return;
+  }
+  FM_APPS.detail = { pkg, label: title, detail };
+
+  const jumpLine = (name, value) => !value ? '' :
+    `<div class="fm-props" style="display:flex;gap:10px;margin-top:6px;">` +
+    `<span style="flex:0 0 84px;color:var(--text-tertiary);">${name}</span>` +
+    `<span style="flex:1 1 auto;word-break:break-all;">` +
+    `<a href="javascript:void(0)" onclick="fmAppJump('${fmHtml(value)}')" ` +
+    `style="color:var(--accent);text-decoration:none;">${fmHtml(String(value))} ↗</a></span></div>`;
+
+  const line = (name, value) =>
+    value === '' || value === null || value === undefined ? '' :
+    `<div class="fm-props" style="display:flex;gap:10px;margin-top:6px;">` +
+    `<span style="flex:0 0 84px;color:var(--text-tertiary);">${name}</span>` +
+    `<span style="flex:1 1 auto;word-break:break-all;">${fmHtml(String(value))}</span></div>`;
+
+  const apks = detail.apkFiles || [];
+  const other = fmAppExtractDest();
+  fmDialog('应用详情 · ' + title,
+    `<div class="fm-props" style="font-weight:600;">${fmHtml(detail.package || pkg)}</div>` +
+    line('版本名称', detail.versionName) +
+    line('版本号', detail.versionCode || '') +
+    line('安装包大小', detail.totalSize ? fmSize(detail.totalSize) : '') +
+    line('签名状态', detail.signatures) +
+    line('目标系统', detail.targetSdk ? 'Android ' + fmAndroidName(detail.targetSdk) + '（API ' + detail.targetSdk + '）' : '') +
+    line('最低系统', detail.minSdk ? 'Android ' + fmAndroidName(detail.minSdk) + '（API ' + detail.minSdk + '）' : '') +
+    jumpLine('数据目录1', detail.dataDir1) +
+    jumpLine('数据目录2', detail.dataDir2) +
+    line('APK 路径', apks.map(a => a.path).join('\n')) +
+    (apks.length > 1
+      ? `<div class="fm-props" style="margin-top:6px;color:var(--text-tertiary);">` +
+        `这是拆分应用（App Bundle），共 ${apks.length} 个 APK：提取时会打成一个 <b>.apks</b>，` +
+        `整套才能安装。</div>`
+      : '') +
+    line('首次安装', detail.firstInstall) +
+    line('最后更新', detail.lastUpdate) +
+    line('UID', detail.uid || '') +
+    `<div class="fm-btns" style="margin-top:14px;">` +
+    `<button class="fm-btn primary" onclick="fmAppExtract()">提取安装包 → ${fmHtml(FM_APK_DEST)}</button>` +
+    `<button class="fm-btn" onclick="fmAppsDialog()">返回列表</button></div>`);
+}
+
+function fmAppJump(path) {
+  if (!path) return;
+  fmDialogClose();
+  fmGo(FM.lastPane, path);
+}
+
+function fmAndroidName(api) {
+  const names = {
+    23: '6', 24: '7', 25: '7.1', 26: '8', 27: '8.1', 28: '9', 29: '10', 30: '11',
+    31: '12', 32: '12L', 33: '13', 34: '14', 35: '15', 36: '16', 37: '17',
+  };
+  return names[api] || '';
+}
+
+const FM_APK_DEST = '/data/adb/app';
+
+function fmAppExtractDest() { return FM_APK_DEST; }
+
+function fmEnsureApkRoot() {
+  const roots = (FM.builtinRoots || []).concat(FM.customRoots || []);
+  if (roots.some(r => r.path === FM_APK_DEST)) return;
+  FM.customRoots = (FM.customRoots || []).concat([{ name: 'APK提取路径', path: FM_APK_DEST }]);
+  fmSaveCustomRoots();
+}
+
+async function fmAppExtract() {
+  const target = FM_APPS.detail;
+  if (!target) return;
+  const dest = fmAppExtractDest();
+  try {
+    const written = await fmApi('/api/apps/extract', {
+      method: 'POST', headers: FM_JSON,
+      body: JSON.stringify({ package: target.pkg, dest, label: target.label }),
+    });
+    showToast(written.length > 1
+      ? `已提取 ${written.length} 个 APK 到 ${dest}`
+      : `已提取到 ${written[0] || dest}`);
+    fmEnsureApkRoot();
+    fmDialogClose();
+    fmLoad(0); fmLoad(1);
+  } catch (e) {
+    showToast('提取失败：' + e.message);
+  }
+}
+
+function fmOpenWithDialog() {
+  const paths = fmSelPaths();
+  if (paths.length !== 1 || FM.owner < 0) return;
+  const pane = FM.panes[FM.owner];
+  const entry = pane.entries.find(e => e.path === paths[0]);
+  if (!entry || entry.is_dir) return;
+  const arc = pane.arc;
+  const where = arc ? arc.path.split('/').pop() + ' / ' + entry.name : entry.path;
+  const detected = fmKindOf(entry.name);
+  fmDialog('打开方式',
+    `<div class="fm-props">${fmHtml(where)}</div>` +
+    `<div class="fm-props" style="margin-top:8px;color:var(--text-tertiary);">` +
+    `按哪种方式打开？按名字看它是「${fmKindLabel(detected)}」。` +
+    (arc ? '<br>包内的文件会先解出来再用，脚本不能直接执行。' : '') +
+    `</div>` +
+    `<div class="fm-btns" style="margin-top:12px;">` +
+    FM_KINDS.map(k =>
+      `<button class="fm-btn${k.id === detected ? ' primary' : ''}" ` +
+      `onclick="fmOpenAsChosen('${k.id}')">${k.label}</button>`).join('') +
+    `</div>`);
+}
+
+function fmOpenAsChosen(kind) {
+  const paths = fmSelPaths();
+  if (paths.length !== 1 || FM.owner < 0) { fmDialogClose(); return; }
+  const pane = FM.panes[FM.owner];
+  const entry = pane.entries.find(e => e.path === paths[0]);
+  fmDialogClose();
+  if (!entry) return;
+  fmOpenFile(entry, pane.arc, kind);
+}
+
+function fmEditorNumbers(text) {
+  const body = document.getElementById('fmEditorText');
+  const gutter = document.getElementById('fmEditorGutter');
+  if (!body || !gutter) return;
+  const lines = (text === undefined ? body.value : text).split('\n').length;
+  if (gutter.dataset.lines !== String(lines)) {
+    let out = '';
+    for (let i = 1; i <= lines; i++) out += i + '\n';
+    gutter.textContent = out;
+    gutter.dataset.lines = String(lines);
+  }
+  gutter.scrollTop = body.scrollTop;
+}
+
+function fmEditorOpen(entry, arc) {
+  const query = arc
+    ? '/api/fs/archive/read?archive=' + fmEsc(arc.path) + '&entry=' + fmEsc(entry.path)
+    : '/api/fs/read?path=' + fmEsc(entry.path);
+  fmApi(query).then(text => {
+    FM.editorPath = entry.path;
+    FM.editorArc = arc || null;
+    document.getElementById('fmEditorPath').textContent =
+      arc ? arc.path.split('/').pop() + ' / ' + entry.path : entry.path;
+    const body = document.getElementById('fmEditorText');
+    body.value = text;
+    body.scrollTop = 0;
+    body.scrollLeft = 0;
+    fmEditorNumbers(text);
+    document.getElementById('fmEditor').classList.add('show');
+    fmTrackKeyboard();
+  }).catch(e => showToast(e.message));
+}
+
+function fmEditorClose() {
+  document.getElementById('fmEditor').classList.remove('show');
+  FM.editorPath = '';
+  FM.editorArc = null;
+}
+
+function fmEditorSelectAll() {
+  const body = document.getElementById('fmEditorText');
+  body.focus();
+  body.select();
+}
+
+function fmEditorClip(action) {
+  const body = document.getElementById('fmEditorText');
+  body.focus();
+  if (body.selectionStart === body.selectionEnd) {
+    showToast(action === 'cut' ? '先选中要剪切的内容' : '先选中要复制的内容');
+    return;
+  }
+
+  let done = false;
+  try { done = document.execCommand(action); } catch (e) { done = false; }
+  showToast(done ? (action === 'cut' ? '已剪切' : '已复制') : '复制失败，请用键盘的复制');
+}
+
+async function fmEditorPaste() {
+  const body = document.getElementById('fmEditorText');
+  body.focus();
+  try {
+    const text = await navigator.clipboard.readText();
+    if (text) body.setRangeText(text, body.selectionStart, body.selectionEnd, 'end');
+    fmEditorNumbers();
+  } catch (e) {
+    showToast('浏览器不允许读剪贴板，请用键盘的粘贴');
+  }
+}
+
+async function fmEditorSave() {
+  if (!FM.editorPath) return;
+  const content = document.getElementById('fmEditorText').value;
+  const arc = FM.editorArc;
+  try {
+    if (arc) {
+      await fmApi('/api/fs/archive/write', {
+        method: 'POST', headers: FM_JSON,
+        body: JSON.stringify({ archive: arc.path, entry: FM.editorPath, content }),
+      });
+      showToast('已保存到压缩包');
+      fmEditorClose();
+      const owner = FM.panes.findIndex(p => p.arc && p.arc.path === arc.path);
+      if (owner >= 0) fmLoad(owner);
+      return;
+    }
+    await fmApi('/api/fs/write', {
+      method: 'POST', headers: FM_JSON,
+      body: JSON.stringify({ path: FM.editorPath, content }),
+    });
+    showToast('已保存');
+    fmEditorClose();
+    fmLoad(0); fmLoad(1);
+  } catch (e) {
+    showToast('保存失败：' + e.message);
+  }
+}
+
+
+
+const TERM = { id: 0, timer: null, pty: false };
+
+function fmTermPrint(text) {
+  const out = document.getElementById('fmTermOut');
+  const withSgr = String(text)
+    .replace(/\x1b\][^\x07\x1b]*(\x07|\x1b\\)/g, '')
+    .replace(/\x1b\[[0-9;]*[A-LN-Za-ln-z]/g, '')
+    .replace(/\x1b[()][A-Za-z0-9]/g, '')
+    .replace(/\x1b[=>NODM]/g, '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n');
+
+  let html = '';
+  for (const part of withSgr.split(/(\x1b\[[0-9;]*m)/)) {
+    if (!part) continue;
+    if (part.startsWith('\x1b[')) {
+      fmSgrApply(part.slice(2, -1));
+      continue;
+    }
+    const cls = TERM_STYLE.classes.join(' ');
+    html += cls ? `<span class="${cls}">${fmHtml(part)}</span>` : fmHtml(part);
+  }
+
+  const atBottom = out.scrollHeight - out.scrollTop - out.clientHeight < 40;
+  if (html) out.insertAdjacentHTML('beforeend', html);
+  if (atBottom) out.scrollTop = out.scrollHeight;
+  fmTermAtBottom = atBottom;
+}
+
+const TERM_STYLE = { classes: [] };
+const TERM_COLOURS = ['a-b', 'a-g', 'a-y', 'a-bl', 'a-m', 'a-c', 'a-w', 'a-dim'];
+
+function fmSgrApply(param) {
+  const set = new Set(TERM_STYLE.classes);
+  for (const code of param.split(';').map(n => parseInt(n, 10) || 0)) {
+    if (code === 0) { set.clear(); continue; }
+    if (code === 1) { set.add('a-bold'); continue; }
+    const fg = {
+      30: 'a-dim', 31: 'a-b', 32: 'a-g', 33: 'a-y', 34: 'a-bl', 35: 'a-m', 36: 'a-c', 37: 'a-w',
+      90: 'a-dim', 91: 'a-b', 92: 'a-g', 93: 'a-y', 94: 'a-bl', 95: 'a-m', 96: 'a-c', 97: 'a-w',
+    }[code];
+    if (code === 39 || fg) {
+      TERM_COLOURS.forEach(c => set.delete(c));
+      if (fg) set.add(fg);
+    }
+  }
+  TERM_STYLE.classes = Array.from(set);
+}
+
+async function fmTermOpen(cwd, title) {
+  const dir = cwd || FM.panes[FM.lastPane].path;
+  document.getElementById('fmTermTitle').textContent = title || ('终端 · ' + dir);
+  document.getElementById('fmTerm').classList.add('show');
+  fmTrackKeyboard();
+  document.getElementById('fmTermOut').textContent = '';
+  await fmTermKill();
+
+  try {
+    const res = await fmApi('/api/shell/open', {
+      method: 'POST', headers: FM_JSON, body: JSON.stringify({ cwd: dir }),
+    });
+    TERM.id = res.id;
+    TERM.pty = !!res.pty;
+    fmTermPoll();
+  } catch (e) {
+    fmTermPrint('无法启动终端：' + e.message + '\n');
+  }
+}
+
+function fmTermPoll() {
+  fmTermStopTimer();
+  TERM.timer = setInterval(async () => {
+    if (!TERM.id) return;
+    try {
+      const res = await fmApi('/api/shell/output?id=' + TERM.id);
+      if (res.data) fmTermPrint(res.data);
+      if (!res.alive) {
+        fmTermPrint('\n[shell 已退出]\n');
+        fmTermStopTimer();
+        TERM.id = 0;
+      }
+    } catch (e) {
+    }
+  }, 600);
+}
+
+function fmTermStopTimer() {
+  if (TERM.timer) clearInterval(TERM.timer);
+  TERM.timer = null;
+}
+
+async function fmTermSendRaw(data) {
+  if (!TERM.id) return;
+  try {
+    await fmApi('/api/shell/input', {
+      method: 'POST', headers: FM_JSON, body: JSON.stringify({ id: TERM.id, data }),
+    });
+  } catch (e) {
+    fmTermPrint('发送失败：' + e.message + '\n');
+  }
+}
+
+function fmTermSend() {
+  const input = document.getElementById('fmTermInput');
+  const line = input.value;
+  input.value = '';
+  fmTermFollowTail();
+  if (!TERM.pty) fmTermPrint(line + '\n');
+  fmTermSendRaw(line + '\n');
+}
+
+function fmTermFollowTail() {
+  const out = document.getElementById('fmTermOut');
+  if (!out) return;
+  out.scrollTop = out.scrollHeight;
+  fmTermAtBottom = true;
+}
+
+async function fmTermKill() {
+  fmTermStopTimer();
+  if (!TERM.id) return;
+  const id = TERM.id;
+  TERM.id = 0;
+  try {
+    await fmApi('/api/shell/close', {
+      method: 'POST', headers: FM_JSON, body: JSON.stringify({ id }),
+    });
+  } catch (e) { }
+}
+
+async function fmTermClose() {
+  document.getElementById('fmTerm').classList.remove('show');
+  await fmTermKill();
+}
+
+async function fmRun() {
+  const paths = fmSelPaths();
+  if (!paths.length || !fmFsOnly()) return;
+  const owner = FM.owner >= 0 ? FM.owner : FM.lastPane;
+  const cwd = FM.panes[owner].path;
+  fmClearSel();
+
+  await fmTermOpen(cwd);
+  if (!TERM.id) return;
+  const command = paths.map(fmRunCommand).join('\n') + '\n';
+  fmTermPrint('$ ' + command);
+  await fmTermSendRaw(command);
+}
+
+
+loadHome();
+loadApps();
+loadModules();
+loadSettings();
