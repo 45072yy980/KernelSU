@@ -31,7 +31,7 @@ git_push（推分支） → ci_dispatch（workflow_dispatch，可带 abi=arm64-v
 - **改完 Rust 记得 rustfmt**：4.1 就因为在 `#[cfg]` 属性下方插函数导致 `get_features` 重复定义 + 两处格式不符，连挂两次 CI。
 
 **② token 只能从环境变量走，不许出现在任何地方。**
-- 插件 `dsha-diksu-git` 已装好：`git_status` / `git_commit` / `git_push` / `git_tag` / `ci_dispatch` / `ci_watch` / `release_publish`。
+- 插件 `dsha-diksu-git` 1.1.0 已装好（18 个工具）：`git_status` / `git_diff` / `git_log` / `git_show` / `git_blame` / `git_stage` / `git_commit` / `git_branch` / `git_stash` / `git_sync` / `git_push` / `git_tag` / `git_release_notes` / `git_audit` / `ci_dispatch` / `ci_watch` / `ci_logs` / `release_publish`。
 - 它读 `DSH_GIT_TOKEN`（其次 `GITHUB_TOKEN` / `GH_TOKEN`）。**没有 token 就先去设置环境变量，不要在对话里贴 token，不要写进文件。**
 - 需要直连不稳时，插件支持 `hostsPin`（临时改 hosts 并自动还原），不要手搓 askpass 脚本。
 - 插件源码随仓库保存了一份副本：`tools/dsha-diksu-git/`（安装方法见该目录 README）。

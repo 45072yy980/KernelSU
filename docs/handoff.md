@@ -218,13 +218,18 @@ kernel/                     内核模块（C），Kbuild 里固定 KSU_PACKAGE_N
 
 上一轮把这套动作做成了 DSH 插件（`/root/dsha-diksu-git`，已接进 `web` profile）：
 
+1.1.0 参考插件市场的社区 Git 插件补齐到 18 个工具（源码：`tools/dsha-diksu-git/`）：
+
 | 工具 | 作用 |
 |---|---|
-| `git_status` | 分支/HEAD/tag/versionCode/改动/APK 残留/领先落后 |
-| `git_commit` | 固定作者提交；**拒绝新增 APK**（删除放行） |
-| `git_push` | 临时 askpass（token 只从环境变量读）+ 可选 hosts 钉 IP + 重试 + ls-remote 校验 |
+| `git_status` | 分支/HEAD/上游/tag/versionCode、四类改动、进行中操作、APK 残留 |
+| `git_diff` / `git_log` / `git_show` / `git_blame` | 读改动、历史、单个提交、逐行追溯 |
+| `git_stage` / `git_commit` | 精确暂存；提交前审计 secret/冲突标记/大文件，**拒绝新增 APK**（删除放行） |
+| `git_branch` / `git_stash` / `git_sync` | 分支（删前备份 ref）、贮藏、fetch/pull（默认 ff-only） |
+| `git_push` | 临时 askpass（token 只从环境变量读）+ 可选 hosts 钉 IP + 重试 + ls-remote 校验；受保护分支拒绝强推 |
 | `git_tag` | 打 `vX.Y.Z-ultra` 并算出 versionCode |
-| `ci_dispatch` / `ci_watch` | 触发 CI 并等到结束，回传失败 job/步骤 |
+| `git_release_notes` | 按 conventional commit 生成发布说明 |
+| `ci_dispatch` / `ci_watch` / `ci_logs` | 触发 CI、等待结果、拉失败 job 日志 |
 | `release_publish` | 从 Release run 挑 28 个资产建 release 并发布 |
 
 **token 只走环境变量**：`export DSH_GIT_TOKEN=<PAT>`（其次 `GITHUB_TOKEN` / `GH_TOKEN`）。
