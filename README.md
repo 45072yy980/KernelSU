@@ -241,6 +241,45 @@ versionCode = major × 10000 + minor × 1000 + patch × 100 + tag 之后的提�
 
 ## 5. 更新记录
 
+### v4.2.0-ultra（开发中，未打 tag）
+
+这一版补网页端的两块空白（SuSFS、Shizuku），并把 4.1 留下的"置灰只做了一半"和"Material 只清了一页"收尾。
+
+#### 网页端：SuSFS 面板
+- 新增 4 条接口：`GET /api/susfs/status`、`POST /api/susfs/toggle`、`POST /api/susfs/add`、`POST /api/susfs/remove`。
+- 状态卡显示**内核真值**（是否加载 / 版本 / variant / 特性清单），全部来自 supercall，不是读配置猜的。
+- 三个开关（log / AVC log spoofing / hide sus mnts）真实下发；因为**内核没有查询当前值的命令**，开关初始显示"当前值未知"，点过之后只显示"已下发"，不画成开关态。
+- 五类规则（path / path_loop / map / kstat / redirect）可添加，路径强制绝对路径且不含 NUL。
+- 删除如实说明：**内核没有 remove 命令**，已添加的规则无法在运行时撤销，只能等重启；不做"删除成功"的假象。
+- 未加载时整块置灰并给出"去首页提权/安装"，不整块消失。
+
+#### 网页端：内置 Shizuku 管理
+- 状态卡：运行中/已停止 + pid + 运行身份（root/uid）+ "binder 可用性请在 App 内确认"。
+- 启动/停止：启动沿用 App 里 `setsid -d env CLASSPATH=… app_process … --nice-name=shizuku_server` 的命令形态；停止只对校验过 `/proc/<pid>` 的 `shizuku_server` 逐个 SIGKILL，不整组杀。
+- 失败时把完整错误（含 `/data/local/tmp/shizuku_ksu.log` 尾部）显示出来，不只弹"成功"。
+- 开机自启的开关状态与**上次结果**（时间/来源/失败原因）、授权应用数量与文件权限异常提示。
+- **授权写入不在网页端做**：Shizuku 的授权要调 binder，ksud 侧没有 binder 通道，改 `shizuku.json` 也不会通知运行中的 server，所以只显示"授权请在 App 内修改"，不装样子。
+
+#### 网页端：资产拆分与视觉
+- 单文件从 5165 行拆成 `index.html`（DOM）+ `app.css` + `app.js`，`webui.rs` 用 `include_str!` 内嵌并新增 `/ui/app.css`、`/ui/app.js` 两条路由；两条路由在令牌校验之前返回（WebView 子资源不一定带 cookie，否则会出现"首页能开、css/js 403"）。
+- 视觉按 App 的 Miuix 美化版对齐：语义 token 层（颜色/圆角/间距/字号/阴影）+ 组件层覆盖，亮色/暗色/AMOLED 三套都成立；旧的 `--bg-*` / `--text-*` / `--accent` 仍是主题引擎唯一可写源。
+- 设置页 section 顺序调整：状态类卡片置顶，SuSFS 与「内置 Shizuku」上移到「工具」之前。
+
+#### 导航置灰做细
+- 4.1 是"整条导航共用一个状态"：非 full-featured 时五个导航组件一起降级，`userScrollEnabled` 与 `badgeEnabled` 也被连带关掉——首页和设置明明能进，却一起锁死。
+- 4.2 拆成 `NavEntry` 逐入口判定：Home/Settings 永远可用，只有 SuperUser/Module 需要 full-featured；五个导航组件只置灰不可用的那一个，点它弹原因与恢复入口；翻页手势与徽标只跟用户设置走。
+
+#### Material 3 巡检
+- 逐页过了 25 个 Material 页面/分支，结论写在 `docs/material3-audit.md`。
+- 修掉：主设置页 9 个残留 import；基础功能页那条**和自动提权共用同一个偏好、文案却还写着 Magica** 的"自动越狱"开关；SuSFS 页 open redirect 规则组"有垃圾桶图标但点了没反应"的空实现。
+- 澄清：`sulog` 与「应用配置模板」仍有入口（4.1 只删了主设置页入口），不是死代码；本分支没有独立的文件管理页。
+
+#### 内核：默认签名哈希
+- `kernel/Kbuild` 的 `KSU_EXPECTED_SIZE/HASH` 自基线起一直是上游官方证书，而本仓库用 `ksu-signing.jks` 签名。CI 会用 keytool 现算并覆盖，所以 CI 产物一直是对的；但**本地直接 `make -C kernel`** 编出来的 `.ko` 会认不出本管理器，表现为"模块能加载、su 能用、首页显示未安装"。
+- 默认值已改为仓库自带签名的实际值（799 / `b27c5a47…`），并注明 CI 覆盖链路。
+
+> 本轮未打 tag、未发布：版本号按"tag 之后提交数"递增，发版前需要先把 tag 打到最终 HEAD 或直接起 `4.1.1`。
+
 ### v4.1.0-ultra
 
 这一版处理四件事：自动提权不再依赖"往内核里注入"，导航入口不再整条消失，Material 3 设置页清掉残留项，网页端补上本项目自己的设置。

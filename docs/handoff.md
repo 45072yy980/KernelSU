@@ -343,6 +343,9 @@ grep -n "getVersionCode" manager/build.gradle.kts | head
 | `5addaf62` | 网页端内置 Shizuku 管理：3 条 API + 设置页卡片（只读 + 启停，授权仍回 App） |
 | `af8dbdd1` | 本文件第十一节（4.2 进展） |
 | `248c5b8a` | rustfmt：`uid_scheme` 链式换行（CI 唯一红点） |
+| `015e48ff` | 本文件第十一节订正（CI 全绿的真实结果） |
+| `7dede5cb` | 网页端资产拆分：`index.html` + `app.css` + `app.js`，`/ui/*` 两条路由（纯搬家，字节一致） |
+| `e2c18361` | 网页端视觉对齐 Miuix：语义 token 层 + 组件层覆盖（DOM/JS 不动） |
 
 ### 11.2 环境问题（下一轮开工先处理）
 
@@ -384,7 +387,9 @@ grep -n "getVersionCode" manager/build.gradle.kts | head
 | task-3 Material 3 巡检 | ✅ 完成（`9ef3767c`） |
 | task-4 真机核验 | ⏹ 按用户要求取消，只留只读证据（`04f25daf`） |
 | task-5 网页端 Shizuku 管理 | ✅ 完成（`5addaf62`） |
-| task-6 网页端视觉重构 | 📋 只有方案（`docs/webui-redesign-plan.md`），**没动代码** |
+| task-6 网页端视觉重构 | ✅ 代码完成（`7dede5cb` 拆分 + `e2c18361` 视觉），**观感待真机浏览器确认** |
 
-task-6 没动代码是刻意的：它要重写 `index.html`（已 4986 行），在没有真机浏览器回归的前提下做，
-风险远大于收益。下一轮建议单独开一轮，先拆文件再改样式，每步可回滚。
+task-6 的做法是"先拆不改样式，再改 token"两步，各自可单独 revert。拆分那一步做了字节级校验
+（CSS/JS 切片 SHA256 与拆分前一致、DOM 逐行一致），视觉那一步只加语义 token 与组件覆盖，
+不动 class 命名、不动 `app.js`。**CI 只能验证语法与编译，五个页面的实际观感必须真机点一遍**；
+如果哪块不好看，直接 revert `e2c18361` 就能回到拆分后的干净状态。
