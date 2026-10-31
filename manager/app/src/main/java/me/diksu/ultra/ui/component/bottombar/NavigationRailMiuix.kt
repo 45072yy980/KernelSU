@@ -1,5 +1,11 @@
 package me.diksu.ultra.ui.component.bottombar
 
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.os.BatteryManager
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
@@ -7,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
@@ -14,6 +21,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.size
@@ -25,12 +33,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -39,7 +49,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.shadow.Shadow
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalViewConfiguration
@@ -81,6 +96,15 @@ import top.yukonga.miuix.kmp.shader.isRenderEffectSupported
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import kotlin.math.roundToInt
 
+/**
+ * Height of the destination column as measured last time.
+ *
+ * Kept outside the composition so a re-created activity starts from the value the rail already
+ * had; otherwise the spacer below is computed from zero for one frame and the destinations are
+ * pushed to the bottom and back - the jump seen when the app returns from the background.
+ */
+private var lastItemsHeight: Dp = 0.dp
+
 @Composable
 fun NavigationRailMiuix(
     navigationBadge: NavigationBadgeState,
@@ -109,7 +133,8 @@ fun NavigationRailMiuix(
         insetsPadding.calculateTopPadding() +
         insetsPadding.calculateBottomPadding()
     val density = LocalDensity.current
-    var itemsHeight by remember { mutableStateOf(0.dp) }
+    var itemsHeightValue by rememberSaveable { mutableStateOf(lastItemsHeight.value) }
+    val itemsHeight = itemsHeightValue.dp
 
     BoxWithConstraints(modifier = modifier.fillMaxHeight()) {
         val spacer: Dp = (maxHeight - overhead - itemsHeight).coerceAtLeast(0.dp)
@@ -154,7 +179,15 @@ fun NavigationRailMiuix(
                         gateFor = { index -> gates[destinations[index].navEntry] ?: NavGate.Open },
                         onGate = { gate -> pendingGate = gate },
                         backdrop = backdrop,
-                        onItemsHeight = { itemsHeight = it },
+                        onItemsHeight = { height ->
+                            // A zero here is a transient re-measure while the window insets settle
+                            // after a resume. Keeping the previous value stops the destinations from
+                            // being pushed to the bottom and springing back.
+                            if (height > 0.dp) {
+                                itemsHeightValue = height.value
+                                lastItemsHeight = height
+                            }
+                        },
                     )
                 }
             }
@@ -173,7 +206,14 @@ fun NavigationRailMiuix(
                 // Darker than the default: over a blurred photo the icon has to hold its own.
                 RebootListPopupMiuix(iconTint = MiuixTheme.colorScheme.onSurface)
             }
-            SceneClock(modifier = Modifier.align(BiasAlignment(0f, -0.35f)))
+            Column(
+                modifier = Modifier.align(BiasAlignment(0f, -0.30f)),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                SceneClock()
+                Spacer(modifier = Modifier.height(10.dp))
+                RailBattery()
+            }
         }
     }
 
@@ -531,6 +571,96 @@ private fun SceneClock(modifier: Modifier = Modifier) {
             fontSize = MiuixTheme.textStyles.body2.fontSize,
             color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
             modifier = Modifier.padding(top = 2.dp),
+        )
+    }
+}
+
+/**
+ * The battery under the clock: a small cell glyph plus the percentage.
+ *
+ * It listens to the sticky `ACTION_BATTERY_CHANGED` broadcast instead of polling, so the rail
+ * updates on its own when the level moves and costs nothing while the screen is idle. An
+ * unreadable battery (very rare: some emulators) shows as `--` rather than a fake 0%.
+ */
+@Composable
+private fun RailBattery(modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    var level by remember { mutableStateOf(-1) }
+    var charging by remember { mutableStateOf(false) }
+
+    DisposableEffect(context) {
+        fun read(intent: Intent) {
+            val scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, 100).coerceAtLeast(1)
+            val raw = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
+            level = if (raw < 0) -1 else (raw * 100 / scale).coerceIn(0, 100)
+            val status = intent.getIntExtra(BatteryManager.EXTRA_STATUS, -1)
+            charging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
+                status == BatteryManager.BATTERY_STATUS_FULL
+        }
+
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                intent?.let(::read)
+            }
+        }
+        // The sticky broadcast carries the current level immediately, so the first frame already
+        // shows the real number instead of flashing "--".
+        context.registerReceiver(receiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED))?.let(::read)
+        onDispose {
+            runCatching { context.unregisterReceiver(receiver) }
+        }
+    }
+
+    val unknown = level < 0
+    val low = !unknown && level <= 15
+    val glyphColor = when {
+        low -> MiuixTheme.colorScheme.error
+        charging -> MiuixTheme.colorScheme.primary
+        else -> MiuixTheme.colorScheme.onBackground
+    }
+    val outlineColor = MiuixTheme.colorScheme.onSurfaceVariantSummary
+
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Canvas(modifier = Modifier.size(width = 22.dp, height = 11.dp)) {
+            val stroke = 1.dp.toPx()
+            val capWidth = 2.dp.toPx()
+            val bodyWidth = size.width - capWidth - stroke
+            val bodyHeight = size.height
+            val radius = CornerRadius(2.dp.toPx(), 2.dp.toPx())
+
+            drawRoundRect(
+                color = outlineColor,
+                topLeft = Offset(stroke / 2f, stroke / 2f),
+                size = Size(bodyWidth, bodyHeight - stroke),
+                cornerRadius = radius,
+                style = Stroke(width = stroke),
+            )
+            drawRoundRect(
+                color = outlineColor,
+                topLeft = Offset(bodyWidth + stroke, bodyHeight * 0.32f),
+                size = Size(capWidth, bodyHeight * 0.36f),
+                cornerRadius = CornerRadius(1.dp.toPx(), 1.dp.toPx()),
+            )
+            if (!unknown) {
+                val innerWidth = (bodyWidth - stroke * 3f).coerceAtLeast(0f) * level / 100f
+                if (innerWidth > 0f) {
+                    drawRoundRect(
+                        color = glyphColor,
+                        topLeft = Offset(stroke * 1.5f, stroke * 1.5f),
+                        size = Size(innerWidth, bodyHeight - stroke * 3f),
+                        cornerRadius = CornerRadius(1.5f.dp.toPx(), 1.5f.dp.toPx()),
+                    )
+                }
+            }
+        }
+        Spacer(modifier = Modifier.width(5.dp))
+        Text(
+            text = if (unknown) "--" else "$level%",
+            fontSize = MiuixTheme.textStyles.body2.fontSize,
+            color = if (low) MiuixTheme.colorScheme.error else MiuixTheme.colorScheme.onSurfaceVariantSummary,
         )
     }
 }
