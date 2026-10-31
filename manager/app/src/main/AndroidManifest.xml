@@ -195,6 +195,42 @@
                 <action android:name="rikka.shizuku.intent.action.REQUEST_BINDER" />
             </intent-filter>
         </receiver>
+        <!-- FoxSu UI（移植）用到的组件：新壳会启动它们 -->
+        <activity
+            android:name="me.diksu.ultra.foxsu.ui.webui.WebUIActivity"
+            android:autoRemoveFromRecents="true"
+            android:configChanges="density|orientation|screenSize|screenLayout|smallestScreenSize|uiMode|locale|layoutDirection|fontScale|keyboard|keyboardHidden"
+            android:documentLaunchMode="intoExisting"
+            android:exported="false"
+            android:taskAffinity="${applicationId}.webui"
+            android:theme="@style/Theme.KernelSU.WebUI" />
+
+        <service
+            android:name="me.diksu.ultra.foxsu.magica.MagicaService"
+            android:directBootAware="true"
+            android:exported="false"
+            android:isolatedProcess="true"
+            android:useAppZygote="true" />
+
+        <service
+            android:name="me.diksu.ultra.foxsu.ui.util.DownloadService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
+        <receiver
+            android:name="me.diksu.ultra.foxsu.magica.BootCompletedReceiver"
+            android:directBootAware="true"
+            android:enabled="false"
+            android:exported="false"
+            android:process=":foxsu_magica_boot">
+            <intent-filter>
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="me.diksu.ultra.foxsu.magica.LAUNCH" />
+            </intent-filter>
+        </receiver>
     </application>
 
 </manifest>
