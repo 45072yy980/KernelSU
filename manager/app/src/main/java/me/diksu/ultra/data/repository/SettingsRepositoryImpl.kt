@@ -28,6 +28,7 @@ private const val KEY_DISABLE_PAGER_SWIPE = "disable_pager_swipe"
 private const val KEY_SIMPLE_MODE = "simple_mode"
 private const val KEY_SHOW_MORE_MODULE_INFO = "show_more_module_info"
 private const val KEY_PAGER_MODE_MIGRATED = "pager_mode_migrated_to_native"
+private const val KEY_CURRENT_THEME = "current_theme_id"
 
 /**
  * One-time move off the cross-axis interceptor default.
@@ -104,6 +105,20 @@ fun setPartitionGuardEnabled(enabled: Boolean) {
     // commit(), not apply(): the settings screen reads the value back right after
     // this returns, so an async write could make the switch snap back.
     settingsPrefs().edit().putBoolean(KEY_PARTITION_GUARD, enabled).commit()
+}
+
+/**
+ * Id of the custom theme the `Themed` style should render, or null when none is selected.
+ *
+ * A plain key, deliberately **not** a [modeKey]: a theme is not a skin-local setting, and
+ * `docs/theme-acceptance.md` §1.3 S2 keeps theme state out of the per-skin namespace.
+ */
+fun currentThemeId(): String? = settingsPrefs().getString(KEY_CURRENT_THEME, null)
+
+fun setCurrentThemeId(id: String?) {
+    settingsPrefs().edit {
+        if (id == null) remove(KEY_CURRENT_THEME) else putString(KEY_CURRENT_THEME, id)
+    }
 }
 
 /**

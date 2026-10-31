@@ -232,5 +232,8 @@ fun ThemeStore.exportToFile(id: String, file: File): Boolean = runCatching {
 private fun exportBlocking(id: String, out: java.io.OutputStream): Boolean {
     val dir = File(ThemeStore.root(), id)
     if (!dir.isDirectory) return false
-    return runCatching { ThemeContainer.export(dir, out) }.getOrDefault(false)
+    return runCatching {
+        ThemeContainer.export(dir, out)
+        true
+    }.getOrDefault(false)
 }
