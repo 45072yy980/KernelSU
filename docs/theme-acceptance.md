@@ -38,7 +38,7 @@
 | A6 | 每个 token 化组件：`ThemeTokens()` 默认值 == 迁移前那处字面量 | **不用跑测试**：§6.1 check 6 从 `ThemeTokens.kt` 读出 9 个默认值，与 §1.6 基线表逐行对拍；组件 diff 必须是「字面量搬进 token、不换值」 | 对拍输出 + diff | **静态（PR 人工）** |
 | A7 | `uiPrefix()` 对前三个值仍返回 `material_` / `miuix_stock_` / `miuix_` | 单测三值 + diff 确认三行未改；**Themed 的前缀必须拍板**（见 S2） | 单测 + diff | **CI / 静态** |
 | A8 | 老皮肤不读主题包、不因主题包存在改变启动路径 | review `MainActivity` 的 mode→theme 分支；`grep -rn "theme.json\|ThemeStore" $SRC \| grep -v "/theme/"` 只允许出现在设置入口与 Themed 分支 | review 记录 | **静态** |
-| A9 | 三皮肤 × 6 页截图：裁剪后 `AE=0`（唯一例外：选择器第 4 项）；**且 Themed × 6 页 == 同页 Miuix 的 `AE=0`（L1a 核心断言）** | §1.7 执行手册 + §3.3 截图流程 | 成对 PNG + 差异报告 | **⏳ 待设备接入**（见 §1.7） |
+| A9 | 三条：① 无主题时 **Themed 观感 == Miuix**（L1a/L1c 核心断言）；② 装包后颜色/字体/背景按包变化，换包跟着变；③ 切回 Miuix / MiuixStock / Material 完全恢复 | §1.7 手动清单（6 页各看一眼，不必截图） | 用户回填一行结论 + 异常截图 | **👤 用户手动验收** |
 | A10 | `fromValue` 四值 round-trip；`entries.size == 4` 且前三项顺序不变；不依赖 `ordinal` | §6.1 check 4（枚举项 + 四个 `.value ->`）+ check 7（`UiMode.*ordinal` 必须为空） | 命令输出 | **静态** |
 
 ### 1.0 A 组实测状态（commit `8d9e3e8d`，2026-10-31）
@@ -53,7 +53,7 @@
 | A6 | ✅ **过** | `ThemeTokens.kt` 9 个默认值与 §1.6 基线逐行一致：`16 / 0 / 0 / 56 / 12 / 12 / Docked / true / DEFAULT_SECTION_ORDER` |
 | A7 | ✅ **过** | `uiPrefix()` 与父提交 `fe9c7a9e` **零差异**；Themed 走 `else -> "miuix_"`（S2 定案）；前三个前缀未变 |
 | A8 | ✅ **过** | `grep -rn "theme.json\|ThemeStore\|ThemePackage" src \| grep -v "/ui/theme/"` 为空：主题包读取只存在于 `ui/theme/` |
-| A9 | ⏳ **待设备接入** | 设备 shell 通道（adb-shell/root/Shizuku）未开，`pm install` 不可用、虚拟屏只能跑已装应用，无法装两个版本做对比。开跑清单与导航见 §1.7 |
+| A9 | 👤 **用户手动验收** | 本机设备 shell 未开、无障碍也未开（`/app/ui/screenshot` 返回 `ACCESSIBILITY_UNAVAILABLE`），自动化截图不可用；用户本就自行装包看效果。判据与 6 页清单见 §1.7 |
 | A10 | ✅ **过** | 枚举 4 项且 Themed 最后、`fromValue` 四值齐全、`UiMode.*ordinal` 零引用 |
 
 > 复跑方式：§6.1 九条断言 + §6.2 扫描器。本次原始输出：九条断言全 PASS；扫描器 `53 / 52 / 52 / 0 / 9 / 12`。
@@ -155,15 +155,36 @@
 > **本期明确不加测试基础设施**（会引入 Robolectric/JUnit 依赖与构建时间，属另一件事），
 > 在此之前这三条按「PR 人工 + §6.1 grep」执行。
 
-### 1.7 A9 执行手册（⏳ 待设备接入）
+### 1.7 A9 手动验收清单（👤 用户执行）
 
-**现在为什么不能跑**：这台机器的设备 shell 通道（adb-shell / root / Shizuku）都未开启，`pm install` 走不通；
-虚拟屏只能运行**已安装**的应用，装不了新包。等通道可用后按本手册一次跑完，不用再想。
+**为什么由用户看**：本机设备 shell 通道未开、无障碍服务也未开（`/app/ui/screenshot` 返回
+`ACCESSIBILITY_UNAVAILABLE`），自动化截图在本机不可用；用户本来就打算自己装包看效果。
+所以 A9 **不是阻塞项**，也不设任何"等设备/等通道"的前置条件。
 
-**开跑前要准备好的东西**（缺一项就别开跑，否则截图没法对比）
+**判据（三条，缺一不可）**
 
-| # | 准备项 | 具体要求 |
-|---|---|---|
+1. **无主题时 Themed == Miuix**：选 Themed、不装任何主题包 → 与 Miuix 观感一致（肉眼无差别；
+   有人能截图的场合要求 `AE=0`）。这是 L1a/L1c 的核心断言——不为 0 就说明注入链路动了不该动的地方。
+2. **装包后真的变**：选主题包 → 颜色/字体/背景按包变化；换另一个包 → 跟着变，且没有上一包的残留。
+3. **切回老皮肤完全恢复**：切回 Miuix / MiuixStock / Material → 回到没有主题时的样子。
+
+**检查路径（每页看一眼即可）**
+
+| # | 页面 | 入口 | 看什么 |
+|---|---|---|---|
+| P1 | 首页 | 启动默认页 | 主色、卡片圆角/底色、hero 背景 |
+| P2 | 模块 | 底部导航 | 列表行高、卡片、动作图标颜色 |
+| P3 | 模块仓库 | 模块页顶部入口 | 与模块页观感一致 |
+| P4 | 设置 | 底部导航 | 分组标题、行高、开关 |
+| P5 | 关于 | 设置页底部 | 文本样式（标题/正文） |
+| P6 | 主题页 | 设置 → 外观（ColorPalette） | 配色预览、选择器第 4 项 |
+
+**边界**：判据 1 只在 **L2 token 接上之前**成立；L2 落地后改成"Themed 与 Miuix 的差异必须只出现在
+已 token 化的组件上"，不要把标准放宽成"随便不一样"。
+
+**回填格式**（一行即可）：`A9：1 ✅ / 2 ✅（A、B 两个包都生效）/ 3 ✅（三皮肤恢复）`；有异常写清页面 + 现象。
+
+---|---|---|
 | P1 | 基线 APK | 父提交 `fe9c7a9e` 构建：`git worktree add /tmp/base fe9c7a9e` → `cd /tmp/base/manager && ./gradlew :app:assembleDebug` |
 | P2 | 被测 APK | 当前 `8d9e3e8d` 构建；**同一签名、同一 ABI** |
 | P3 | 设备 | 同一台；记录型号、`wm size`、`wm density`、Android 版本 |
@@ -209,15 +230,15 @@
 
 | 编号 | 判据 | 怎么验 | 证据 | 谁来验 |
 |---|---|---|---|---|
-| B1 | `color.seed` 生效：主色/容器色随 seed 变，53 个角色都有值（无透明块、无纯黑块） | 导入 A → 首页/主题页截图；换 B 对比 | 两套截图 + 取色值 | 真机 |
-| B2 | `color.roles` 逐角色覆盖：只覆盖 `primary` 时其余由 seed 补齐、不塌陷 | 只写 `primary` 的包，检查按钮/滑块/选中态 | 截图 + 日志 | 真机 |
-| B3 | `dark` / `amoled`：切深色生效；AMOLED 背景像素为 `#000000` | 三模式各一张，取背景像素 | 截图 + 像素值 | 真机 |
-| B4 | 字体：14 样式可分别覆盖字号/字重/行高；自定义 ttf 生效；未覆盖样式回落默认 | 只改 `title1`/`body1` 的包 | 截图（局部放大） | 真机 |
-| B5 | 背景：每页可不同；`opacity`/`dim`/`blur` 三参数各自可辨 | 首页与设置页不同背景，逐参数改各一张 | 4 张截图 | 真机 |
-| B6 | **只在 Themed 生效**：切回 Miuix/MiuixStock/Material 后颜色/字体/背景全部恢复 | 切回后按 A9 对比 `AE=0` | 截图 | 真机 |
-| B7 | 持久化：杀进程、重启后仍是 Themed + 同一主题包 | `am force-stop` → 重开；再重启 | 两次截图 | 真机 |
-| B8 | A→B 无残留：先 A 再 B，B 的截图里不得有 A 的像素 | 连续切换后与"直接进 B"对比 `AE=0` | 两组截图 | 真机 |
-| B9 | 优先级**已定**：Themed 下 `主题 roles` > `主题 seed` > `设置里的 keyColor/Monet`；显式给了文字角色就跳过提亮（§1.4 D7） | 测 4 种组合：roles+keyColor / 仅 seed+keyColor / 仅 roles / 都没给 | 4 张截图 + 取色值 | **已定口径 + 真机** |
+| B1 | `color.seed` 生效：主色/容器色随 seed 变，53 个角色都有值（无透明块、无纯黑块） | 导入 A → 首页/主题页截图；换 B 对比 | 两套截图 + 取色值 | 👤 用户手动验收 |
+| B2 | `color.roles` 逐角色覆盖：只覆盖 `primary` 时其余由 seed 补齐、不塌陷 | 只写 `primary` 的包，检查按钮/滑块/选中态 | 截图 + 日志 | 👤 用户手动验收 |
+| B3 | `dark` / `amoled`：切深色生效；AMOLED 背景像素为 `#000000` | 三模式各一张，取背景像素 | 截图 + 像素值 | 👤 用户手动验收 |
+| B4 | 字体：14 样式可分别覆盖字号/字重/行高；自定义 ttf 生效；未覆盖样式回落默认 | 只改 `title1`/`body1` 的包 | 截图（局部放大） | 👤 用户手动验收 |
+| B5 | 背景：每页可不同；`opacity`/`dim`/`blur` 三参数各自可辨 | 首页与设置页不同背景，逐参数改各一张 | 4 张截图 | 👤 用户手动验收 |
+| B6 | **只在 Themed 生效**：切回 Miuix/MiuixStock/Material 后颜色/字体/背景全部恢复 | 切回后按 A9 对比 `AE=0` | 截图 | 👤 用户手动验收 |
+| B7 | 持久化：杀进程、重启后仍是 Themed + 同一主题包 | `am force-stop` → 重开；再重启 | 两次截图 | 👤 用户手动验收 |
+| B8 | A→B 无残留：先 A 再 B，B 的截图里不得有 A 的像素 | 连续切换后与"直接进 B"对比 `AE=0` | 两组截图 | 👤 用户手动验收 |
+| B9 | 优先级**已定**：Themed 下 `主题 roles` > `主题 seed` > `设置里的 keyColor/Monet`；显式给了文字角色就跳过提亮（§1.4 D7） | 测 4 种组合：roles+keyColor / 仅 seed+keyColor / 仅 roles / 都没给 | 4 张截图 + 取色值 | **已定口径 + 👤 用户手动验收** |
 
 ---
 
@@ -237,11 +258,11 @@
 
 | 编号 | 判据 | 怎么验 | 证据 | 谁来验 |
 |---|---|---|---|---|
-| C1 | 老皮肤零变化（同 A9，按组件裁剪） | §3.3，只裁该组件 | 两张 PNG + `AE` | 真机 |
-| C2 | Themed 下该组件跟随主题 | A/B 两包各一张 | 两张 PNG + 差异包围盒 | 真机 |
+| C1 | 老皮肤零变化（同 A9，按组件裁剪） | §3.3，只裁该组件 | 两张 PNG + `AE` | 👤 用户手动验收 |
+| C2 | Themed 下该组件跟随主题 | A/B 两包各一张 | 两张 PNG + 差异包围盒 | 👤 用户手动验收 |
 | C3 | token 默认值 == 旧字面量 | 单测 golden + diff | 单测输出 | CI（需 step） |
-| C4 | 未迁移组件不崩、不闪烁、无 `CompositionLocal` 缺失 | 迁移 1 个后跑全页面 smoke（6 页） | 录屏 / 无 crash 日志 | 真机 |
-| C5 | 同一 token 多处表现一致（如 `cardRadius` 同时作用于首页与设置卡片） | 两处同屏截图 | 截图 | 真机 |
+| C4 | 未迁移组件不崩、不闪烁、无 `CompositionLocal` 缺失 | 迁移 1 个后跑全页面 smoke（6 页） | 录屏 / 无 crash 日志 | 👤 用户手动验收 |
+| C5 | 同一 token 多处表现一致（如 `cardRadius` 同时作用于首页与设置卡片） | 两处同屏截图 | 截图 | 👤 用户手动验收 |
 
 ### 3.3 统一截图流程（可复现）
 
@@ -287,14 +308,14 @@ snap() {
 
 | 编号 | 判据 | 怎么验 | 证据 | 谁来验 |
 |---|---|---|---|---|
-| D1 | 非 zip / 坏 zip / 缺 `theme.json` → 拒绝导入 + 说明原因 + **不崩溃** | 依次导入 3 个包，看对话框与 `logcat` 无 `FATAL` | 截图 + logcat | 真机（CI 覆盖解析器单测） |
-| D2 | 超大：单文件 >8 MiB / 总量 >64 MiB / 条目 >64 → 拒绝并说明是哪一条 | 各构造一个超限包 | 提示截图 | CI（预算单测）+ 真机 |
+| D1 | 非 zip / 坏 zip / 缺 `theme.json` → 拒绝导入 + 说明原因 + **不崩溃** | 依次导入 3 个包，看对话框与 `logcat` 无 `FATAL` | 截图 + logcat | 👤 用户手动验收（CI 覆盖解析器单测） |
+| D2 | 超大：单文件 >8 MiB / 总量 >64 MiB / 条目 >64 → 拒绝并说明是哪一条 | 各构造一个超限包 | 提示截图 | CI（预算单测）+ 👤 用户手动验收 |
 | D3 | 非法颜色（`#GGGGGG`、`red`、`#12345`）→ 该字段回退默认，其余字段照常生效 | 只坏一个颜色字段 | 截图 + "已忽略"日志 | CI（解析器单测） |
-| D4 | 缺字体文件 → 字体回退系统，**其他字段仍生效**（不能整包失败） | 引用不存在的 `font.ttf` | 截图 | 真机 |
-| D5 | zip slip（条目含 `../`）→ 拒绝，且不得写到应用私有目录之外 | 构造 `../evil`，导入后检查路径不存在 | 文件系统检查 | CI（解压单测）+ 真机 |
+| D4 | 缺字体文件 → 字体回退系统，**其他字段仍生效**（不能整包失败） | 引用不存在的 `font.ttf` | 截图 | 👤 用户手动验收 |
+| D5 | zip slip（条目含 `../`）→ 拒绝，且不得写到应用私有目录之外 | 构造 `../evil`，导入后检查路径不存在 | 文件系统检查 | CI（解压单测）+ 👤 用户手动验收 |
 | D6 | 未知字段 → 忽略 + 记日志，**不报错** | 加 `"foo": 1` | 日志 + 正常导入 | CI（解析器单测） |
-| D7 | 导入失败不留半个主题：当前生效主题不变，列表不出现坏包 | 导入 D1/D2 后再看列表与当前主题 | 截图 | 真机 |
-| D8 | 导入预览两栏：**将应用 N 项 / 未应用 M 项**，未应用项列名字 | 用真实 FolkPatch 包导入 | 预览截图 | 真机 |
+| D7 | 导入失败不留半个主题：当前生效主题不变，列表不出现坏包 | 导入 D1/D2 后再看列表与当前主题 | 截图 | 👤 用户手动验收 |
+| D8 | 导入预览两栏：**将应用 N 项 / 未应用 M 项**，未应用项列名字 | 用真实 FolkPatch 包导入 | 预览截图 | 👤 用户手动验收 |
 
 > 硬要求：8 条都属"不崩 + 回退 + 如实告知"。**任何一条崩溃即阻断发布。**
 
@@ -459,3 +480,33 @@ for w in whens:
 3. **豁免**：只有"选择器第 4 项"可豁免像素比对，且必须在 PR 里贴截图并注明范围。
 4. **基线**：`git worktree` 构建父提交或固定用上一版 APK；**不要**用"看起来一样"当证据。
 5. **与方案文档冲突时**：以 `theme-freedom-plan.md` 为准，并回来改本文。
+
+---
+
+## 8. 静态评审记录 · L1c-1（commit `1f16acec`，2026-10-31）
+
+**范围**：`theme/ThemeResolver.kt`（472 行）、`theme/ThemeRuntime.kt`（55 行）、
+`ui/theme/MiuixTheme.kt` 的注入点。
+**方法**：解析源码做集合比对 + 与 `d84fab94` 逐字 diff；**未运行代码**（本地无 Android SDK 与设备）。
+
+| # | 检查项 | 结论 | 证据 |
+|---|---|---|---|
+| R1 | 53 个颜色角色一一对应 | ✅ 过 | `Colors(...)` 具名参数 **53** 个、`withRole` 字符串分支 **53** 个，两集合**完全相等**（双向差集为空）；且每个分支都是 `"x" -> copy(x = …)` 同名，不存在"字符串写对、copy 参数写错" |
+| R2 | 无透明洞 / 未初始化 | ✅ 过 | `mapRoles` 对 53 个角色**全部显式赋值**；13 个 alpha 合成角色经 `ensureOpaqueOver`（先 `compositeOver` 再强制 alpha=1）；`windowDimming` 保留 0.3/0.6 是设计上的遮罩而非洞；无 seed 时用库的 `lightColorScheme()/darkColorScheme()` 兜底 |
+| R3 | 只给字体时不刷配色 | ✅ 过 | `hasColors = seed \|\| darkSeed \|\| roles \|\| darkRoles \|\| amoledBackground`；渲染处 `val themeColors = if (hasColors) resolved.colors else textColors` —— 字体包沿用调用方配色，不会把 Monet 刷成默认紫 |
+| R4 | 老皮肤零影响 | ✅ 过 | `resolvedTheme` 只在 `LocalUiMode.current == Themed` 时求值；`d84fab94..1f16acec` 在 `MiuixTheme.kt` 只有 **1 个 hunk（+29/−4）**；**else 分支的渲染表达式与改动前逐字相同**（去空白后脚本比对相等）；外层非 MiuixLook 分支未被 diff 触及 |
+| R5 | 异常被吞掉 | ✅ 过 | `runCatching { ThemeResolver.resolve(...) }.onFailure { Log.w }.getOrNull()`；`resolve` 内部对 manifest 解析失败直接返 null；字体 `runCatching { Typeface.createFromFile(f); FontFamily(Font(f)) }` —— **先 eager 解析再交给 Compose**（Compose 懒加载会在布局期炸） |
+| R6 | 缓存三要素 + 失效 | ✅ 过 | key = `"$id\|$dark\|$amoled"`；`invalidate()` 在 `ThemeStore.setCurrent`(:78)、`import` 成功(:130)、`delete`(:159) 三处调用；删除非当前主题不需要失效（缓存只存当前） |
+| R7 | 不可信输入不崩 | ✅ 过 | `parseColor` 只吃 `#RRGGBB`/`#AARRGGBB`，`toLongOrNull` 失败即 null；数值过 `range(0.0,1.0)` 且显式判 `isNaN()`；容器预算 64 条目 / 8 MiB 单文件 / 64 MiB 总量 / 1 MiB manifest；解压做 canonical 前缀校验并拒绝 `.`/`..`/绝对路径（zip slip） |
+
+**附注（不阻塞，但值得知道）**
+
+1. `mapRoles` 自称"镜像 Miuix 0.9.4 内部映射"，仓库里没有库源码可比对 → 只能证明"53 个都有值"，
+   不能证明"值与库逐点一致"（`secondary = outlineVariant`、`disabledOnSurface = onSurface` 这类是照抄还是近似，需观感验收）。
+2. **首帧主线程 IO**：`currentResolved()` 在 composition 里同步读 prefs + `theme.json`（`ThemeStore.find` → `readInstalled` 读文件并解析）。
+   有缓存兜后续帧，但"刚选完主题的第一帧"是主线程磁盘 IO；建议后续挪到 `produceState`/后台解析。
+3. **超大字体**：导入受 8 MiB 单文件上限保护；但 `resolve` 不复查大小，若有人往应用私有目录手工塞一个大 ttf，
+   `Typeface.createFromFile` 会吃内存。低危（需文件系统写权限）。
+4. **超长字符串**：manifest 上限 1 MiB，`name` 未再截断；极端名字只影响布局宽度，不崩。
+
+**结论**：7 项全部通过，无阻塞项。
