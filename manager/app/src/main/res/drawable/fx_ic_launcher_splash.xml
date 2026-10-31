@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 第一启动页图标（Android 12+ 系统闪屏）：直接用新的狐狸 logo。
+     底色本身就是奶油白，与 splash_background 同源，边缘已做羽化，不会有方形接缝。 -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:width="128dp"
+        android:height="128dp"
+        android:gravity="center">
+        <bitmap
+            android:src="@drawable/fx_foxsu_mark"
+            android:gravity="fill" />
+    </item>
+</layer-list>

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp"
+    android:viewportWidth="24" android:viewportHeight="24">
+    <!-- 全新一代：顶部大开口圆环 + 悬浮竖档，比例更舒展 -->
+    <path
+        android:strokeColor="#FF000000" android:strokeWidth="2.6"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M16.03,6.63 A7.2,7.2 0 1 1 7.97,6.63" />
+    <path
+        android:strokeColor="#FF000000" android:strokeWidth="2.6"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M12,3.2 L12,10.4" />
+</vector>

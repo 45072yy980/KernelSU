@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 第一启动页图标（暗色）：奶油白圆片承托狐狸，避免浅色方图压在深底上 -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:width="132dp"
+        android:height="132dp"
+        android:gravity="center">
+        <shape android:shape="oval">
+            <solid android:color="#FFFDFBF6" />
+        </shape>
+    </item>
+    <item
+        android:width="108dp"
+        android:height="108dp"
+        android:gravity="center">
+        <bitmap
+            android:src="@drawable/fx_foxsu_mark"
+            android:gravity="fill" />
+    </item>
+</layer-list>

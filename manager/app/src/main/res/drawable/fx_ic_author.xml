@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp"
+    android:viewportWidth="24" android:viewportHeight="24">
+    <!-- 全新一代：无脸头像剪影（圆头 + 肩弧），极简干净 -->
+    <path
+        android:strokeColor="#FF000000" android:strokeWidth="2.1"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M12,4.9 A3.4,3.4 0 1 0 12,11.7 A3.4,3.4 0 1 0 12,4.9 Z" />
+    <path
+        android:strokeColor="#FF000000" android:strokeWidth="2.1"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M5.2,20 C5.2,16.5 8.2,14.4 12,14.4 C15.8,14.4 18.8,16.5 18.8,20" />
+</vector>

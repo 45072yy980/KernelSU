@@ -1,0 +1,38 @@
+package me.diksu.ultra.foxsu.ui.screen.about
+
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.res.stringResource
+import androidx.lifecycle.compose.dropUnlessResumed
+import me.diksu.ultra.BuildConfig
+import me.diksu.ultra.R
+import me.diksu.ultra.foxsu.ui.LocalUiMode
+import me.diksu.ultra.foxsu.ui.UiMode
+import me.diksu.ultra.foxsu.ui.navigation3.LocalNavigator
+
+@Composable
+fun AboutScreen() {
+    val navigator = LocalNavigator.current
+    val uriHandler = LocalUriHandler.current
+    val htmlString = stringResource(
+        id = R.string.fx_about_source_code,
+        "<b><a href=\"https://github.com/Cmry-mlc/FoxSu\">GitHub</a></b>",
+        "<b><a href=\"https://t.me/KernelSU\">Telegram</a></b>"
+    )
+    val state = AboutUiState(
+        title = stringResource(R.string.fx_about),
+        appName = stringResource(R.string.fx_app_name),
+        versionName = BuildConfig.VERSION_NAME,
+        links = extractLinks(htmlString),
+    )
+    val actions = AboutScreenActions(
+        onBack = dropUnlessResumed { navigator.pop() },
+        onOpenLink = uriHandler::openUri,
+    )
+
+    when (LocalUiMode.current) {
+        UiMode.Miuix -> AboutScreenMiuix(state, actions)
+        UiMode.Fresh, UiMode.Glass, UiMode.Nocturne -> AboutScreenMaterial(state, actions)
+        UiMode.Material -> me.diksu.ultra.foxsu.ui.screen.editorial.EditorialAbout(state, actions)
+    }
+}

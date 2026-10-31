@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <style name="fx_Theme.KernelSU" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
+    </style>
+
+    <style name="fx_Theme.KernelSU.Starting" parent="Theme.SplashScreen">
+        <item name="fx_windowSplashScreenBackground">@color/fx_splash_bg</item>
+        <item name="fx_windowSplashScreenIconBackgroundColor">#00000000</item>
+        <item name="fx_windowSplashScreenAnimatedIcon">@drawable/fx_ic_launcher_splash</item>
+        <item name="fx_windowSplashScreenAnimationDuration">500</item>
+        <item name="fx_postSplashScreenTheme">@style/fx_Theme.KernelSU</item>
+    </style>
+
+    <style name="fx_Theme.KernelSU.WebUI" parent="Theme.KernelSU" />
+
+</resources>

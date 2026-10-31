@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="fx_home_click_to_install">Додирните да бисте инсталирали</string>
+    <string name="fx_home">Почетна</string>
+    <string name="fx_home_not_installed">Није инсталирано</string>
+    <string name="fx_home_working_version">Верзија: %s</string>
+    <string name="fx_home_working">Ради</string>
+    <string name="fx_save_log">Сачувај Дневнике</string>
+    <string name="fx_settings_sucompat">Preusmeri su binarni fajl</string>
+    <string name="fx_settings_sucompat_summary">Preusmeri /system/bin/su na ksud za aplikacije sa dozvolom Superkorisnika u Profilu aplikacije; efektivno samo za nove procese.</string>
+    <string name="fx_settings_kernel_umount">Kernel umount</string>
+    <string name="fx_settings_kernel_umount_summary">Ponašanje umount-a na nivou kernela kontrolisano od strane KernelSU-a</string>
+    <string name="fx_profile_flags_desc_no_new_privs">Sprečava dalje podizanje privilegija putem KernelSU-a u okviru ovog root profila.</string>
+    <string name="fx_install_force_backup">Napravi rezervnu kopiju kao originalnu sliku</string>
+    <string name="fx_install_force_backup_summary">Uverite se da je izabrana boot slika originalna slika</string>
+    <string name="fx_home_lkm_update_available">Доступна је новија верзија уграђеног LKM-а. Додирните за ажурирање.</string>
+    <string name="fx_home_lkm_custom">Прилагођено</string>
+    <string name="fx_require_manager_version">Потребно је ажурирати менаџер.</string>
+    <string name="fx_require_kernel_version">Потребно је ажурирати кернел. Додирните за инсталирање.</string>
+    <string name="fx_require_kernel_version_gki">Потребно је ажурирати кернел.</string>
+</resources>

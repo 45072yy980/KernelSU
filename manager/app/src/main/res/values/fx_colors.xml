@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="fx_ic_launcher_background">#FF0FC01F</color>
+    <color name="fx_ic_launcher_foreground">#FFFFFFFF</color>
+    <color name="fx_ic_splash_background">#FF07080B</color>
+    <!-- 系统闪屏底色。必须给颜色：android:windowSplashScreenBackground 只接受 color，
+         传 drawable 会被部分 ROM 当成非法值丢掉，闪屏退化成一层灰白（真机上见过 #EBEBF5）。 -->
+    <color name="fx_splash_bg">#FFFCF9F4</color>
+</resources>

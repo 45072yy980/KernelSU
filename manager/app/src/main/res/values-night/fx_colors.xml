@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 暗色闪屏底色：与 Nocturne 的墨底同源 -->
+    <color name="fx_splash_bg">#FF0B0A12</color>
+</resources>
