@@ -128,7 +128,7 @@ const RED_RAW_WRITE: Rule = Rule {
     id: "R1",
     title: "直接写块设备",
     risk: "把数据写进分区原始扇区，文件系统与校验值立刻损坏，重启也修不回来，只能重刷整机",
-    pattern: r"\bdd\b[^;|]*\bof=\s*[\"']?/dev/",
+    pattern: r#"\bdd\b[^;|]*\bof=\s*["']?/dev/"#,
 };
 
 const RED_REDIRECT: Rule = Rule {
@@ -136,7 +136,7 @@ const RED_REDIRECT: Rule = Rule {
     id: "R1",
     title: "重定向写入块设备",
     risk: "把数据写进分区原始扇区，文件系统与校验值立刻损坏，重启也修不回来，只能重刷整机",
-    pattern: r">>?\s*[\"']?/dev/block/",
+    pattern: r#">>?\s*["']?/dev/block/"#,
 };
 
 const RED_TEE: Rule = Rule {
@@ -152,7 +152,7 @@ const RED_COPY: Rule = Rule {
     id: "R1",
     title: "复制文件到块设备",
     risk: "把文件内容灌进分区原始扇区，分区数据会被破坏且无法回滚",
-    pattern: r"\b(cp|mv|install)\b[^;|]*\s[\"']?/dev/block/[^;|\s\"']*[\"']?\s*($|[;|&])",
+    pattern: r#"\b(cp|mv|install)\b[^;|]*\s["']?/dev/block/[^;|\s"']*["']?\s*($|[;|&])"#,
 };
 
 const RED_FORMAT: Rule = Rule {
@@ -192,7 +192,7 @@ const RED_INDIRECT: Rule = Rule {
     id: "R7",
     title: "变量间接引用块设备",
     risk: "块设备路径藏在变量里，无法静态确定写入目标，按最坏情况处理",
-    pattern: r"(^|\s)(export\s+)?[A-Za-z_][A-Za-z0-9_]*=[\"']?/dev/block/",
+    pattern: r#"(^|\s)(export\s+)?[A-Za-z_][A-Za-z0-9_]*=["']?/dev/block/"#,
 };
 
 const YELLOW_REMOUNT_A: Rule = Rule {
@@ -224,7 +224,7 @@ const YELLOW_SYS_REDIRECT: Rule = Rule {
     id: "Y2",
     title: "重定向写入系统分区",
     risk: "直接改系统分区里的文件；写坏会导致无法开机或 OTA 失败，通常只能重刷",
-    pattern: r">>?\s*[\"']?/(system|system_ext|vendor|product|odm|oem|my_[a-z]+)/",
+    pattern: r#">>?\s*["']?/(system|system_ext|vendor|product|odm|oem|my_[a-z]+)/"#,
 };
 
 const YELLOW_BLOCKDEV: Rule = Rule {
@@ -272,7 +272,7 @@ const YELLOW_SUBSHELL: Rule = Rule {
     id: "Y4",
     title: "子 shell 动态执行",
     risk: "命令由子 shell 现场生成再执行，无法静态审计",
-    pattern: r"\b(ba)?sh\b[^;|]*-c\s*[\"']?\$\(",
+    pattern: r#"\b(ba)?sh\b[^;|]*-c\s*["']?\$\("#,
 };
 
 const YELLOW_NET_EXEC: Rule = Rule {
