@@ -3,9 +3,8 @@ package com.mngr.app.ui
 /**
  * The launcher entry point the manifest names; the screen itself is inherited.
  *
- * Since the FoxSu UI port, the launcher opens [me.diksu.ultra.foxsu.ui.MainActivity]
- * (5 skins + dock effects). Our own shell is still in the tree under
- * `me.diksu.ultra.ui.MainActivity` — it owns the jailbreak and partition-guard
- * entry points that have not been moved into the new shell yet.
+ * Back to our own shell: 美化版 stays the default. The FoxSu screens are wired as three
+ * *additional* styles (Fresh / Glass / Nocturne) inside this shell, not as a replacement —
+ * see `docs/foxsu-ui-plan.md`.
  */
-class MainActivity : me.diksu.ultra.foxsu.ui.MainActivity()
+class MainActivity : me.diksu.ultra.ui.MainActivity()
