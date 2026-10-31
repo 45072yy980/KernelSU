@@ -2,7 +2,7 @@ package me.diksu.ultra.ui.screen.settings
 
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Brightness
+import androidx.compose.material.icons.filled.Brightness4
 import androidx.compose.material.icons.filled.ColorLens
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Favorite
@@ -149,7 +149,7 @@ internal fun FoxsuAppearanceGroupMaterial() {
             }
             add {
                 SegmentedDropdownItem(
-                    icon = Icons.Filled.Brightness,
+                    icon = Icons.Filled.Brightness4,
                     title = bgFxStyleTitle,
                     items = bgFxs,
                     enabled = enabled && custom.bgFxOn,
