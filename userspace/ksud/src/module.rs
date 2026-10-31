@@ -721,7 +721,10 @@ fn guard_partition(updated_dir: &Path, module_id: &str, force: bool) -> Result<(
             }
             println!("🟡 请确认上面的操作：");
             println!("   [音量+] 继续安装      [音量-] 取消");
-            println!("   {} 秒无操作将自动取消", partition_guard::CONFIRM_TIMEOUT.as_secs());
+            println!(
+                "   {} 秒无操作将自动取消",
+                partition_guard::CONFIRM_TIMEOUT.as_secs()
+            );
             match partition_guard::confirm_with_volume_keys(partition_guard::CONFIRM_TIMEOUT) {
                 partition_guard::Confirm::Continue => {
                     warn!("partition guard: user confirmed with the volume keys");
@@ -755,7 +758,10 @@ fn discard_staged_module(updated_dir: &Path) {
     if let Err(e) = std::fs::remove_dir_all(updated_dir)
         && e.kind() != std::io::ErrorKind::NotFound
     {
-        warn!("failed to remove staged module {}: {e}", updated_dir.display());
+        warn!(
+            "failed to remove staged module {}: {e}",
+            updated_dir.display()
+        );
     }
 }
 

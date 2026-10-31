@@ -443,7 +443,7 @@ const YELLOW_BLOCKDEV: Rule = Rule {
 /// parameter and is left alone (see the `dd of="$1"` regression).
 const YELLOW_DYNAMIC_OF: Rule = Rule {
     level: Level::Yellow,
-    id: "Y7",
+    id: "Y10",
     title: "写入目标无法静态确定",
     risk: "写入目标是变量，静态无法确定落点，可能指向真实分区",
     pattern: r#"\bof=\s*["']?\$\{?[A-Za-z_]"#,
