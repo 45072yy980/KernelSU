@@ -196,7 +196,7 @@
     <string name="jailbreak_success">越獄完成</string>
     <string name="jailbreak_failed">越獄失敗</string>
     <string name="settings_partition_guard">系統分區保護</string>
-    <string name="settings_partition_guard_summary">安裝前掃描模組腳本，給出三級結論：綠色直接安裝，黃色由你按音量鍵確認，紅色直接拒絕。越獄模式下始終開啟，且從終端機發起的安裝同樣會被掃描；其他情況可在此開關，但只對從本管理器發起的安裝生效。</string>
+    <string name="settings_partition_guard_summary">掃描預設開啟。此開關只控制從本管理器發起的安裝（關閉後由終端機、網頁端發起的安裝仍會掃描）；越獄模式下始終開啟。</string>
     <string name="settings_partition_guard_summary_jailbreak">越獄模式下始終開啟，無法在此關閉——晚期載入的會話無法撤銷對分區的真實寫入。</string>
     <string name="settings_home_card_blur">狀態卡片使用模糊背景</string>
     <string name="settings_home_card_blur_summary">主介面狀態卡片以高斯模糊（毛玻璃）渲染背景，取代純色。若裝置不支援模糊渲染，或卡片已設定自訂圖片，則此開關無效。</string>

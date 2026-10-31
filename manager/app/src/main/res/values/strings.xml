@@ -451,7 +451,7 @@
     <string name="jailbreak_success">Jailbreak success</string>
     <string name="jailbreak_failed">Jailbreak failed</string>
     <string name="settings_partition_guard">System partition protection</string>
-    <string name="settings_partition_guard_summary">Scans the scripts in a module before install and gives one of three verdicts: green installs directly, yellow asks you to confirm with the volume keys, red is refused outright. Always on in jailbreak mode, where it also covers installs started from a terminal; otherwise it can be toggled here and only covers installs started from this manager.</string>
+    <string name="settings_partition_guard_summary">Scanning is on by default. This switch only controls installs started from this manager (installs started from a terminal or the web UI are still scanned); in jailbreak mode it is always on.</string>
     <string name="settings_partition_guard_summary_jailbreak">Always on in jailbreak mode and cannot be turned off here - a late-loaded session cannot undo a real partition write.</string>
     <string name="settings_stealth">Stealth mode (hide the manager)</string>
     <string name="settings_stealth_summary">Stop reporting that a manager is installed and that the module arrived after boot. Every other process — including the ones that look for root — is told a plain device. The app keeps its root rights, so this switch stays reachable; turn it off here, or run `ksud stealth set 0` from a shell.</string>

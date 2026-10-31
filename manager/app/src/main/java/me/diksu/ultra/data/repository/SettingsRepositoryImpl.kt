@@ -93,7 +93,7 @@ fun isSoftRebootPreferred(): Boolean =
  * real partition write - and optional otherwise, following the user setting.
  */
 fun isPartitionGuardEnabled(): Boolean =
-    Natives.isLateLoadMode || settingsPrefs().getBoolean(KEY_PARTITION_GUARD, false)
+    Natives.isLateLoadMode || settingsPrefs().getBoolean(KEY_PARTITION_GUARD, true)
 
 fun setPartitionGuardEnabled(enabled: Boolean) {
     // In a jailbreak (late-load) session isPartitionGuardEnabled() ignores the

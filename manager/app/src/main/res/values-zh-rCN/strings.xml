@@ -445,7 +445,7 @@
     <string name="jailbreak_success">越狱完成</string>
     <string name="jailbreak_failed">越狱失败</string>
     <string name="settings_partition_guard">系统分区保护</string>
-    <string name="settings_partition_guard_summary">安装前扫描模块脚本，给出三级结论：绿色直接安装，黄色由你按音量键确认，红色直接拒绝。越狱模式下始终开启，且终端发起的安装同样会被扫描；其他情况可在此开关，但只对从本管理器发起的安装生效。</string>
+    <string name="settings_partition_guard_summary">扫描默认开启。此开关只控制从本管理器发起的安装（关掉后终端、网页端发起的安装仍会扫描）；越狱模式下始终开启。</string>
     <string name="settings_partition_guard_summary_jailbreak">越狱模式下始终开启，无法在此关闭——晚期加载的会话无法撤销对分区的真实写入。</string>
     <string name="settings_stealth">隐身模式（隐藏管理器）</string>
     <string name="settings_stealth_summary">不再上报“装了管理器”和“开机后才加载”。其它进程（包括查 root 的）只会看到一台普通设备。管理器仍保有 root 权限，所以这个开关仍然能关掉；也可以在终端执行 ksud stealth set 0。</string>
