@@ -321,7 +321,7 @@ fun FoxSuHost(
                                 onOpenWebUi = { id ->
                                     // 模块自带 webroot 时，用与模块列表同一个 WebUI 宿主打开，
                                     // 不另造一套页面：KSU 的 su 桥、文件选择、返回手势都在那边。
-                                    startActivity(
+                                    activity.startActivity(
                                         Intent(activity, me.diksu.ultra.foxsu.ui.webui.WebUIActivity::class.java)
                                             .setData(
                                                 me.diksu.ultra.foxsu.ui.util.module.Shortcut.buildShortcutUri(

@@ -89,9 +89,20 @@ internal fun fxBgThemeLabels(): List<String> =
 internal fun fxBgFxLabels(): List<String> =
     listOf(stringResource(R.string.fx_custom_bg_fx_paw)) + FX_NAMES
 
-/** 卡面配色：与 [CustomizationStore.cardColorOptions] 同序。 */
+/**
+ * 卡面配色：与 [CustomizationStore.cardColorOptions] 同序。
+ *
+ * 用 for 循环而不是 `map {}`：`stringResource` 是 @Composable，只能在本函数体内直接调用，
+ * 不能塞进非 @Composable 的 lambda（项目里踩过的坑）。
+ */
 @Composable
-internal fun fxCardColorLabels(): List<String> = FX_CARD_COLOR_LABELS.map { stringResource(it) }
+internal fun fxCardColorLabels(): List<String> {
+    val labels = ArrayList<String>(FX_CARD_COLOR_LABELS.size)
+    for (res in FX_CARD_COLOR_LABELS) {
+        labels += stringResource(res)
+    }
+    return labels
+}
 
 /** 卡面配色当前值在下拉框里的下标；用户选过色块以外的自定义色时退回「跟随主题」。 */
 internal fun fxCardColorIndex(cardColor: Int): Int =
@@ -112,7 +123,7 @@ internal fun fxFontLabel(fontStyle: Int): String = stringResource(
 /** 首页标题当前值：留空就是应用名。 */
 @Composable
 internal fun fxTitleLabel(homeTitle: String): String =
-    homeTitle.ifBlank { stringResource(R.string.fx_custom_title_default) }
+    if (homeTitle.isBlank()) stringResource(R.string.fx_custom_title_default) else homeTitle
 
 /**
  * 卡面配图的现状：首页主卡一张、四张 KPI、逐模块卡各一张，都是可选图。

@@ -79,7 +79,7 @@ internal fun FoxsuAppearanceGroupMiuix() {
             text = stringResource(R.string.fx_custom_only_for_foxsu_styles),
             modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 6.dp),
             color = MiuixTheme.colorScheme.onBackground.copy(alpha = 0.6f),
-            style = MiuixTheme.textStyles.footnote2,
+            style = MiuixTheme.textStyles.footnote1,
         )
     }
     Card(

@@ -36,7 +36,7 @@ import me.diksu.ultra.ui.util.JailbreakExploit
 /**
  * FoxSu 风格首页与「我们的」越狱实现之间**唯一**的桥。
  *
- * FoxSu 那套 `foxsu/magica/*` 是它自己的 late-load 触发链（空服务 + 开机接收器），
+ * FoxSu 那套 `foxsu/magica/…` 是它自己的 late-load 触发链（空服务 + 开机接收器），
  * 我们 4.1 已经把同类 legacy 路径从自己的设置里拆掉了（见
  * `SettingsRepositoryImpl.autoJailbreak` 的注释）。新风格首页因此不能再用它，
  * 一律经这里落到我们的实现：
@@ -86,14 +86,24 @@ object JailbreakBridge {
         context: Context,
         onLog: (String) -> Unit = {},
     ): JailbreakResult = withContext(Dispatchers.IO) {
-        // 手动点越狱说明用户认为链路应该能通：把开机自动尝试的失败计数清零。
-        AutoEscalation.resetFailStreak()
-        val outcome = AutoEscalation.run(context) { line -> onLog(line) }
-        JailbreakResult(
-            success = outcome.success,
-            method = outcome.method,
-            message = outcome.message,
-        )
+        // 对话框靠这个返回值收尾：任何异常都要变成一条失败结果，不能把组合作用域的
+        // 协程抛崩（爆炸点可能在偏好读取或引擎启动，不该让 App 直接退出）。
+        runCatching {
+            // 手动点越狱说明用户认为链路应该能通：把开机自动尝试的失败计数清零。
+            AutoEscalation.resetFailStreak()
+            val outcome = AutoEscalation.run(context) { line -> onLog(line) }
+            JailbreakResult(
+                success = outcome.success,
+                method = outcome.method,
+                message = outcome.message,
+            )
+        }.getOrElse { throwable ->
+            JailbreakResult(
+                success = false,
+                method = "",
+                message = throwable.message ?: throwable.javaClass.simpleName,
+            )
+        }
     }
 }
 
