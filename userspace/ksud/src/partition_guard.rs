@@ -182,9 +182,9 @@ const RED_AVB: Rule = Rule {
 const RED_MOUNT_RAW: Rule = Rule {
     level: Level::Red,
     id: "R6",
-    title: "挂载裸块设备",
+    title: "以可写方式挂载裸块设备",
     risk: "绕过文件系统层直接改分区，等同于把分区交给脚本任意写",
-    pattern: r"\bmount\b[^;|]*/dev/block/",
+    pattern: r"\bmount\b[^;|]*\b(rw|remount)\b[^;|]*/dev/block/",
 };
 
 const RED_INDIRECT: Rule = Rule {
@@ -193,6 +193,14 @@ const RED_INDIRECT: Rule = Rule {
     title: "变量间接引用块设备",
     risk: "块设备路径藏在变量里，无法静态确定写入目标，按最坏情况处理",
     pattern: r#"(^|\s)(export\s+)?[A-Za-z_][A-Za-z0-9_]*=["']?/dev/block/"#,
+};
+
+const YELLOW_MOUNT_RAW: Rule = Rule {
+    level: Level::Yellow,
+    id: "Y6",
+    title: "挂载裸块设备",
+    risk: "裸设备挂载本身只读时不能写入，但如果脚本随后重新挂成可写、或把 fd 交给别的工具，就会直接改分区",
+    pattern: r"\bmount\b[^;|]*/dev/block/",
 };
 
 const YELLOW_REMOUNT_A: Rule = Rule {
@@ -304,6 +312,7 @@ const RULES: &[Rule] = &[
     RED_TEE,
     RED_COPY,
     RED_INDIRECT,
+    YELLOW_MOUNT_RAW,
     YELLOW_REMOUNT_A,
     YELLOW_REMOUNT_B,
     YELLOW_SYS_WRITE,

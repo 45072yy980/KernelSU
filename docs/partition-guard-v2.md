@@ -56,7 +56,7 @@
 | R3 | 刷镜像 | `fastboot flash`、`flash_image`、`nandwrite`、`flashcp`、`update_engine`、`payload.bin` 写入 | 覆盖 boot/system/vbmeta，**可能导致设备无法开机** |
 | R4 | 写引导分区 | 任何写操作目标匹配 `/dev/block/.../(boot\|init_boot\|vendor_boot\|dtbo\|vbmeta\|super\|aboot\|sbl1)` | 破坏引导链，是变砖概率最高的一类操作 |
 | R5 | 关闭 AVB / verity | `avbctl`、`disable-verity`、`set-avb`、`dm-verity ... disable` | 破坏 verified boot；OTA 会失败，部分机型直接拒绝启动 |
-| R6 | 裸设备挂载写 | `mount ... -o rw /dev/block/...` | 绕过文件系统层直接改分区 |
+| R6 | 裸设备挂载写 | `mount … rw/remount … /dev/block/…`（只读挂载降为 Y6） | 绕过文件系统层直接改分区 |
 | R7 | 无法解析的块设备写入 | 变量间接指向 `/dev/block`（如 `DEV=/dev/block/by-name/boot; dd of=$DEV`）且静态无法确定目标 | 无法审计目标，按最坏情况处理 |
 
 ### 🟡 黄：会改真实分区 / 无法静态审计
@@ -68,6 +68,7 @@
 | Y3 | 强制块设备可写 | `blockdev --setrw` | 让只读块设备接受写入 |
 | Y4 | 混淆 / 动态执行 | `eval`、`base64 -d \| sh`、`xxd -r`、`printf '\x..' \| sh`、`sh -c "$(…)"` | 脚本内容被编码/拼接，**无法静态审计**，可能藏着任意写分区逻辑 |
 | Y5 | 联网取回并执行 | `curl … \| sh`、`wget -O- … \| sh`、`curl -o x && sh x` | 实际执行的代码在安装时才会下载，**无法审计** |
+| Y6 | 挂载裸块设备 | `mount … /dev/block/…`（可写方式见 R6，直接判红） | 只读挂载本身不能写，但脚本随后可能重挂可写、或把 fd 交给别的工具 |
 
 > 判定优先级：同一行/同一文件同时命中红与黄时，**红优先**。
 > 一个模块只要有一处 🔴 就是 🔴，不接受"其它都是绿的"来调和。
