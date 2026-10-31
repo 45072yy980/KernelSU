@@ -40,7 +40,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -96,15 +95,6 @@ import top.yukonga.miuix.kmp.shader.isRenderEffectSupported
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import kotlin.math.roundToInt
 
-/**
- * Height of the destination column as measured last time.
- *
- * Kept outside the composition so a re-created activity starts from the value the rail already
- * had; otherwise the spacer below is computed from zero for one frame and the destinations are
- * pushed to the bottom and back - the jump seen when the app returns from the background.
- */
-private var lastItemsHeight: Dp = 0.dp
-
 @Composable
 fun NavigationRailMiuix(
     navigationBadge: NavigationBadgeState,
@@ -123,22 +113,23 @@ fun NavigationRailMiuix(
     // lower half of the screen empty and parks the last destination — settings — in the middle of
     // nowhere.
     //
-    // The rail's own column is Arrangement.Top and scrolls, so there is no slot to align with and a
-    // weight would be measured against an unbounded height. What is left is a spacer of exactly the
-    // leftover height, and the leftover is knowable: the column's height, minus the insets it pads
-    // itself with, its vertical padding, the expand toggle, and the items — the items measured,
-    // because their height follows the label font.
-    val insetsPadding = WindowInsets.statusBars.union(WindowInsets.navigationBars).asPaddingValues()
-    val overhead = NavigationRailDefaults.VerticalPadding * 2 +
-        insetsPadding.calculateTopPadding() +
-        insetsPadding.calculateBottomPadding()
-    val density = LocalDensity.current
-    var itemsHeightValue by rememberSaveable { mutableStateOf(lastItemsHeight.value) }
-    val itemsHeight = itemsHeightValue.dp
+    // The rail's own column is Arrangement.Top and scrolls, so it offers no slot to align with and a
+    // weight would be measured against an unbounded height. They are therefore not the rail's content
+    // any more: the rail is an empty container and the destinations are bottom-aligned by the Box
+    // below, which needs no measurement and cannot drift when the window insets settle.
+    val systemViewConfiguration = LocalViewConfiguration.current
+    val railViewConfiguration = remember(systemViewConfiguration) {
+        object : ViewConfiguration {
+            override val longPressTimeoutMillis = 300L
+            override val doubleTapTimeoutMillis =
+                systemViewConfiguration.doubleTapTimeoutMillis
+            override val doubleTapMinTimeMillis =
+                systemViewConfiguration.doubleTapMinTimeMillis
+            override val touchSlop = systemViewConfiguration.touchSlop
+        }
+    }
 
     BoxWithConstraints(modifier = modifier.fillMaxHeight()) {
-        val spacer: Dp = (maxHeight - overhead - itemsHeight).coerceAtLeast(0.dp)
-
         // A tapped destination is fed back with a block filled in the theme's `onBackground` colour —
         // over a picture that light block is exactly the box that appears the instant a destination is
         // tapped. Transparent, the tap still works and nothing is drawn on top of the rail.
@@ -146,6 +137,8 @@ fun NavigationRailMiuix(
             MiuixIndication(color = Color.Transparent)
         }
         CompositionLocalProvider(LocalIndication provides noPressBlock) {
+            // Bare container: it paints the rail's background and owns the window insets. The
+            // destinations are not its content — see the overlay below.
             NavigationRail(
                 // Fixed width, and therefore no expand/collapse button: the library draws that button
                 // itself whenever the rail is given a state, and this one is icons in a single column.
@@ -157,19 +150,23 @@ fun NavigationRailMiuix(
                 // No straight divider of its own: the page panel's rounded border takes that role and
                 // wraps the content instead of running past it at both ends.
                 showDivider = false,
+            ) {}
+
+            // The destinations are bottom-aligned by the Box, not by a spacer of measured height.
+            //
+            // They used to sit inside the rail's scrollable column behind a spacer computed from
+            // "container height - insets - measured items height". Every input of that sum changes
+            // while the window insets settle on resume, and the measured one starts at zero after a
+            // re-creation, so the group was pushed down and pulled back for a few frames - the jump
+            // that was still visible. Alignment cannot drift: there is nothing to compute.
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .width(64.dp)
+                    .windowInsetsPadding(WindowInsets.navigationBars.only(WindowInsetsSides.Bottom))
+                    .padding(vertical = NavigationRailDefaults.VerticalPadding),
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Spacer(modifier = Modifier.height(spacer))
-                val systemViewConfiguration = LocalViewConfiguration.current
-                val railViewConfiguration = remember(systemViewConfiguration) {
-                    object : ViewConfiguration {
-                        override val longPressTimeoutMillis = 300L
-                        override val doubleTapTimeoutMillis =
-                            systemViewConfiguration.doubleTapTimeoutMillis
-                        override val doubleTapMinTimeMillis =
-                            systemViewConfiguration.doubleTapMinTimeMillis
-                        override val touchSlop = systemViewConfiguration.touchSlop
-                    }
-                }
                 CompositionLocalProvider(LocalViewConfiguration provides railViewConfiguration) {
                     RailItems(
                         icons = icons,
@@ -179,15 +176,7 @@ fun NavigationRailMiuix(
                         gateFor = { index -> gates[destinations[index].navEntry] ?: NavGate.Open },
                         onGate = { gate -> pendingGate = gate },
                         backdrop = backdrop,
-                        onItemsHeight = { height ->
-                            // A zero here is a transient re-measure while the window insets settle
-                            // after a resume. Keeping the previous value stops the destinations from
-                            // being pushed to the bottom and springing back.
-                            if (height > 0.dp) {
-                                itemsHeightValue = height.value
-                                lastItemsHeight = height
-                            }
-                        },
+                        onItemsHeight = {},
                     )
                 }
             }
@@ -620,16 +609,13 @@ private fun RailBattery(modifier: Modifier = Modifier) {
     }
     val outlineColor = MiuixTheme.colorScheme.onSurfaceVariantSummary
 
-    Row(
-        modifier = modifier,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Canvas(modifier = Modifier.size(width = 22.dp, height = 11.dp)) {
+    Box(modifier = modifier, contentAlignment = Alignment.Center) {
+        Canvas(modifier = Modifier.size(width = 20.dp, height = 10.dp)) {
             val stroke = 1.dp.toPx()
-            val capWidth = 2.dp.toPx()
+            val capWidth = 1.8.dp.toPx()
             val bodyWidth = size.width - capWidth - stroke
             val bodyHeight = size.height
-            val radius = CornerRadius(2.dp.toPx(), 2.dp.toPx())
+            val radius = CornerRadius(3.dp.toPx(), 3.dp.toPx())
 
             drawRoundRect(
                 color = outlineColor,
@@ -640,9 +626,9 @@ private fun RailBattery(modifier: Modifier = Modifier) {
             )
             drawRoundRect(
                 color = outlineColor,
-                topLeft = Offset(bodyWidth + stroke, bodyHeight * 0.32f),
-                size = Size(capWidth, bodyHeight * 0.36f),
-                cornerRadius = CornerRadius(1.dp.toPx(), 1.dp.toPx()),
+                topLeft = Offset(bodyWidth + stroke, bodyHeight * 0.34f),
+                size = Size(capWidth, bodyHeight * 0.32f),
+                cornerRadius = CornerRadius(0.9f.dp.toPx(), 0.9f.dp.toPx()),
             )
             if (!unknown) {
                 val innerWidth = (bodyWidth - stroke * 3f).coerceAtLeast(0f) * level / 100f
@@ -651,16 +637,10 @@ private fun RailBattery(modifier: Modifier = Modifier) {
                         color = glyphColor,
                         topLeft = Offset(stroke * 1.5f, stroke * 1.5f),
                         size = Size(innerWidth, bodyHeight - stroke * 3f),
-                        cornerRadius = CornerRadius(1.5f.dp.toPx(), 1.5f.dp.toPx()),
+                        cornerRadius = CornerRadius(2.5f.dp.toPx(), 2.5f.dp.toPx()),
                     )
                 }
             }
         }
-        Spacer(modifier = Modifier.width(5.dp))
-        Text(
-            text = if (unknown) "--" else "$level%",
-            fontSize = MiuixTheme.textStyles.body2.fontSize,
-            color = if (low) MiuixTheme.colorScheme.error else MiuixTheme.colorScheme.onSurfaceVariantSummary,
-        )
     }
 }
