@@ -11,8 +11,9 @@
  *   node test/smoke-registry.mjs
  */
 import assert from 'node:assert/strict'
-import { mkdtemp, writeFile, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { mkdtemp, writeFile, rm, rename } from 'node:fs/promises'
+import { renameSync } from 'node:fs'
+import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import process from 'node:process'
 
@@ -33,6 +34,7 @@ async function check(name, fn) {
 }
 
 const registry = new Map()
+const routes = []
 const logs = []
 const ctx = {
   tools: {
@@ -43,7 +45,77 @@ const ctx = {
   },
   get: () => undefined,
   logger: { info: (text) => logs.push(String(text)), warn: (text) => logs.push(String(text)) },
+  effect(fn) {
+    return fn()
+  },
+  // token 配置页用动态 inject 挂到 webServer 上，这里把它捕获下来供测试直接调用
+  inject(names, callback) {
+    const scoped = {
+      webServer: {
+        register(spec) {
+          routes.push(spec)
+          return () => {}
+        },
+      },
+      connection: { authorizeIndex: () => true },
+      effect(fn) {
+        return fn()
+      },
+    }
+    callback(scoped)
+  },
 }
+
+/** 直接调用捕获到的路由 handler，模拟一次 HTTP 请求。 */
+async function callRoute(method, body) {
+  const route = routes[0]
+  assert.ok(route, '没有注册 token 路由')
+  const { EventEmitter } = await import('node:events')
+  const req = new EventEmitter()
+  req.method = method
+  const out = { code: 0, body: '' }
+  const res = {
+    writeHead(code) {
+      out.code = code
+    },
+    end(payload) {
+      out.body = payload ?? ''
+    },
+  }
+  const promise = route.handler(req, res)
+  if (body !== undefined) req.emit('data', Buffer.from(JSON.stringify(body)))
+  req.emit('end')
+  await promise
+  return { code: out.code, ...(out.body ? JSON.parse(out.body) : {}) }
+}
+
+// 用户机器上可能真的配了 token（~/.dsh/git-token、/sdcard/Download/...）。
+// 有几条用例专门验证「没 token 时」的行为，测试期间先把这些文件挪开，结束后恢复。
+const AMBIENT_TOKEN_FILES = [
+  join(homedir(), '.dsh', 'git-token'),
+  join(homedir(), '.dsh', 'github-token'),
+  join(homedir(), '.config', 'dsha', 'git-token'),
+  '/sdcard/Download/git-token.txt',
+  '/sdcard/Download/git-token',
+]
+const stashedAmbient = []
+for (const path of AMBIENT_TOKEN_FILES) {
+  try {
+    await rename(path, `${path}.smoke-bak`)
+    stashedAmbient.push(path)
+  } catch {
+    // 不存在就不管
+  }
+}
+process.on('exit', () => {
+  for (const path of stashedAmbient) {
+    try {
+      renameSync(`${path}.smoke-bak`, path)
+    } catch {
+      // 尽力恢复
+    }
+  }
+})
 
 const repo = await mkdtemp(join(tmpdir(), 'diksu-smoke-'))
 let bare = ''
@@ -269,6 +341,28 @@ await check('git_push 用本地 bare 远端 + 配置里的 token 走通', async 
 await check('git_sync fetch 本地远端', async () => {
   const sync = await call('git_sync', { action: 'fetch' })
   assert.equal(sync.ok, true, sync.summary)
+})
+
+await check('设置页 API：GET 状态 / POST 保存 / POST 清除', async () => {
+  const before = await callRoute('GET')
+  assert.equal(before.configured, false)
+  assert.match(before.file, /no-token$/)
+
+  const saved = await callRoute('POST', { token: 'ghp_settingspage0123456789abcdefghijklmnop' })
+  assert.equal(saved.saved, true)
+
+  const after = await callRoute('GET')
+  assert.equal(after.configured, true)
+  assert.match(after.source, /no-token/)
+
+  const bad = await callRoute('POST', { token: 'short' })
+  assert.equal(bad.ok, false)
+  assert.match(bad.error, /太短/)
+
+  const cleared = await callRoute('POST', { clear: true })
+  assert.equal(cleared.cleared, true)
+  const final = await callRoute('GET')
+  assert.equal(final.configured, false)
 })
 
 await check('需要 token 的工具在缺凭据时给可执行的错（不是 is not defined）', async () => {

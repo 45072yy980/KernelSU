@@ -10,7 +10,17 @@ Diksu Ultra 专用的 git / CI / 发布工具插件，19 个工具。**2.0.0 全
 DSH 官方的「设置 → 插件」页面只是个容器，**不提供通用的插件配置表单**，所以也没有一个
 「填 token 的输入框」——这就是 2.1.0 要专门加入口的原因。
 
-### 最省事：放一个文件（手机用户推荐）
+### 首选：设置 → 插件 → 「Diksu Git 凭据」
+
+2.2.0 起插件自己在「设置 → 插件」里注册了一页（`settings.plugins.tab`）：
+
+- 密码框里粘贴 PAT → 保存，写进 `~/.dsh/git-token`（`chmod 600`），**立即生效，不用重启**；
+- 页面只读状态（已配置/未配置 + 来源），**永远不回显 token 值**；
+- 有「清除」按钮；
+- 说明：DSH 官方的插件设置页只是 slot 容器，不会按 Config 生成表单，所以这一页是插件自己实现的
+  （`lib/client.js` + host 路由 `/__dsha/diksu-git/token`，走 `authorizeIndex` 鉴权）。
+
+### 其次：放一个文件（不想开设置页时）
 
 1. 把 PAT 存成手机上的一个文本文件，**只放一行 token**：`/sdcard/Download/git-token.txt`
 2. 插件每次解析 token 都会读它，**立即生效，不用重启**。
@@ -93,7 +103,7 @@ dsh --profile web --dump-config | grep -A2 diksu-git
 | 工具 | 作用 |
 |---|---|
 | `git_push` | 推分支或 tag；临时 askpass + hostsPin + 重试；推完用 `ls-remote` 逐 sha 复核；受保护分支拒绝强推；拒绝 `+main` 这类 refspec 强推前缀 |
-| `git_auth` | token 入口与诊断：`status` 看读到哪层、`import` 从文件导入（不进对话、即时生效、写 600）、`clear` 清除、`check=true` 调 API 验证 |
+| `git_auth` | token 诊断：`status` 看读到哪层、`import` 从文件导入（不进对话、即时生效）、`clear` 清除、`check=true` 调 API 验证权限 |
 | `git_tag` | 在 HEAD 打 `vX.Y.Z-ultra`，算出 versionCode；支持附注 tag（自动注入作者身份） |
 | `git_release_notes` | 按 conventional commit 分组生成 Markdown 发布说明，可写入仓库文件（自动建目录） |
 | `ci_dispatch` | 触发 workflow_dispatch，按 `head_sha` + 创建时间精确匹配 run |
@@ -121,6 +131,12 @@ dsh --profile web --dump-config | grep -A2 diksu-git
 | `protectedBranches` | `main,master,develop,trunk,release/*,hotfix/*` | 受保护分支，逗号分隔，`*` 结尾前缀匹配 |
 | `maxDiffBytes` | `200000` | diff / patch 输出字节上限（按行边界截断） |
 | `auditMaxFileMB` | `2` | 提交审计的大文件阈值 |
+
+## 2.2.0 新增
+
+- **图形化 token 入口**：「设置 → 插件 → Diksu Git 凭据」tab，密码框保存 / 状态显示 / 清除，
+  写 `~/.dsh/git-token`（600），即时生效；
+- host 路由 `GET|POST /__dsha/diksu-git/token`，带 `authorizeIndex` 鉴权，响应不回显 token。
 
 ## 2.1.0 新增
 

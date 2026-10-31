@@ -1,15 +1,24 @@
 {
   "name": "dsha-diksu-git",
-  "description": "Diksu Ultra 专用 git/CI/发布工具（19 个）：仓库自动定位、四层 token 解析与文件导入入口、提交审计、diff/log/branch/stash/sync/push、CI 编排与 Release 发布",
-  "version": "2.1.0",
+  "description": "Diksu Ultra 专用 git/CI/发布工具（19 个）：仓库自动定位、四层 token 解析 + 设置页入口、提交审计、diff/log/branch/stash/sync/push、CI 编排与 Release 发布",
+  "version": "2.2.0",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
-    ".": "./lib/index.js"
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
   },
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-slots"
+      ]
     }
   },
   "peerDependencies": {

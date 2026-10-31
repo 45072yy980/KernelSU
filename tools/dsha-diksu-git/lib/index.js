@@ -30,6 +30,7 @@ import { registerReadTools } from './tools-read.js'
 import { registerWriteTools } from './tools-write.js'
 import { registerRemoteTools } from './tools-remote.js'
 import { registerCiTools } from './tools-ci.js'
+import { registerTokenRoute } from './token-route.js'
 
 export const name = 'dsha-diksu-git'
 
@@ -118,6 +119,9 @@ export function apply(ctx, config) {
   registerWriteTools(deps)
   registerRemoteTools(deps)
   registerCiTools(deps)
+
+  // 浏览器端的 token 配置页（设置 → 插件 → Diksu Git 凭据）
+  registerTokenRoute(ctx, config, credentials)
 
   ctx.logger?.info?.(`dsha-diksu-git: 已注册 ${registered.length} 个工具（${registered.join(', ')}）`)
   if (credentials === undefined) {
