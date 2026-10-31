@@ -71,19 +71,20 @@ pub struct ScanReport {
     pub scripts: usize,
     /// Total bytes read.
     pub bytes: u64,
-    /// True when the file-count or per-file size cap was hit.
+    /// True when the file-count, per-file size or finding-count cap was hit.
     pub truncated: bool,
     pub findings: Vec<Finding>,
+    /// Strongest level seen while scanning. Tracked separately from `findings`
+    /// so that capping the list can never downgrade a red module to yellow.
+    max_level: Level,
+    /// How many red findings were recorded (reds bypass the yellow cap).
+    red_recorded: usize,
 }
 
 impl ScanReport {
-    /// Strongest level among the findings; `Green` when there are none.
+    /// Strongest level seen during the scan; `Green` when nothing matched.
     pub fn level(&self) -> Level {
-        self.findings
-            .iter()
-            .map(|finding| finding.level)
-            .max()
-            .unwrap_or(Level::Green)
+        self.max_level
     }
 
     fn count(&self, level: Level) -> usize {
@@ -366,6 +367,8 @@ pub fn scan_module(root: &Path, module_id: &str) -> ScanReport {
         bytes: 0,
         truncated: truncated_files,
         findings: Vec::new(),
+        max_level: Level::Green,
+        red_recorded: 0,
     };
 
     for path in files {
@@ -397,7 +400,23 @@ pub fn scan_module(root: &Path, module_id: &str) -> ScanReport {
                 continue;
             }
             for (rule, re) in &rules {
-                if re.is_match(line) {
+                if !re.is_match(line) {
+                    continue;
+                }
+                // Always remember the strongest level: capping the recorded list
+                // must never downgrade a red module to yellow.
+                report.max_level = report.max_level.max(rule.level);
+                // Reds get their own budget so that a script padded with hundreds
+                // of yellow hits cannot push the real payload out of the report.
+                let record = if rule.level == Level::Red {
+                    report.red_recorded < MAX_FINDINGS
+                } else {
+                    report.findings.len() < MAX_FINDINGS
+                };
+                if record {
+                    if rule.level == Level::Red {
+                        report.red_recorded += 1;
+                    }
                     report.findings.push(Finding {
                         level: rule.level,
                         file: name.clone(),
@@ -407,16 +426,17 @@ pub fn scan_module(root: &Path, module_id: &str) -> ScanReport {
                         title: rule.title,
                         risk: rule.risk,
                     });
-                    break;
+                } else {
+                    report.truncated = true;
                 }
+                break;
             }
-            if report.findings.len() >= MAX_FINDINGS {
+            // Both budgets full: nothing more can be recorded, and the level is
+            // already at least red, so there is nothing left to learn.
+            if report.red_recorded >= MAX_FINDINGS && report.findings.len() >= MAX_FINDINGS {
                 report.truncated = true;
                 break;
             }
-        }
-        if report.findings.len() >= MAX_FINDINGS {
-            break;
         }
     }
 
