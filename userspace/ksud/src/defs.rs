@@ -103,6 +103,9 @@ mod android {
     pub const PREINIT_CONF: &str = "preinit.conf";
     // Written by installer.sh when customize.sh requests a hot install
     pub const HOT_INSTALL_MARKER: &str = ".ksu_hot_install";
+    // Written by ksud while a module is being staged; a leftover marker means
+    // the install was interrupted and the directory must not be promoted
+    pub const INSTALLING_MARKER: &str = ".ksu-installing";
 
     // Module config system
     pub const MODULE_CONFIG_DIR: &str = concatcp!(WORKING_DIR, "module_configs/");

@@ -655,27 +655,59 @@ pub fn handle_updated_modules() -> Result<()> {
             return Ok(());
         }
 
-        if let Some(name) = updated_module.file_name() {
-            let module_dir = modules_root.join(name);
-            let mut disabled = false;
-            let mut removed = false;
-            if module_dir.exists() {
-                // If the old module is disabled, we need to also disable the new one
-                disabled = module_dir.join(defs::DISABLE_FILE_NAME).exists();
-                removed = module_dir.join(defs::REMOVE_FILE_NAME).exists();
-                remove_dir_all(&module_dir)?;
+        let Some(name) = updated_module.file_name() else {
+            return Ok(());
+        };
+
+        // A marker left behind means the install never reached the end (the
+        // process was killed or power was lost). Never promote such a
+        // directory: drop it and leave the live module as it was.
+        let marker = updated_module.join(defs::INSTALLING_MARKER);
+        let incomplete = match std::fs::symlink_metadata(&marker) {
+            Ok(_) => true,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => false,
+            // If we cannot even tell, assume the worst and drop it.
+            Err(e) => {
+                warn!(
+                    "cannot check {} ({e}), treating the module as incomplete",
+                    marker.display()
+                );
+                true
             }
-            rename(updated_module, &module_dir)?;
-            if removed {
-                let path = module_dir.join(defs::REMOVE_FILE_NAME);
-                if let Err(e) = ensure_file_exists(&path) {
-                    warn!("Failed to create {}: {e}", path.display());
-                }
-            } else if disabled {
-                let path = module_dir.join(defs::DISABLE_FILE_NAME);
-                if let Err(e) = ensure_file_exists(&path) {
-                    warn!("Failed to create {}: {e}", path.display());
-                }
+        };
+        if incomplete {
+            warn!(
+                "dropping incomplete module {} staged before an interrupted install",
+                name.to_string_lossy()
+            );
+            if let Err(e) = remove_dir_all(updated_module) {
+                warn!(
+                    "failed to drop incomplete module {}: {e}",
+                    updated_module.display()
+                );
+            }
+            return Ok(());
+        }
+
+        let module_dir = modules_root.join(name);
+        let mut disabled = false;
+        let mut removed = false;
+        if module_dir.exists() {
+            // If the old module is disabled, we need to also disable the new one
+            disabled = module_dir.join(defs::DISABLE_FILE_NAME).exists();
+            removed = module_dir.join(defs::REMOVE_FILE_NAME).exists();
+            remove_dir_all(&module_dir)?;
+        }
+        rename(updated_module, &module_dir)?;
+        if removed {
+            let path = module_dir.join(defs::REMOVE_FILE_NAME);
+            if let Err(e) = ensure_file_exists(&path) {
+                warn!("Failed to create {}: {e}", path.display());
+            }
+        } else if disabled {
+            let path = module_dir.join(defs::DISABLE_FILE_NAME);
+            if let Err(e) = ensure_file_exists(&path) {
+                warn!("Failed to create {}: {e}", path.display());
             }
         }
         Ok(())
@@ -762,6 +794,43 @@ fn discard_staged_module(updated_dir: &Path) {
             "failed to remove staged module {}: {e}",
             updated_dir.display()
         );
+    }
+}
+
+/// Write the "install in progress" marker into the staging directory.
+///
+/// The marker is how `handle_updated_modules()` tells an interrupted install
+/// (SIGKILL, App kill, power loss - none of which a signal handler could
+/// catch) apart from one that finished: a marked directory is dropped at the
+/// next boot instead of being promoted.
+fn mark_staging_in_progress(updated_dir: &Path) -> Result<()> {
+    let marker = updated_dir.join(defs::INSTALLING_MARKER);
+    let mut file =
+        File::create(&marker).with_context(|| format!("Failed to create {}", marker.display()))?;
+    file.write_all(b"installing\n")
+        .with_context(|| format!("Failed to write {}", marker.display()))?;
+    // Flush it: a power loss that keeps the extracted files but loses the
+    // marker would make a half-installed module look complete at boot.
+    file.sync_all()
+        .with_context(|| format!("Failed to sync {}", marker.display()))?;
+    // Best effort: make the directory entry durable as well.
+    if let Ok(dir) = File::open(updated_dir)
+        && let Err(e) = dir.sync_all()
+    {
+        debug!("failed to sync {}: {e}", updated_dir.display());
+    }
+    Ok(())
+}
+
+/// Remove the marker once the staged module is complete. A failure here is
+/// fatal for the install: leaving it behind would make the next boot delete a
+/// module we just reported as installed.
+fn clear_staging_in_progress(updated_dir: &Path) -> Result<()> {
+    let marker = updated_dir.join(defs::INSTALLING_MARKER);
+    match std::fs::remove_file(&marker) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(e).with_context(|| format!("Failed to remove {}", marker.display())),
     }
 }
 
@@ -871,13 +940,29 @@ fn install_module_to_system(zip: &str, force: bool) -> Result<String> {
     // Prepare target directory
     println!("- Installing to {}", updated_dir.display());
     ensure_clean_dir(&updated_dir)?;
+
+    // Mark the staging directory as in-progress *before* extraction: a kill
+    // during extraction would otherwise leave a half-extracted directory that
+    // the next boot promotes as a module. Marked directories are dropped at
+    // boot instead, and a later kill anywhere in the install is covered too.
+    if let Err(e) = mark_staging_in_progress(&updated_dir) {
+        discard_staged_module(&updated_dir);
+        return Err(e);
+    }
     info!("target dir: {}", updated_dir.display());
 
     // Extract zip to target directory
     println!("- Extracting module files");
-    let file = File::open(zip)?;
-    let mut archive = zip::ZipArchive::new(file)?;
-    archive.extract(&updated_dir)?;
+    let extracted = (|| -> Result<()> {
+        let file = File::open(zip)?;
+        let mut archive = zip::ZipArchive::new(file)?;
+        archive.extract(&updated_dir)?;
+        Ok(())
+    })();
+    if let Err(e) = extracted {
+        discard_staged_module(&updated_dir);
+        return Err(e).context("Failed to extract module files");
+    }
     // Only installer.sh may request a hot install, not a file shipped in the zip
     std::fs::remove_file(updated_dir.join(defs::HOT_INSTALL_MARKER)).ok();
 
@@ -914,6 +999,10 @@ fn finish_install(
     // the zip (and therefore was never scanned). Nothing has run yet, so a red
     // result here can still be fully undone by deleting the staging directory.
     rescan_after_install(updated_dir, module_id)?;
+    // The staged tree is final now. Clear the marker before hot_install() moves
+    // it, and before the next boot promotes it: a kill from here on leaves a
+    // complete module behind, which is safe to promote.
+    clear_staging_in_progress(updated_dir)?;
 
     if let Some(request) = hot_install::take_request(updated_dir)
         && hot_install::apply(module_id, is_metamodule, &request)

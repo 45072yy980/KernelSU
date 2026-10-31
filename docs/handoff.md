@@ -511,7 +511,11 @@ run `41174904338`），41031 已删除。
 
 ### 13.5 仍未解决（下一轮/真机）
 
-1. **Ctrl-C 清理**：ksud 没有 SIGINT 处理，`kill -INT` 会跳过 `discard_staged_module`。建议加 signal handler 或让安装脚本用临时目录 + 启动时清理孤儿目录。
+1. ~~**Ctrl-C 清理**~~ **已修**：改用"标记 + 开机清扫"（2026-10-31，`defs::INSTALLING_MARKER`）——
+   解包前写 `.ksu-installing`，成功 rename 前删；开机 `handle_updated_modules()` 见到标记就删目录、
+   绝不转正。这样 Ctrl-C / SIGKILL / App 被杀 / 断电都覆盖，不依赖进程优雅退出。
+   **仍需真机验证**：解包中 kill、音量键等待中 kill、installer 中途 kill、手工放 marker 后重启，
+   各验一次"暂存消失、live 模块不变"。
 2. **音量键三路径未真机验证**（+ / - / 不按超时），需一台已 root 机器。
 3. **静态扫描的固有边界**（已写进规范，不再当缺陷）：base64 等编码载荷只能到黄；模块外脚本（`sh /data/adb/stage2.sh`）只能到黄；native ELF 里的写操作扫不到；用户按了音量+ 之后不再审计。
 4. **`cargo test` 没有 CI job**：145 条语料目前靠人工/脚本复刻验证，建议下一轮做成 `#[test]`。
