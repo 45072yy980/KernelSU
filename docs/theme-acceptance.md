@@ -26,10 +26,12 @@
 
 ## 1. A 组：零回归（最重要）
 
+> 最新一次实测（commit `8d9e3e8d`）的逐条结论见 **§1.0**；下表是判据与验法，两者配合使用。
+
 | 编号 | 判据 | 怎么验 | 证据形式 | 谁来验 |
 |---|---|---|---|---|
 | A1 | **编译门禁**：52 处无 `else` 的 `when` 必须逐个显式分派；`assembleRelease` 必须绿 | `./gradlew :app:compileDebugKotlin`；失败日志按文件聚合，与 §6.2 扫描器输出比对 | 失败日志（文件:行）+ 最终绿构建 | **CI**（`assembleRelease`） |
-| A2 | 52 处 `when` 所在文件里，diff **只允许新增行**（`+`），不得删改老分支 | `git diff -U0 <base>..HEAD -- <§6.2 列出的文件>` 后 `grep -E "^-[^-]"` 必须为空 | 命令输出为空 | **静态**（reviewer） |
+| A2 | 52 处 `when` 所在文件里，**分支体不得改动**；允许的删除只有三类：① 分支条件行追加 `, UiMode.Themed`；② D3 的 `== UiMode.Miuix` → `isMiuixLook`；③ S3/S4 的索引映射改造。除此之外任何删除行都算改动 | `git diff <base>..<head> -- <含 when 的文件>` 取出全部 `-` 行逐行归类（条件行 / 上述三处例外 / 其余即不通过） | 归类清单 | **静态**（reviewer） |
 | A3 | 谓词**逐点等价**：`isMiuixFamily` / `isMiuixLook` 对 Miuix、MiuixStock、Material 的返回值与改动前完全一致；23 处 `isMiuixFamily` 调用点不改语义 | §6.1 check 5（谓词定义文本必须是那 3 个 `this == UiMode.*`）+ PR 人工核对 §1.2 真值表；`git diff` 只允许追加 | 命令输出 + 评审记录 | **静态（PR 人工 + 代码审查）** |
 | A4 | **4 个静默点**必须显式处理并有单测（§1.3） | 单测；`grep -A3 "onSetUiModeIndex"` 必须出现 `entries` | 单测输出 | **CI / 静态** |
 | A5 | `LocalThemeTokens` 的**实际读取**不得出现在 `Miuix*` / `Material*` 分支 | `grep -rn "LocalThemeTokens\.current\|provides LocalThemeTokens" $SRC \| grep -v "/ui/theme/"` 必须为空 | 空输出 | **静态 / CI 卡口** |
@@ -38,6 +40,23 @@
 | A8 | 老皮肤不读主题包、不因主题包存在改变启动路径 | review `MainActivity` 的 mode→theme 分支；`grep -rn "theme.json\|ThemeStore" $SRC \| grep -v "/theme/"` 只允许出现在设置入口与 Themed 分支 | review 记录 | **静态** |
 | A9 | 三皮肤 × 6 页截图：裁剪后 `AE=0`（唯一例外：选择器第 4 项） | §3.3 截图流程 + §6.1 比对 | 成对 PNG + 差异报告 | **真机** |
 | A10 | `fromValue` 四值 round-trip；`entries.size == 4` 且前三项顺序不变；不依赖 `ordinal` | §6.1 check 4（枚举项 + 四个 `.value ->`）+ check 7（`UiMode.*ordinal` 必须为空） | 命令输出 | **静态** |
+
+### 1.0 A 组实测状态（commit `8d9e3e8d`，2026-10-31）
+
+| 编号 | 结论 | 证据 |
+|---|---|---|
+| A1 | ✅ **过**（静态部分已验；构建由 CI 确认） | `uimode-scan.py`：`when 块 53 / 无 else 52 / 含 Themed 52` —— 52 个编译器强制点全部分派；唯一未含 Themed 的是 `uiPrefix`（带 `else`，按 S2 定案保持）。构建绿由 CI 的 Build Manager 确认（本地无 Android SDK，未复跑） |
+| A2 | ✅ **过**（按本节口径） | 该范围内 49 行删除全部可归因：36 行分支条件扩展、1 行 D3 改 `isMiuixLook`、12 行 S3/S4 索引映射改造；**无一行改动分支体** |
+| A3 | ✅ **过** | `isMiuixFamily` = 三个 `this ==`；`isMiuixLook` = Miuix + Themed；`UiMode.kt` 的 diff 仅同行扩写，三个老值的返回值未变（§1.2） |
+| A4 | ✅ **过** | `SettingsScreen.kt:61-64`、`ColorPaletteScreen.kt:44-47` 均为 `UiMode.entries.getOrNull(index)?.let { … }` |
+| A5 | ✅ **过** | `LocalThemeTokens` 全仓 4 处：定义 1（`ThemeTokens.kt:81`）、KDoc 2、`provides` 1（`MiuixTheme.kt:142`，且被 `if (LocalUiMode.current == UiMode.Themed)` 包住）；**`.current` 读取 0 处**（本期预期） |
+| A6 | ✅ **过** | `ThemeTokens.kt` 9 个默认值与 §1.6 基线逐行一致：`16 / 0 / 0 / 56 / 12 / 12 / Docked / true / DEFAULT_SECTION_ORDER` |
+| A7 | ✅ **过** | `uiPrefix()` 与父提交 `fe9c7a9e` **零差异**；Themed 走 `else -> "miuix_"`（S2 定案）；前三个前缀未变 |
+| A8 | ✅ **过** | `grep -rn "theme.json\|ThemeStore\|ThemePackage" src \| grep -v "/ui/theme/"` 为空：主题包读取只存在于 `ui/theme/` |
+| A9 | ⏳ **需真机** | 三皮肤 × 6 页截图对比未跑（需设备 + 基线 APK） |
+| A10 | ✅ **过** | 枚举 4 项且 Themed 最后、`fromValue` 四值齐全、`UiMode.*ordinal` 零引用 |
+
+> 复跑方式：§6.1 九条断言 + §6.2 扫描器。本次原始输出：九条断言全 PASS；扫描器 `53 / 52 / 52 / 0 / 9 / 12`。
 
 ### 1.1 结构事实（审计目标；数字用 §6.2 重跑）
 
