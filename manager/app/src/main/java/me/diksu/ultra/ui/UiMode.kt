@@ -5,7 +5,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 /**
  * The look of the app.
  *
- * The first three are our own shell (`ui/MainActivity` + `ui/screen/*`). The last three are
+ * The first three are our own shell (`ui/MainActivity` + `ui/screen/…`). The last three are
  * FoxSu's styles: when one of them is selected our `MainActivity` hands the whole screen over
  * to `foxsu/ui/FoxSuHost`, so nothing from our own screens is composed in that case.
  *
