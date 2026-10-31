@@ -13,7 +13,9 @@
 import {
   aheadBehind,
   api,
+  clearTokenFile,
   currentBranch,
+  defaultTokenFile,
   git,
   gitLine,
   isProtectedBranch,
@@ -24,8 +26,10 @@ import {
   repoSlug,
   resolveToken,
   safeBranchName,
+  readTokenFromFile,
   safeRemoteName,
   safeTagName,
+  saveTokenFile,
   statusSummary,
   tokenInventory,
   upstreamBranch,
@@ -227,8 +231,17 @@ export function registerRemoteTools({ register, config, credentials, ctx }) {
   register({
     name: 'git_auth',
     description:
-      '检查 git token 到底配在哪一层：列出插件配置 / token 文件 / DSH 凭据 / 环境变量的命中情况（只报是否配置，不回显值），并给出「怎么配上」的具体路径。check=true 时用 token 调一次 GitHub API 验证权限。',
+      'token 的配置入口与诊断。action=status 看当前读到哪一层、怎么配；action=import 从你指定的文件把 token 导入（token 不进对话、立即生效）；action=clear 清除；check=true 时用 token 调一次 GitHub API 验证权限。',
     parameters: {
+      action: {
+        type: 'string',
+        enum: ['status', 'import', 'clear'],
+        description: 'status（默认）查看；import 从 path 读 token 并写入 ~/.dsh/git-token；clear 删除该文件',
+      },
+      path: {
+        type: 'string',
+        description: 'action=import 时读哪个文件，例如 /sdcard/Download/git-token.txt；省略则试该默认路径',
+      },
       check: { type: 'boolean', description: '是否用 token 实际调用一次 GitHub API 验证（默认 false，纯本地检查）' },
     },
     output: {
@@ -240,6 +253,7 @@ export function registerRemoteTools({ register, config, credentials, ctx }) {
           source: { type: 'string', required: true },
           sources: { type: 'array', required: true, items: { type: 'string' } },
           remoteUrl: { type: 'string', required: true },
+          tokenFile: { type: 'string', required: true },
           apiCheck: { type: 'string', required: true },
           summary: { type: 'string', required: true },
         },
@@ -248,6 +262,51 @@ export function registerRemoteTools({ register, config, credentials, ctx }) {
     },
     async execute(args, exec) {
       exec.signal?.throwIfAborted?.()
+      const action = args.action ?? 'status'
+      const target = defaultTokenFile(config)
+      if (action === 'import') {
+        const wanted = typeof args.path === 'string' && args.path.trim().length > 0 ? args.path.trim() : '/sdcard/Download/git-token.txt'
+        const { value, file } = await readTokenFromFile(wanted)
+        const saved = await saveTokenFile(config, value)
+        let apiCheck = '未执行（想确认权限可以再调 git_auth check=true）'
+        if (args.check === true) {
+          try {
+            const slug = await repoSlug(config)
+            const repo = await api(config, value, 'GET', `/repos/${slug}`, undefined, { signal: exec.signal })
+            apiCheck = `✓ 可以访问 ${repo.full_name ?? slug}（private=${repo.private === true}）`
+          } catch (error) {
+            apiCheck = `✗ ${String(error?.message ?? error)}`
+          }
+        }
+        return {
+          configured: true,
+          source: `文件 ${saved.file}`,
+          sources: [`✓ 刚从 ${file} 导入`],
+          remoteUrl: sanitizeRemoteUrl(await gitLine(config, ['remote', 'get-url', safeRemoteName(config.remote)])),
+          tokenFile: saved.file,
+          apiCheck,
+          summary: [
+            `已从 ${file} 导入 token → ${saved.file}（${saved.bytes} 字节，权限 600）`,
+            '立即生效，不需要重启：下次 push / sync / CI 就会用它。',
+            `API 验证：${apiCheck}`,
+            '如果想删掉：git_auth action=clear',
+          ].join('\n'),
+        }
+      }
+      if (action === 'clear') {
+        const cleared = await clearTokenFile(config)
+        return {
+          configured: false,
+          source: '',
+          sources: [cleared.removed ? `✓ 已删除 ${cleared.file}` : `✗ ${cleared.file} 本来就不存在`],
+          remoteUrl: sanitizeRemoteUrl(await gitLine(config, ['remote', 'get-url', safeRemoteName(config.remote)])),
+          tokenFile: cleared.file,
+          apiCheck: '未执行',
+          summary: cleared.removed
+            ? `已删除 ${cleared.file}。如果别的地方还配了 token（.env / 凭据库 / 环境变量），仍会被读到 —— 用 action=status 查看。`
+            : `${cleared.file} 不存在，没有可删的。`,
+        }
+      }
       const rows = await tokenInventory(config, credentials)
       const sources = rows.map((row) => `${row.configured ? '✓' : '✗'} ${row.source}`)
       let configured = false
@@ -281,6 +340,7 @@ export function registerRemoteTools({ register, config, credentials, ctx }) {
         source,
         sources,
         remoteUrl,
+        tokenFile: target,
         apiCheck,
         summary: [
           configured ? `token 已配置：${source}` : 'token 未配置 —— 推送/CI/发版会失败',
@@ -288,8 +348,18 @@ export function registerRemoteTools({ register, config, credentials, ctx }) {
           '各层命中情况：',
           ...sources.map((line) => `  ${line}`),
           `API 验证：${apiCheck}`,
-          configured ? '' : `\n${missingTokenMessage(config)}`,
           `仓库根目录：${await repoRoot(config)}`,
+          configured
+            ? ''
+            : [
+                '',
+                '最快的一条路（token 不进对话）：',
+                '  1) 把 PAT 存成手机上的一个文本文件，例如 /sdcard/Download/git-token.txt（只放一行 token）；',
+                '  2) 让我执行 git_auth action=import path=/sdcard/Download/git-token.txt；',
+                '  3) 它会写进 ' + target + '（chmod 600），下一次 push/sync 立即生效，不用重启。',
+                '',
+                missingTokenMessage(config),
+              ].join('\n'),
         ]
           .filter((line) => line.length > 0)
           .join('\n'),

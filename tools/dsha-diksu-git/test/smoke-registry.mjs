@@ -222,6 +222,39 @@ await check('git_auth 只报 token 来源，不泄露值', async () => {
   assert.match(auth.summary, /\.dsh|凭据|token/)
 })
 
+await check('git_auth 能从文件导入 token（不用重启、不进对话）', async () => {
+  const srcFile = join(repo, 'incoming-token.txt')
+  await writeFile(srcFile, 'ghp_importtest0123456789abcdefghijklmnopqrst\n')
+  const imported = await call('git_auth', { action: 'import', path: srcFile })
+  assert.equal(imported.configured, true)
+  assert.match(imported.summary, /已从 .*incoming-token\.txt 导入 token/)
+  // 导入后立刻应该能被 resolveToken 读到（不需要重启）
+  const { resolveToken } = await import('../lib/core.js')
+  const hit = await resolveToken(config, undefined)
+  assert.equal(hit.value, 'ghp_importtest0123456789abcdefghijklmnopqrst')
+  // 文件权限应是 600
+  const { stat } = await import('node:fs/promises')
+  const mode = (await stat(imported.tokenFile)).mode & 0o777
+  assert.equal(mode, 0o600, `权限应为 600，实际 ${mode.toString(8)}`)
+  // 清理
+  const cleared = await call('git_auth', { action: 'clear' })
+  assert.match(cleared.summary, /已删除/)
+  await assert.rejects(() => resolveToken(config, undefined), /没有可用的 git token/)
+})
+
+await check('git_auth import 拒绝坏内容', async () => {
+  const empty = join(repo, 'empty-token.txt')
+  await writeFile(empty, '   \n')
+  await assert.rejects(() => call('git_auth', { action: 'import', path: empty }), /是空的/)
+  const short = join(repo, 'short-token.txt')
+  await writeFile(short, 'abc123\n')
+  await assert.rejects(() => call('git_auth', { action: 'import', path: short }), /太短/)
+  const messy = join(repo, 'messy-token.txt')
+  await writeFile(messy, 'ghp_abcdefghij0123456789 extra words here\n')
+  await assert.rejects(() => call('git_auth', { action: 'import', path: messy }), /空白字符/)
+  await assert.rejects(() => call('git_auth', { action: 'import', path: join(repo, 'nope.txt') }), /读不到/)
+})
+
 await check('git_push 用本地 bare 远端 + 配置里的 token 走通', async () => {
   bare = join(repo, '..', `diksu-remote-${Date.now()}.git`)
   const init = await import('../lib/core.js').then(({ run }) => run('git', ['init', '-q', '--bare', bare]))

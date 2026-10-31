@@ -27,7 +27,13 @@ import { dirname, isAbsolute, join, resolve } from 'node:path'
 export const DEFAULT_TOKEN_ENVS = ['DSH_GIT_TOKEN', 'GITHUB_TOKEN', 'GH_TOKEN', 'GITHUB_PAT']
 
 /** token 候选文件（相对 ~ 展开）。 */
-export const DEFAULT_TOKEN_FILES = ['.dsh/git-token', '.dsh/github-token', '.config/dsha/git-token']
+export const DEFAULT_TOKEN_FILES = [
+  '.dsh/git-token',
+  '/sdcard/Download/git-token.txt',
+  '/sdcard/Download/git-token',
+  '.dsh/github-token',
+  '.config/dsha/git-token',
+]
 
 /** git 网络操作里值得重试的错误特征（其余一律不重试，避免"推送被拒还重试 12 次"）。 */
 const RETRYABLE_PATTERNS = [
@@ -409,6 +415,13 @@ function expandHome(file) {
   return value
 }
 
+/** 把默认列表里的一项变成绝对路径：`/...` 原样，其余按 home 展开。 */
+function resolveTokenPath(entry) {
+  const value = expandHome(entry)
+  if (value.length === 0) return ''
+  return value.startsWith('/') ? value : join(homedir(), value)
+}
+
 /** 哪些层级配置了 token（只报事实，不返回值）。 */
 export async function tokenInventory(config, credentials) {
   const rows = []
@@ -418,7 +431,7 @@ export async function tokenInventory(config, credentials) {
     rows.push({ source: `文件 ${file}`, kind: 'file', configured: await fileHasToken(file) })
   }
   for (const rel of DEFAULT_TOKEN_FILES) {
-    const path = join(homedir(), rel)
+    const path = resolveTokenPath(rel)
     rows.push({ source: `文件 ${path}`, kind: 'file', configured: await fileHasToken(path) })
   }
   const names = [...new Set([config?.tokenEnv, ...DEFAULT_TOKEN_ENVS].filter((item) => typeof item === 'string' && item.length > 0))]
@@ -478,7 +491,7 @@ export async function resolveToken(config, credentials) {
   if (direct.length > 0) return { value: direct, source: '插件配置 token' }
 
   const customFile = expandHome(config?.tokenFile)
-  for (const path of [customFile, ...DEFAULT_TOKEN_FILES.map((rel) => join(homedir(), rel))].filter(Boolean)) {
+  for (const path of [customFile, ...DEFAULT_TOKEN_FILES.map((rel) => resolveTokenPath(rel))].filter(Boolean)) {
     try {
       const text = await readFile(path, 'utf8')
       const value = text.trim()
@@ -505,6 +518,59 @@ export async function resolveToken(config, credentials) {
     if (typeof value === 'string' && value.trim().length > 0) return { value: value.trim(), source: `环境变量 ${name}` }
   }
   throw new Error(missingTokenMessage(config))
+}
+
+/** 插件写入 token 用的默认文件（与 DEFAULT_TOKEN_FILES 第一项一致，运行时读的就是它）。 */
+export function defaultTokenFile(config) {
+  const configured = expandHome(config?.tokenFile)
+  return configured.length > 0 ? configured : join(homedir(), '.dsh', 'git-token')
+}
+
+/**
+ * 把 token 落盘到 tokenFile（chmod 600），返回路径与字节数。
+ *
+ * 这是「没有地方配置 token」的入口：调用方从用户给的**文件**里读，不经过对话，
+ * 也不回显内容。写完立即生效 —— resolveToken 每次调用都会重新读这个文件。
+ */
+export async function saveTokenFile(config, token) {
+  const value = String(token ?? '').trim()
+  if (value.length === 0) throw new Error('token 内容为空')
+  if (/\s/.test(value)) throw new Error('token 里不应该有空白字符（是不是把说明文字也复制进来了？）')
+  if (value.length < 20) throw new Error(`token 看起来太短（${value.length} 字符），GitHub PAT 通常 40 字符以上`)
+  const file = defaultTokenFile(config)
+  await mkdir(dirname(file), { recursive: true, mode: 0o700 })
+  await writeFile(file, `${value}\n`, { encoding: 'utf8', mode: 0o600 })
+  await chmod(file, 0o600).catch(() => {})
+  return { file, bytes: Buffer.byteLength(value) }
+}
+
+/** 删除 tokenFile；没有就返回 false。 */
+export async function clearTokenFile(config) {
+  const file = defaultTokenFile(config)
+  try {
+    await rm(file, { force: false })
+    return { file, removed: true }
+  } catch (error) {
+    if (error?.code === 'ENOENT') return { file, removed: false }
+    throw error
+  }
+}
+
+/** 读一个「用户放 token 的文件」，做基本校验后返回内容（调用方负责不打印它）。 */
+export async function readTokenFromFile(file) {
+  const path = expandHome(String(file ?? '').trim())
+  if (path.length === 0) throw new Error('token 文件路径不能为空')
+  let text
+  try {
+    text = await readFile(path, 'utf8')
+  } catch (error) {
+    const reason = error?.code === 'ENOENT' ? '文件不存在' : String(error?.code ?? error?.message ?? error)
+    throw new Error(`读不到 ${path}（${reason}）。把 token 存成文本文件后，把路径传给我，例如 /sdcard/Download/git-token.txt`)
+  }
+  const value = text.trim()
+  if (value.length === 0) throw new Error(`${path} 是空的`)
+  if (/\s/.test(value)) throw new Error(`${path} 里含有空白字符（只放一行 token，不要带说明文字）`)
+  return { value, file: path }
 }
 
 // ────────────────────────────── askpass / hosts / 重试 ──────────────────────────────

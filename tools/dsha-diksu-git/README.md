@@ -3,25 +3,45 @@
 Diksu Ultra 专用的 git / CI / 发布工具插件，19 个工具。**2.0.0 全面重写**：修掉了 1.1.0 里
 一批会把工具跑挂、把 secret 留在索引里、或者干脆注册不上的问题（见「2.0.0 修了什么」）。
 
-## token 怎么设（重点，1.1.0 在这里踩过坑）
+## token 怎么设（重点，1.1.0 / 2.0.0 都踩过坑）
 
 1.1.0 只从 `process.env` 读 token，而 **Shell 设置里 `export` 的变量只进 bash 工具的子进程，
-不会回灌到 harness 进程** —— 所以「明明设了环境变量，插件还是说没有 token」。2.0.0 改成四层解析，
-任选一种（都不需要把 token 贴进对话）：
+不会回灌到 harness 进程** —— 所以「明明设了环境变量，插件还是说没有 token」。
+DSH 官方的「设置 → 插件」页面只是个容器，**不提供通用的插件配置表单**，所以也没有一个
+「填 token 的输入框」——这就是 2.1.0 要专门加入口的原因。
 
-| 顺序 | 位置 | 怎么设 |
+### 最省事：放一个文件（手机用户推荐）
+
+1. 把 PAT 存成手机上的一个文本文件，**只放一行 token**：`/sdcard/Download/git-token.txt`
+2. 插件每次解析 token 都会读它，**立即生效，不用重启**。
+3. 想确认是否读到：调 `git_auth`（只报来源，不回显值）。
+
+如果文件放在别处，让 agent 帮你导入（token 不进对话）：
+
+```
+git_auth action=import path=/sdcard/Download/my-token.txt
+```
+
+它会把内容写进 `~/.dsh/git-token`（`chmod 600`）并立即生效。要撤销：`git_auth action=clear`。
+
+### 全部来源（按优先级）
+
+| 顺序 | 位置 | 说明 |
 |---|---|---|
-| 1 | 插件配置 `token` | 设置 → 插件 → dsha-diksu-git → `token`（掩码保存，写不进读） |
-| 2 | 插件配置 `tokenFile` + 默认文件 | `echo <PAT> > ~/.dsh/git-token && chmod 600 ~/.dsh/git-token` |
-| 3 | DSH 凭据服务 | 在设置里给 `DSH_GIT_TOKEN` 存一个凭据（落到 `~/.dsh/.credentials.yaml`） |
-| 4 | 环境变量 / `~/.dsh/.env` | 把 `DSH_GIT_TOKEN=<PAT>` 加进 `~/.dsh/.env`，然后**重启 DSH** |
+| 1 | 插件配置 `token` | 直接编辑 profile 的 `cordis.patch.yml`（`role('secret')`，UI 读不回来） |
+| 2 | 插件配置 `tokenFile` | 自定义文件路径 |
+| 3 | `~/.dsh/git-token` | `git_auth action=import` 写的就是这里 |
+| 4 | `/sdcard/Download/git-token.txt`（或 `git-token`） | 手机端随手放，无需重启 |
+| 5 | `~/.dsh/github-token`、`~/.config/dsha/git-token` | 兼容旧位置 |
+| 6 | DSH 凭据服务 | 给 `DSH_GIT_TOKEN` 存凭据（`~/.dsh/.credentials.yaml`） |
+| 7 | 环境变量 / `~/.dsh/.env` | 写 `.env` 后需要**重启 DSH** |
 
 - 环境变量名依次试 `DSH_GIT_TOKEN` → `GITHUB_TOKEN` → `GH_TOKEN` → `GITHUB_PAT`（可用 `tokenEnv` 改第一个）。
 - 权限：私有仓库要 `repo`；只看 Actions / 传资产还要 `workflow`。
-- `~/.dsh/.env` 是 DSH 官方支持的给 harness 进程注入环境变量的地方（启动时 load），比 `export` 靠谱。
-- 不确定当前读到哪一层？直接调 **`git_auth`**：它只报「哪一层配了 / 来源 / 长度」，不返回值。
-- 公开仓库和本地 file 远端**不需要 token**：没有 token 时插件会退回匿名访问并给出提示。
+- 公开仓库和本地 file 远端**不需要 token**：没配时插件会退回匿名访问并给出提示。
+- `git_auth` 支持 `status`（默认）、`import`、`clear`，`check=true` 会用 token 调一次 GitHub API 验证权限。
 
+## 安装与部署
 ## 安装与部署
 
 - 源码：本目录（`tools/dsha-diksu-git`）
@@ -73,7 +93,7 @@ dsh --profile web --dump-config | grep -A2 diksu-git
 | 工具 | 作用 |
 |---|---|
 | `git_push` | 推分支或 tag；临时 askpass + hostsPin + 重试；推完用 `ls-remote` 逐 sha 复核；受保护分支拒绝强推；拒绝 `+main` 这类 refspec 强推前缀 |
-| `git_auth` | 凭据诊断：四层各自的 ✓/✗、当前来源、远端地址（已抹掉账号）、可选 `check=true` 调 API 验证 |
+| `git_auth` | token 入口与诊断：`status` 看读到哪层、`import` 从文件导入（不进对话、即时生效、写 600）、`clear` 清除、`check=true` 调 API 验证 |
 | `git_tag` | 在 HEAD 打 `vX.Y.Z-ultra`，算出 versionCode；支持附注 tag（自动注入作者身份） |
 | `git_release_notes` | 按 conventional commit 分组生成 Markdown 发布说明，可写入仓库文件（自动建目录） |
 | `ci_dispatch` | 触发 workflow_dispatch，按 `head_sha` + 创建时间精确匹配 run |
@@ -101,6 +121,11 @@ dsh --profile web --dump-config | grep -A2 diksu-git
 | `protectedBranches` | `main,master,develop,trunk,release/*,hotfix/*` | 受保护分支，逗号分隔，`*` 结尾前缀匹配 |
 | `maxDiffBytes` | `200000` | diff / patch 输出字节上限（按行边界截断） |
 | `auditMaxFileMB` | `2` | 提交审计的大文件阈值 |
+
+## 2.1.0 新增
+
+- **token 配置入口**：`/sdcard/Download/git-token.txt` 直接生效；`git_auth action=import/clear` 从文件导入或清除，写 `~/.dsh/git-token`（600），**不用重启**；
+- 默认 token 文件列表支持绝对路径（不再被拼到 `$HOME` 下）。
 
 ## 2.0.0 修了什么
 

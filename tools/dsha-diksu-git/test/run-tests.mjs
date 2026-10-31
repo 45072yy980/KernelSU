@@ -9,8 +9,8 @@
  * 2) 临时 git 仓库上的真实调用（status / commit / tag / 发布说明 / 审计 / 定位仓库 / 分支 / stash）。
  */
 import assert from 'node:assert/strict'
-import { mkdtemp, writeFile, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { mkdtemp, writeFile, rm, rename } from 'node:fs/promises'
+import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import process from 'node:process'
 
@@ -227,6 +227,25 @@ test('unquoteGitPath 还原空格 TAB 与 C 风格引号路径', () => {
 
 // ────────────────────────────── token 解析 ──────────────────────────────
 
+// 默认 token 文件列表里有 /sdcard/Download/git-token.txt 和 ~/.dsh/git-token。
+// 用户机器上真的放了 token 时，「四层都没有」这条会失败 —— 测试期间先挪开，结束后恢复。
+const TOKEN_PROBE_PATHS = [
+  '/sdcard/Download/git-token.txt',
+  '/sdcard/Download/git-token',
+  join(homedir(), '.dsh', 'git-token'),
+  join(homedir(), '.dsh', 'github-token'),
+  join(homedir(), '.config', 'dsha', 'git-token'),
+]
+const stashedTokens = []
+for (const path of TOKEN_PROBE_PATHS) {
+  try {
+    await rename(path, `${path}.diksu-test-bak`)
+    stashedTokens.push(path)
+  } catch {
+    // 不存在就不管
+  }
+}
+
 section('token 解析（"设了环境变量却读不到"的核心）')
 
 await testAsync('插件配置里的 token 优先', async () => {
@@ -270,6 +289,10 @@ await testAsync('四层都没有时报错里带可照做的指引', async () => 
 })
 
 // ────────────────────────────── 真实 git 仓库 ──────────────────────────────
+
+for (const path of stashedTokens) {
+  await rename(`${path}.diksu-test-bak`, path).catch(() => {})
+}
 
 section('真实仓库集成')
 
