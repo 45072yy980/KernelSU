@@ -101,7 +101,7 @@ export function registerReadTools({ register, config, credentials, ctx }) {
       }
       const summary = [
         `仓库 ${root}`,
-        `分支 ${branch} @ ${head}${headSubject ? ` · ${headSubject}` : ''}`,
+        head.length > 0 ? `分支 ${branch} @ ${head}${headSubject ? ` · ${headSubject}` : ''}` : `分支 ${branch} · 还没有任何提交`,
         version.tag.length > 0
           ? `tag ${version.tag}${version.headTag ? '（HEAD 已打 tag）' : ''} · versionCode ${version.versionCode ?? '—'}（tag 后 ${version.commitsAfterTag ?? 0} 个提交）`
           : '尚无版本 tag',
@@ -191,7 +191,7 @@ export function registerReadTools({ register, config, credentials, ctx }) {
       }
       const label = args.staged === true ? '已暂存' : ref ? `范围 ${ref}` : '未暂存'
       const summary = [
-        `${label}改动：${files.length} 个文件${truncated ? '（补丁已截断）' : ''}`,
+        `${label}：${files.length} 个文件改动${truncated ? '（补丁已截断）' : ''}`,
         stat || '（没有改动）',
       ].join('\n')
       return { files, stat, patch, truncated, summary }
@@ -418,11 +418,19 @@ export function registerReadTools({ register, config, credentials, ctx }) {
       exec.signal?.throwIfAborted?.()
       const path = safePath(args.path)
       const blameArgs = ['blame', '--date=short', '--line-porcelain']
-      if (typeof args.startLine === 'number' && args.startLine > 0) {
-        const start = Math.trunc(args.startLine)
-        const end = typeof args.endLine === 'number' && args.endLine >= start ? Math.trunc(args.endLine) : start
-        blameArgs.push('-L', `${start},${end}`)
+      // 行号必须显式校验：负数/0 会被 git 当成「没有范围」，静默返回整个文件
+      const start = args.startLine === undefined ? undefined : Math.trunc(Number(args.startLine))
+      const end = args.endLine === undefined ? undefined : Math.trunc(Number(args.endLine))
+      if (start !== undefined && (!Number.isFinite(start) || start < 1)) {
+        throw new Error(`startLine 必须是不小于 1 的整数（收到 ${args.startLine}）`)
       }
+      if (end !== undefined && (!Number.isFinite(end) || end < 1)) {
+        throw new Error(`endLine 必须是不小于 1 的整数（收到 ${args.endLine}）`)
+      }
+      if (start !== undefined && end !== undefined && end < start) {
+        throw new Error(`endLine（${end}）不能小于 startLine（${start}）`)
+      }
+      if (start !== undefined) blameArgs.push('-L', `${start},${end ?? start}`)
       blameArgs.push('--', path)
       const result = await git(config, blameArgs)
       if (result.code !== 0) throw new Error(`git blame 失败：${(result.stderr || result.stdout).trim()}`)

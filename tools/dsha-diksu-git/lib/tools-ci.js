@@ -22,8 +22,10 @@ import {
   mask,
   repoRoot,
   repoSlug,
+  resolveToken,
   safePath,
   safeRevision,
+  safeTagName,
   safeWorkflowName,
   sleep,
   writeRepoFile,
@@ -281,11 +283,19 @@ export function registerCiTools({ register, config, credentials, ctx }) {
     },
     async execute(args, exec) {
       exec.signal?.throwIfAborted?.()
+      // 参数先校验再谈 token：参数写错不该先弹「没有 token」
+      if (args.runId !== undefined && (!Number.isFinite(args.runId) || !Number.isInteger(args.runId) || args.runId <= 0)) {
+        throw new Error(`runId 必须是正整数（收到 ${args.runId}）；也可以改传 sha`)
+      }
+      let runId = args.runId === undefined ? 0 : args.runId
+      const givenSha = typeof args.sha === 'string' && args.sha.trim().length > 0 ? args.sha.trim() : ''
+      if (runId === 0 && givenSha.length === 0) {
+        throw new Error('runId 与 sha 至少要给一个（ci_dispatch 的输出里有 runId；不给 sha 我不会替你猜 HEAD，避免盯错 run）')
+      }
       const token = await requireToken(config, credentials)
       const slug = await repoSlug(config)
-      let runId = Number.isFinite(args.runId) ? Math.trunc(args.runId) : 0
       if (runId === 0) {
-        const sha = typeof args.sha === 'string' && args.sha.trim().length > 0 ? args.sha.trim() : await gitLine(config, ['rev-parse', 'HEAD'])
+        const sha = safeRevision(givenSha, 'sha')
         const runs = await api(config, token, 'GET', `/repos/${slug}/actions/runs?head_sha=${encodeURIComponent(sha)}&per_page=10`, undefined, { signal: exec.signal })
         const list = runs.workflow_runs ?? []
         if (list.length === 0) throw new Error(`找不到 sha=${sha} 的 workflow run（是不是还没 push？）`)
@@ -425,7 +435,7 @@ export function registerCiTools({ register, config, credentials, ctx }) {
     },
     async execute(args, exec) {
       exec.signal?.throwIfAborted?.()
-      const tag = safeRevision(String(args.tag ?? ''), 'tag')
+      const tag = safeTagName(String(args.tag ?? ''))
       if (!/^v\d+\.\d+\.\d+/.test(tag)) throw new Error(`tag 应该形如 v4.2.0-ultra，收到 ${tag}`)
       if (!Number.isFinite(args.runId) || args.runId <= 0) throw new Error('必须提供 Release workflow 的 runId')
       const runId = Math.trunc(args.runId)
@@ -487,11 +497,18 @@ export function registerCiTools({ register, config, credentials, ctx }) {
         const uploadUrl = String(release.upload_url ?? '').replace(/\{.*\}$/, '')
         if (uploadUrl.length === 0) throw new Error('GitHub 返回的 upload_url 是空的')
 
-        // 4) 逐个上传
+        // 4) 逐个上传；中途失败就把刚建的草稿删掉，不留孤儿 release
         const assets = []
-        for (const item of ready) {
-          const uploaded = await uploadAsset(config, token, uploadUrl, item.file, item.name, exec.signal)
-          assets.push(uploaded.name ?? item.name)
+        try {
+          for (const item of ready) {
+            const uploaded = await uploadAsset(config, token, uploadUrl, item.file, item.name, exec.signal)
+            assets.push(uploaded.name ?? item.name)
+          }
+        } catch (error) {
+          const cleaned = await api(config, token, 'DELETE', `/repos/${slug}/releases/${releaseId}`, undefined, { signal: exec.signal })
+            .then(() => '已删除刚建的草稿 release')
+            .catch((cleanupError) => `草稿 release 清理失败：${cleanupError.message}（请到网页上删掉）`)
+          throw new Error(`上传资产失败：${error.message}\n${cleaned}\n已上传：${assets.length} 个`)
         }
 
         // 5) 发布

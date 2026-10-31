@@ -329,7 +329,11 @@ export function isProtectedBranch(config, branch) {
 export function truncateText(text, maxBytes) {
   const buffer = Buffer.from(text, 'utf8')
   if (buffer.length <= maxBytes) return { text, truncated: false }
-  return { text: `${buffer.subarray(0, maxBytes).toString('utf8')}\n…（已截断）`, truncated: true }
+  // 按行切：字节切法会把一行 UTF-8 从中间截断，读起来像乱码
+  const head = buffer.subarray(0, maxBytes).toString('utf8')
+  const lastBreak = head.lastIndexOf('\n')
+  const body = lastBreak > 0 ? head.slice(0, lastBreak) : head
+  return { text: `${body}\n…（已截断，共 ${buffer.length} 字节）`, truncated: true }
 }
 
 /** 把 token 从任何输出里抹掉。 */
@@ -337,6 +341,22 @@ export function mask(text, token) {
   if (typeof text !== 'string' || text.length === 0) return text
   if (typeof token !== 'string' || token.length === 0) return text
   return text.split(token).join('***')
+}
+
+/**
+ * 从 git 的 stderr/stdout 里取出「够判断原因」的尾部若干行。
+ *
+ * 1.1.0 只留最后一行，于是常见报错的因果被砍掉（`fatal: ...` 在前一行，
+ * 留下的那行是 `and the repository exists.`）。这里保留最后 4 行，并抹掉 token。
+ */
+export function errorDetail(result, token, maxLines = 4) {
+  const text = String(result?.stderr || result?.stdout || '').trim()
+  if (text.length === 0) return `退出码 ${result?.code ?? 'unknown'}`
+  const lines = text
+    .split('\n')
+    .map((line) => line.trimEnd())
+    .filter((line) => line.trim().length > 0)
+  return mask(lines.slice(-maxLines).join('\n'), token)
 }
 
 /** 递归 mask。 */
@@ -605,7 +625,7 @@ export async function networkGit(config, token, label, buildArgs, options = {}) 
           async () => {
             const result = await git(config, buildArgs(), { ...rest, env, signal })
             if (result.code === 0) return { ok: true, result }
-            const detail = mask((result.stderr || result.stdout).trim().split('\n').slice(-1)[0] ?? '', token)
+            const detail = errorDetail(result, token)
             return { ok: false, detail, status: result.code }
           },
           { signal },
@@ -655,7 +675,7 @@ export async function networkGitAuto(config, credentials, label, buildArgs, opti
       anonymous: true,
     }
   }
-  const detail = mask((result.stderr || result.stdout).trim().split('\n').slice(-1)[0] ?? '', '')
+  const detail = errorDetail(result, '')
   return { ok: false, detail, retries: 0, warnings, authSource: '匿名', anonymous: true, missingToken: auth.message }
 }
 

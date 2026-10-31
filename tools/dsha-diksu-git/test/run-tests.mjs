@@ -163,6 +163,17 @@ test('lossless 消掉 NaN/Infinity/undefined，避免 DSH "not lossless JSON"', 
   assert.doesNotThrow(() => JSON.parse(JSON.stringify(out)))
 })
 
+test('truncateText 按行截断，不会把一行切成两半', () => {
+  const text = ['a'.repeat(50), 'b'.repeat(50), 'c'.repeat(50)].join('\n')
+  const cut = truncateText(text, 120)
+  assert.equal(cut.truncated, true)
+  assert.ok(cut.text.startsWith('a'.repeat(50)), cut.text)
+  for (const line of cut.text.split('\n').slice(0, -1)) {
+    assert.ok(line === 'a'.repeat(50) || line === 'b'.repeat(50) || line === 'c'.repeat(50), `被切坏的半行：${line}`)
+  }
+  assert.equal(truncateText('short', 100).truncated, false)
+})
+
 test('versionCodeFor 与仓库约定一致', () => {
   assert.equal(versionCodeFor('v4.2.0-ultra', 5), 42005)
   assert.equal(versionCodeFor('v1.0.0', 0), 10000)

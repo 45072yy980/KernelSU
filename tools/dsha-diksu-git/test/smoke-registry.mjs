@@ -179,6 +179,42 @@ await check('git_branch / git_stash 输出合法', async () => {
   await call('git_stash', { action: 'pop', index: 0 })
 })
 
+await check('拒绝非法参数：stash 负序号 / blame 行号 / ci_watch id', async () => {
+  const rejects = [
+    ['git_stash', { action: 'drop', index: -1 }, /index 必须是不小于 0 的整数/],
+    ['git_blame', { path: 'a.txt', startLine: 0 }, /startLine 必须是不小于 1 的整数/],
+    ['git_blame', { path: 'a.txt', startLine: 5, endLine: 2 }, /endLine（2）不能小于 startLine（5）/],
+    ['ci_watch', { runId: -3 }, /runId 必须是正整数/],
+    ['ci_watch', {}, /runId 与 sha 至少要给一个/],
+  ]
+  for (const [name, args, pattern] of rejects) {
+    const tool = registry.get(name)
+    let text = ''
+    try {
+      await tool.execute(args, {})
+      throw new Error(`${name}(${JSON.stringify(args)}) 居然执行成功了`)
+    } catch (error) {
+      text = String(error?.message ?? error)
+    }
+    assert.match(text, pattern, `${name}(${JSON.stringify(args)}) 报错不符：${text}`)
+  }
+})
+
+await check('git_stash 展示可用的数字引用', async () => {
+  // 改动已跟踪文件，git stash push 才会真的入栈（默认不含未跟踪文件）
+  await writeFile(join(repo, 'a.txt'), 'stash one\n')
+  await call('git_stash', { action: 'save', message: 'one' })
+  await writeFile(join(repo, 'a.txt'), 'stash two\n')
+  await call('git_stash', { action: 'save', message: 'two' })
+  const listed = await call('git_stash', { action: 'list' })
+  assert.equal(listed.stashes.length, 2, JSON.stringify(listed.stashes))
+  assert.ok(listed.stashes.every((line) => /^stash@\{\d+\}  /.test(line)), listed.stashes.join(' | '))
+  assert.ok(listed.stashes[0].startsWith('stash@{0}'), listed.stashes[0])
+  assert.ok(listed.stashes[1].startsWith('stash@{1}'), listed.stashes[1])
+  await call('git_stash', { action: 'drop', index: 1 })
+  await call('git_stash', { action: 'pop', index: 0 })
+})
+
 await check('git_auth 只报 token 来源，不泄露值', async () => {
   const auth = await call('git_auth', {})
   assert.equal(auth.configured, false)
@@ -200,6 +236,27 @@ await check('git_push 用本地 bare 远端 + 配置里的 token 走通', async 
 await check('git_sync fetch 本地远端', async () => {
   const sync = await call('git_sync', { action: 'fetch' })
   assert.equal(sync.ok, true, sync.summary)
+})
+
+await check('需要 token 的工具在缺凭据时给可执行的错（不是 is not defined）', async () => {
+  const cases = [
+    ['ci_logs', {}],
+    ['ci_dispatch', { workflow: 'build-manager.yml' }],
+    ['ci_watch', {}],
+    ['release_publish', { tag: 'v0.0.1-ultra', runId: 1 }],
+  ]
+  for (const [name, args] of cases) {
+    const tool = registry.get(name)
+    let text = ''
+    try {
+      await tool.execute(args, {})
+      throw new Error(`${name} 在没 token 的情况下居然成功了`)
+    } catch (error) {
+      text = String(error?.message ?? error)
+    }
+    assert.equal(/is not defined|Cannot read|undefined is not/.test(text), false, `${name} 抛了实现错误：${text}`)
+    assert.match(text, /token|workflow|runId|tag/, `${name} 的报错不可执行：${text}`)
+  }
 })
 
 await check('清理', async () => {

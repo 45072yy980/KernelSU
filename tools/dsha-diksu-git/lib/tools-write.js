@@ -348,13 +348,15 @@ export function registerWriteTools({ register, config, credentials, ctx }) {
       exec.signal?.throwIfAborted?.()
       const action = args.action
       const describe = async () => {
-        const raw = await gitLine(config, ['stash', 'list', '--date=short', '--pretty=format:%gd%x1f%h%x1f%ad%x1f%s'])
+        // 展示用数字序号：%gd 在 --date=short 下会给出 stash@{2026-10-31}，
+        // 同一天多条贮藏时这个引用完全相同，根本没法照着敲。
+        const raw = await gitLine(config, ['stash', 'list', '--date=short', '--pretty=format:%h%x1f%ad%x1f%s'])
         return raw
           .split('\n')
           .filter(Boolean)
-          .map((line) => {
-            const [ref, hash, date, subject] = line.split('\x1f')
-            return `${ref}  ${hash}  ${date}  ${subject}`
+          .map((line, position) => {
+            const [hash, date, subject] = line.split('\x1f')
+            return `stash@{${position}}  ${hash}  ${date}  ${subject}`
           })
       }
       if (action === 'list') {
@@ -373,7 +375,13 @@ export function registerWriteTools({ register, config, credentials, ctx }) {
           summary: `${(result.stdout || result.stderr).trim()}\n${stashes.length === 0 ? '' : `当前贮藏：\n${stashes.join('\n')}`}`.trim(),
         }
       }
-      const index = Number.isInteger(args.index) && args.index >= 0 ? args.index : 0
+      let index = 0
+      if (args.index !== undefined) {
+        if (!Number.isInteger(args.index) || args.index < 0) {
+          throw new Error(`index 必须是不小于 0 的整数（收到 ${args.index}；0 是最新的一条贮藏）`)
+        }
+        index = args.index
+      }
       const ref = `stash@{${index}}`
       const exists = await gitLine(config, ['rev-parse', '--verify', '--quiet', ref])
       if (exists.length === 0) throw new Error(`没有 ${ref}（先用 action=list 看看有哪些）`)

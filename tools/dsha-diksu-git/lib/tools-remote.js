@@ -84,9 +84,13 @@ export function registerRemoteTools({ register, config, credentials, ctx }) {
         expectSha = await gitLine(config, ['rev-parse', `refs/tags/${name}`])
         pushSpec = `refs/tags/${name}`
       } else {
-        name = safeBranchName(args.ref ?? (await currentBranch(config)))
+        const fallback = await currentBranch(config)
+        if (args.ref === undefined && fallback === 'HEAD') {
+          throw new Error('当前 HEAD 没有指向任何分支（仓库可能是空的，或处于游离头状态）；先提交/切分支，或显式传 ref')
+        }
+        name = safeBranchName(args.ref ?? fallback)
         localSha = await gitLine(config, ['rev-parse', '--verify', '--quiet', `refs/heads/${name}`])
-        if (localSha.length === 0) throw new Error(`本地没有分支 ${name}`)
+        if (localSha.length === 0) throw new Error(`本地没有分支 ${name}（用 git_branch action=list 看看有哪些）`)
         expectSha = localSha
         pushSpec = `refs/heads/${name}:refs/heads/${name}`
       }
@@ -123,7 +127,7 @@ export function registerRemoteTools({ register, config, credentials, ctx }) {
         remoteSha = line.split(/\s+/)[0] ?? ''
       }
       const verified = remoteSha.length > 0 && remoteSha === expectSha
-      const warnings = [...(outcome.warnings ?? []), ...(verify.warnings ?? [])]
+      const warnings = [...new Set([...(outcome.warnings ?? []), ...(verify.warnings ?? [])])]
       return {
         ok: verified,
         remote,
@@ -251,7 +255,7 @@ export function registerRemoteTools({ register, config, credentials, ctx }) {
       try {
         const hit = await resolveToken(config, credentials)
         configured = true
-        source = `${hit.source}（长度 ${hit.value.length}）`
+        source = hit.source
       } catch {
         configured = false
       }
