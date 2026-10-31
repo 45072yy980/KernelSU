@@ -71,7 +71,7 @@ class WebUIState {
     }
 
     fun dispose(activity: Activity) {
-        activity.setTaskDescription(activity.getString(R.string.fx_app_name))
+        activity.setTaskDescription(activity.getString(R.string.app_name))
         webView?.let { view ->
             (view.parent as? android.view.ViewGroup)?.removeView(view)
             view.destroy()

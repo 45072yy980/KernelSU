@@ -584,7 +584,7 @@ private fun ThemePreviewCardMiuix(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = stringResource(id = R.string.fx_app_name),
+                            text = stringResource(id = R.string.app_name),
                             fontSize = 12.sp,
                             color = textColor
                         )

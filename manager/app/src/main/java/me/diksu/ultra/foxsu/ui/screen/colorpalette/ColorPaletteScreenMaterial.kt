@@ -496,7 +496,7 @@ private fun ThemePreviewCard(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = stringResource(id = R.string.fx_app_name),
+                            text = stringResource(id = R.string.app_name),
                             style = MaterialTheme.typography.bodyMedium,
                             color = colorScheme.onSurface
                         )

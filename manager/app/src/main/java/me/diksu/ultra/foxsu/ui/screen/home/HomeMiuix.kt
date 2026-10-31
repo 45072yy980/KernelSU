@@ -277,7 +277,7 @@ private fun TopBar(
     BlurredBar(backdrop) {
         TopAppBar(
             color = barColor,
-            title = stringResource(R.string.fx_app_name),
+            title = stringResource(R.string.app_name),
             actions = {
                 // 作者页入口（与其余主题对齐）
                 IconButton(onClick = onOpenAuthor) {

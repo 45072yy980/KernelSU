@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package me.weishu.kernelsu.ui.webui;
+package me.diksu.ultra.foxsu.ui.webui;
 
 import java.net.URLConnection;
 

@@ -184,7 +184,7 @@ private fun TopBar(
     scrollBehavior: TopAppBarScrollBehavior? = null
 ) {
     LargeFlexibleTopAppBar(
-        title = { Text(stringResource(R.string.fx_app_name)) },
+        title = { Text(stringResource(R.string.app_name)) },
         actions = {
             UiModeSwitchButton()
             RebootListPopup()

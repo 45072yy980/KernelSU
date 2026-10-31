@@ -613,7 +613,7 @@ private fun FreshHeader(onOpenTheme: () -> Unit) {
                 me.diksu.ultra.foxsu.ui.theme.currentAccent.primary
             )
             Text(
-                text = customTitle.ifBlank { stringResource(R.string.fx_app_name) },
+                text = customTitle.ifBlank { stringResource(R.string.app_name) },
                 fontSize = 24.sp,
                 lineHeight = 28.sp,
                 fontWeight = FontWeight.Bold,

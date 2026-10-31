@@ -74,7 +74,7 @@ internal suspend fun prepareWebView(
         webUIState.rootShell = shell
 
         withContext(Dispatchers.Main) {
-            activity.setTaskDescription(activity.getString(R.string.fx_app_name) + " - ${moduleInfo.name}")
+            activity.setTaskDescription(activity.getString(R.string.app_name) + " - ${moduleInfo.name}")
 
             val webView = WebView(activity)
             webView.setBackgroundColor(Color.TRANSPARENT)
