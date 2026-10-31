@@ -38,7 +38,7 @@
 | A6 | 每个 token 化组件：`ThemeTokens()` 默认值 == 迁移前那处字面量 | **不用跑测试**：§6.1 check 6 从 `ThemeTokens.kt` 读出 9 个默认值，与 §1.6 基线表逐行对拍；组件 diff 必须是「字面量搬进 token、不换值」 | 对拍输出 + diff | **静态（PR 人工）** |
 | A7 | `uiPrefix()` 对前三个值仍返回 `material_` / `miuix_stock_` / `miuix_` | 单测三值 + diff 确认三行未改；**Themed 的前缀必须拍板**（见 S2） | 单测 + diff | **CI / 静态** |
 | A8 | 老皮肤不读主题包、不因主题包存在改变启动路径 | review `MainActivity` 的 mode→theme 分支；`grep -rn "theme.json\|ThemeStore" $SRC \| grep -v "/theme/"` 只允许出现在设置入口与 Themed 分支 | review 记录 | **静态** |
-| A9 | 三皮肤 × 6 页截图：裁剪后 `AE=0`（唯一例外：选择器第 4 项） | §3.3 截图流程 + §6.1 比对 | 成对 PNG + 差异报告 | **真机** |
+| A9 | 三皮肤 × 6 页截图：裁剪后 `AE=0`（唯一例外：选择器第 4 项）；**且 Themed × 6 页 == 同页 Miuix 的 `AE=0`（L1a 核心断言）** | §1.7 执行手册 + §3.3 截图流程 | 成对 PNG + 差异报告 | **⏳ 待设备接入**（见 §1.7） |
 | A10 | `fromValue` 四值 round-trip；`entries.size == 4` 且前三项顺序不变；不依赖 `ordinal` | §6.1 check 4（枚举项 + 四个 `.value ->`）+ check 7（`UiMode.*ordinal` 必须为空） | 命令输出 | **静态** |
 
 ### 1.0 A 组实测状态（commit `8d9e3e8d`，2026-10-31）
@@ -53,7 +53,7 @@
 | A6 | ✅ **过** | `ThemeTokens.kt` 9 个默认值与 §1.6 基线逐行一致：`16 / 0 / 0 / 56 / 12 / 12 / Docked / true / DEFAULT_SECTION_ORDER` |
 | A7 | ✅ **过** | `uiPrefix()` 与父提交 `fe9c7a9e` **零差异**；Themed 走 `else -> "miuix_"`（S2 定案）；前三个前缀未变 |
 | A8 | ✅ **过** | `grep -rn "theme.json\|ThemeStore\|ThemePackage" src \| grep -v "/ui/theme/"` 为空：主题包读取只存在于 `ui/theme/` |
-| A9 | ⏳ **需真机** | 三皮肤 × 6 页截图对比未跑（需设备 + 基线 APK） |
+| A9 | ⏳ **待设备接入** | 设备 shell 通道（adb-shell/root/Shizuku）未开，`pm install` 不可用、虚拟屏只能跑已装应用，无法装两个版本做对比。开跑清单与导航见 §1.7 |
 | A10 | ✅ **过** | 枚举 4 项且 Themed 最后、`fromValue` 四值齐全、`UiMode.*ordinal` 零引用 |
 
 > 复跑方式：§6.1 九条断言 + §6.2 扫描器。本次原始输出：九条断言全 PASS；扫描器 `53 / 52 / 52 / 0 / 9 / 12`。
@@ -154,6 +154,52 @@
 > A6（token 默认值 golden）、A10（`fromValue` round-trip）升级成真单测。
 > **本期明确不加测试基础设施**（会引入 Robolectric/JUnit 依赖与构建时间，属另一件事），
 > 在此之前这三条按「PR 人工 + §6.1 grep」执行。
+
+### 1.7 A9 执行手册（⏳ 待设备接入）
+
+**现在为什么不能跑**：这台机器的设备 shell 通道（adb-shell / root / Shizuku）都未开启，`pm install` 走不通；
+虚拟屏只能运行**已安装**的应用，装不了新包。等通道可用后按本手册一次跑完，不用再想。
+
+**开跑前要准备好的东西**（缺一项就别开跑，否则截图没法对比）
+
+| # | 准备项 | 具体要求 |
+|---|---|---|
+| P1 | 基线 APK | 父提交 `fe9c7a9e` 构建：`git worktree add /tmp/base fe9c7a9e` → `cd /tmp/base/manager && ./gradlew :app:assembleDebug` |
+| P2 | 被测 APK | 当前 `8d9e3e8d` 构建；**同一签名、同一 ABI** |
+| P3 | 设备 | 同一台；记录型号、`wm size`、`wm density`、Android 版本 |
+| P4 | 系统设置 | `font_scale 1.0`、三个动画 scale 0、系统深浅固定、飞行模式（命令见 §3.3） |
+| P5 | 页面入口 | 首页 / 模块 / 设置 / **模块仓库（模块页顶部入口）** / **关于（设置页底部）** / **主题页（设置 → 外观 → ColorPalette）** |
+| P6 | 比对工具 | `AE` + 差异包围盒：ImageMagick `compare -metric AE` 或 Python+Pillow |
+| P7 | 裁剪规则 | 裁掉状态栏与手势条；**把样式选择器那一行单独裁掉**（唯一允许的差异：多第 4 项） |
+
+**核心断言（L1a）**
+
+- `Themed` 目前原样 provide `ThemeTokens()`（§1.6 末），因此 **Themed × 6 页的截图必须与同页 Miuix 的截图 `AE=0`**。
+- 这条比"三个老皮肤各自没变"更早暴露问题：一旦不为 0，说明 L1 注入链路动了不该动的东西，
+  或者 Themed 意外走到了非 Miuix 的分支（例如 §1.4 的某个决策点）。
+- **适用边界**：该断言只在 **L2 token 真正接上之前**成立。L2 落地后，它会自然变成
+  "Themed 与 Miuix 的差异必须 ⊆ 已 token 化的组件包围盒"，那时改判据，不要放宽成"随便不一样"。
+
+**执行顺序**
+
+1. 装 P1 基线包 → 3 皮肤 × 6 页 = 18 张 → `baseline/`
+2. 装 P2 被测包 → 同样 3 皮肤 × 6 页 = 18 张（先不截 Themed）→ `after/`
+3. 逐对算 `AE`：`Miuix / MiuixStock / Material` 的 `baseline` vs `after` 必须全 0
+4. 被测包里切到 `Themed` → 6 张 → 与 `after/` 里同页 Miuix 比，必须全 0
+5. 填记录表；任何一格非 0，先判断是不是"选择器没裁干净"，再判断是不是真回归
+
+**记录模板**
+
+| 页面 | Miuix（基线 vs 后） | MiuixStock | Material | Themed vs Miuix（后） |
+|---|---|---|---|---|
+| 首页 | AE = ? | AE = ? | AE = ? | AE = ? |
+| 模块 | | | | |
+| 设置 | | | | |
+| 模块仓库 | | | | |
+| 关于 | | | | |
+| 主题页 | | | | |
+
+> 设备通道开通后，把这份表填满贴 PR，A9 才算结。
 
 ---
 
