@@ -440,3 +440,25 @@ task-6 的做法是"先拆不改样式，再改 token"两步，各自可单独 r
 `docs/theme-port-plan.md`：FolkPatch / FinaSU 自定义主题移植方案（**只有方案，未动代码**）。
 要点：两家主题包同一格式（AES-CBC + ZIP + theme.json），做兼容就能直接吃现成主题；
 建议分三期，一期只做导入/导出/应用核心；需要用户拍板三件事（皮肤口径 / 是否要求互操作 / 是否做主题商店）。
+
+### 12.5 安全修复：截断不能把红色降级成黄色
+
+自查发现并修复了一个真实绕过路径（`b941f4ca`）：findings 上限 200 是"先到先得"，
+攻击者在真正 payload 前塞 200 行黄色命中，后面的红色就不会被记录，而 `level()`
+又是从 findings 推出来的 → 整个模块被判黄色，用户按一次音量键就装进去了。
+
+现在的实现：`ScanReport.max_level` 在每次命中时**无论是否记录**都更新，`level()` 读它；
+红色另有独立预算（`red_recorded`），不会被黄色挤掉；两端预算都满才提前停止扫描。
+
+自用包更新为 `DiksuUltra_4.1.1-arm64_selfuse_41033.apk`（`b941f4ca`，versionCode 41033，
+run `41174904338`），41031 已删除。
+
+### 12.6 团队机制说明（给下一任）
+
+- 团队名额上限写在 `dsh-experimental-agent-team-profile/cordis.patch.yml` 的 `maxMembers`（默认 8），
+  用户级覆盖写在 `~/.dsh/profiles/web/cordis.patch.yml` 的 `id: agent-team` 条目（当前改成 12），
+  **profile 的 patchReload 是 startup，改完必须重启 harness 才生效**。
+- 插件层没有"删除成员"的接口（roster 只在超限时抛 `TEAM_MEMBER_LIMIT`），所以成员只能是
+  "建新的 + 不用旧的"，不能真正开除。
+- 建议的常驻分工：`ksud-core`（Rust/ksud）、`manager-android`（Kotlin/Compose）、
+  `webui-frontend`（ksud 网页端）、`qa-verifier`（独立验证，只读）。
