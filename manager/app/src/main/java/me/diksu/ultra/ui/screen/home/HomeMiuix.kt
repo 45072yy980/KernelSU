@@ -870,8 +870,10 @@ private fun previewHomeScreenState(
 
 @Composable
 private fun JailbreakGuardCard(modifier: Modifier = Modifier) {
-    // Shown while jailbreak (late-load) mode is running: the partition guard is
-    // active, so this tells the user their system partitions are protected.
+    // Shown while jailbreak (late-load) mode is running. What actually guards the
+    // partitions is the install-time three-level scan (red refused / yellow waits
+    // for the volume keys / green installs) - there is no runtime write blocker,
+    // so this card must not promise that a live root shell cannot touch a partition.
     // Sits inside the notice glass pane on the home screen, where the pane is the
     // background and this card has to keep off it.
     //

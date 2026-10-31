@@ -77,7 +77,8 @@ fun FlashScreenMaterial(
                                     FlashingStatus.FAILED -> R.string.jailbreak_failed
                                 }
                             } else when (state.flashingStatus) {
-                                FlashingStatus.FLASHING -> R.string.flashing
+                                FlashingStatus.FLASHING ->
+                                    if (state.waitingForKeys) R.string.flash_waiting_volume_keys else R.string.flashing
                                 FlashingStatus.SUCCESS -> R.string.flash_success
                                 FlashingStatus.FAILED -> R.string.flash_failed
                             }

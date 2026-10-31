@@ -179,6 +179,7 @@
     <string name="settings_uninstall_permanent_message">徹底永久解除安裝 Diksu Ultra（Root 權限及所有模組）</string>
     <string name="settings_restore_stock_image_message">恢復原廠映像（如有備份），通常用於 OTA 前；如需解除安裝 Diksu Ultra，請使用「永久解除安裝」</string>
     <string name="flashing">正在刷入</string>
+    <string name="flash_waiting_volume_keys">等待音量鍵確認</string>
     <string name="flash_success">刷入成功</string>
     <string name="flash_failed">刷入失敗</string>
     <string name="selected_lkm">已選取 LKM：%s</string>
@@ -301,7 +302,7 @@
     <string name="settings_navigation_badge">底部欄標記</string>
     <string name="settings_navigation_badge_summary">在底部欄顯示已授權 App 及已啟用模組數量</string>
     <string name="jailbreak_guard_running_title">系統分區保護運行中</string>
-    <string name="jailbreak_guard_running_summary">當前處於越獄模式。會攔截真正寫入分區的模組安裝；重啟即還原。此模式運行期間，系統分區寫入受到保護。</string>
+    <string name="jailbreak_guard_running_summary">當前處於越獄模式，系統分區保護始終開啟。任何模組安裝都會先掃描腳本——包括由終端機發起的安裝：紅色直接拒絕，黃色由你按音量鍵確認，綠色直接安裝。</string>
     <string name="jailbreak_choose_title">啟用 Root</string>
     <string name="jailbreak_choose_message">當前核心尚未載入。你可以讓本應用藉助內建的漏洞利用直接提權並立即進入越獄（late-load）模式，全程不修改任何分區；也可以選擇手動安裝核心。</string>
     <string name="jailbreak_manual_action">手動安裝</string>
@@ -312,7 +313,7 @@
     <string name="jailbreak_success">越獄完成</string>
     <string name="jailbreak_failed">越獄失敗</string>
     <string name="settings_partition_guard">系統分區保護</string>
-    <string name="settings_partition_guard_summary">安裝前掃描模組腳本，給出三級結論：綠色直接安裝，黃色由你按音量鍵確認，紅色直接拒絕。越獄模式下始終開啟，其他情況可在此開關。</string>
+    <string name="settings_partition_guard_summary">安裝前掃描模組腳本，給出三級結論：綠色直接安裝，黃色由你按音量鍵確認，紅色直接拒絕。越獄模式下始終開啟，且由終端機發起的安裝同樣會被掃描；其他情況可在此開關，但只對從本管理器發起的安裝生效。</string>
     <string name="settings_partition_guard_summary_jailbreak">越獄模式下始終開啟，無法在此關閉——晚期載入的會話無法撤銷對分區的真實寫入。</string>
     <string name="settings_home_card_blur">狀態卡片使用模糊背景</string>
     <string name="settings_home_card_blur_summary">主介面狀態卡片以高斯模糊（毛玻璃）渲染背景，取代純色。若裝置不支援模糊渲染，或卡片已設定自訂圖片，則此開關無效。</string>

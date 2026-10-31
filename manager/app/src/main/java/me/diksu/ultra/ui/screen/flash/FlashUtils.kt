@@ -262,6 +262,14 @@ fun FlashEffect(
                     }
                     logContent.append(it).append("\n")
                 }, onStderr = {
+                    // stderr has to reach the progress screen too, not just the saved
+                    // log: the partition guard asks the user for the volume keys on
+                    // stdout today, but a prompt moved to eprintln!/warn! would
+                    // otherwise be invisible while the install sits waiting.
+                    currentText += "$it\n"
+                    mainHandler.post {
+                        onTextUpdate(currentText)
+                    }
                     logContent.append(it).append("\n")
                 })
             } catch (t: Throwable) {

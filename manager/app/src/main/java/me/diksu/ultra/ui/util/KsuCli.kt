@@ -230,9 +230,11 @@ fun flashModule(
             return FlashResult(1, message, false)
         }
         val cmd = "module install ${file.absolutePath}"
-        // Opt the install into the system-partition guard when it is enabled
-        // (always in jailbreak mode, otherwise the user setting).
-        val guardEnv = if (isPartitionGuardEnabled()) "KSU_PARTITION_GUARD=1 " else ""
+        // ksud scans by default and only an explicit KSU_PARTITION_GUARD=0 turns it
+        // off, so the value is always passed - leaving it unset would install with
+        // the guard on even after the user turned it off here. Jailbreak (late-load)
+        // mode is forced on by isPartitionGuardEnabled().
+        val guardEnv = if (isPartitionGuardEnabled()) "KSU_PARTITION_GUARD=1 " else "KSU_PARTITION_GUARD=0 "
         val result = flashWithIO("$guardEnv${getKsuDaemonPath()} $cmd", onStdout, onStderr)
         Log.i("KernelSU", "install module $uri result: $result")
         return FlashResult(result, result.isSuccess && moduleNeedsReboot(file))

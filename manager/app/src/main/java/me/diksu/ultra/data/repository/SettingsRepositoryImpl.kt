@@ -95,8 +95,12 @@ fun isSoftRebootPreferred(): Boolean =
 fun isPartitionGuardEnabled(): Boolean =
     Natives.isLateLoadMode || settingsPrefs().getBoolean(KEY_PARTITION_GUARD, false)
 
-
 fun setPartitionGuardEnabled(enabled: Boolean) {
+    // In a jailbreak (late-load) session isPartitionGuardEnabled() ignores the
+    // stored value and always reports true. Writing false here would leave
+    // "what is stored" and "what actually runs" disagreeing, so refuse the write
+    // in the repository instead of relying on the settings switch being disabled.
+    if (Natives.isLateLoadMode) return
     // commit(), not apply(): the settings screen reads the value back right after
     // this returns, so an async write could make the switch snap back.
     settingsPrefs().edit().putBoolean(KEY_PARTITION_GUARD, enabled).commit()

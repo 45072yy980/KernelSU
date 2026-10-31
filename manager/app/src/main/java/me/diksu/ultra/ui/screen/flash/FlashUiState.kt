@@ -13,6 +13,10 @@ data class FlashUiState(
     // True while running the bundled jailbreak exploit, so the screen can say
     // "jailbreaking" instead of "flashing".
     val isJailbreak: Boolean = false,
+    // True while ksud is blocked on the volume keys (the partition guard's yellow
+    // verdict, up to 60 seconds). The title then says "waiting" instead of
+    // "flashing", so the prompt does not look like a frozen install.
+    val waitingForKeys: Boolean = false,
 )
 
 @Immutable

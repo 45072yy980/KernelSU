@@ -89,6 +89,8 @@ fun FlashScreenMiuix(
                 onSave = actions.onSaveLog,
                 backdrop = backdrop,
                 barColor = barColor,
+                isJailbreak = state.isJailbreak,
+                waitingForKeys = state.waitingForKeys,
             )
         },
         floatingActionButton = {
@@ -164,6 +166,7 @@ private fun TopBar(
     backdrop: LayerBackdrop?,
     barColor: Color,
     isJailbreak: Boolean = false,
+    waitingForKeys: Boolean = false,
 ) {
     BlurredBar(backdrop) {
         SmallTopAppBar(
@@ -175,7 +178,8 @@ private fun TopBar(
                         FlashingStatus.FAILED -> R.string.jailbreak_failed
                     }
                 } else when (status) {
-                    FlashingStatus.FLASHING -> R.string.flashing
+                    FlashingStatus.FLASHING ->
+                        if (waitingForKeys) R.string.flash_waiting_volume_keys else R.string.flashing
                     FlashingStatus.SUCCESS -> R.string.flash_success
                     FlashingStatus.FAILED -> R.string.flash_failed
                 }

@@ -44,6 +44,10 @@ fun FlashScreen(flashIt: FlashIt, onBackEnabledChange: (Boolean) -> Unit) {
     val uiMode = LocalUiMode.current
     val snackbarHost = remember { SnackbarHostState() }
     val backEnabled = flashingStatus != FlashingStatus.FLASHING
+    // ksud prints "[音量+] 继续安装" only when the partition guard is asking the user
+    // to decide, and it blocks there for up to 60 seconds. Reading it back from the
+    // log keeps the plumbing to one line and needs no new callback.
+    val waitingForKeys = flashingStatus == FlashingStatus.FLASHING && text.contains("音量+")
 
     SideEffect { onBackEnabledChange(backEnabled) }
     NavigationBackHandler(
@@ -91,6 +95,7 @@ fun FlashScreen(flashIt: FlashIt, onBackEnabledChange: (Boolean) -> Unit) {
         showJailbreakWarning = needJailbreakWarning && !flashingEnabled,
         rebootLabelRes = if (softReboot) R.string.reboot_soft else R.string.reboot,
         isJailbreak = flashIt is FlashIt.JailbreakExploit,
+        waitingForKeys = waitingForKeys,
     )
     val actions = FlashScreenActions(
         onBack = dropUnlessResumed { if (backEnabled) navigator.pop() },
