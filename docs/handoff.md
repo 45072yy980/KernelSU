@@ -464,3 +464,58 @@ run `41174904338`），41031 已删除。
   "建新的 + 不用旧的"，不能真正开除。
 - 建议的常驻分工：`ksud-core`（Rust/ksud）、`manager-android`（Kotlin/Compose）、
   `webui-frontend`（ksud 网页端）、`qa-verifier`（独立验证，只读）。
+
+---
+
+## 十三、4.1.1 第二批：守卫被独立评审推翻后重写（2026-10-31）
+
+上一轮交付后，qa-verifier 与 ksud-core 各自独立复刻了规则表（不看我结论），结果**两边都判守卫不合格**。
+这一轮就是按他们的证据重写，并把"看起来拦住了其实没有"的三个 P0 补掉。
+
+### 13.1 三个 P0（发版前必须修，已修）
+
+| # | 问题 | 后果 | 修法 |
+|---|---|---|---|
+| P0-1 | 拒绝/取消后 `modules_update/<id>` 没删，而 `handle_updated_modules()` 每次开机无条件 rename 进 `modules/` | **提示"已拒绝安装"，重启后模块照样生效并执行 `service.sh`**；若是升级还会先删掉当前版本 | `finish_install` 的 Err 统一 `discard_staged_module()`，守卫三个分支再兜一次 |
+| P0-2 | 超 2 MiB / 超 200 脚本只标"已截断"，判定不受影响 | 载荷放文件尾部或第 201 个脚本 = 绿且照装 | 预算改 1000 脚本 / 32 MiB 总量 / 深度 8，**任一触发 ≥ 黄**；单文件不再截断读取 |
+| P0-3 | 安装期由 `customize.sh` 生成/改名的脚本（如 `cp payload.txt service.sh`）在扫描之后才出现 | 重启后以 root 执行未审计内容 | installer 成功后**复扫缓存目录**，命中红回滚；静态侧加 Y7 三条 |
+
+### 13.2 规则表：23 → 39 条
+
+- 误报修正：`cp -a /vendor/lib/*.so $MODPATH/system/` 被判黄（Y2 只看"命令后出现系统分区"）→ 只看目标参数；
+  `dd if=/dev/block/sda1 of=/data/x` 只读备份被判红（R7 把 `if=` 当赋值）→ 赋值锚定行首/`;`/`&&`；
+  读 boot 备份被判红 → R4 只看写目标；行内注释里的关键字误判 → 先剥注释。
+- 漏检修正：续行 `\` 拼接、变量拼路径与命令名变量化（两遍 `$VAR` 展开）、`e2fsck -y`、
+  `dm-verity … disable`、无尾斜杠 `/system`、`system_dlkm`/`vendor_dlkm`/`/system_root`/根挂载、
+  `dd of=/system/…`、`mkdir/touch/truncate`、`sh -c "$VAR"`/`printf|sh`/`cat|sh`/`sh 未知脚本`、软链解析一跳。
+- 新增黄级：Y7（安装期生成可执行脚本）、Y8（扫描范围不完整）、Y9（软链指向模块外）、Y10（`of=$VAR` 目标不可确定）。
+
+### 13.3 验收数据（独立复刻，不是自测）
+
+| 套件 | 修复前 | 修复后 |
+|---|---|---|
+| `docs/partition-guard-cases.md`（145 条） | 48 条不符 | **1 条**（该 1 条是 fixture 冲突：`A4-02` 的 `of=$D` 同时触发 Y10，换 fixture 后 0） |
+| 旧 125 条套件 | 39 条不符 | 1 条（同一条 fixture 无效：`big[:2MiB]` 把载荷截成 2 字节） |
+| 反绕过 20 条 | 20 不达标 | 0 |
+| 不误报 10 条 | 8 不达标 | 0 |
+
+### 13.4 顺带修掉的"假承诺"
+
+- **首页越狱守卫卡片**写着"运行期间写入受保护 / 重启即还原"——运行时拦截早删了，
+  41033 包已经把这句话发出去（arsc 里实测命中）。四语言改成三级语义。
+- 管理器开关默认 `false`，但 ksud 已默认扫描 → 新用户看到"开关关着却在扫描"。默认改 `true`。
+- `KsuCli` 原来关闭时传空串 → 改默认开启后开关关不掉。改成恒传 `1` / `0`。
+- 网页端「内核特性」里 feature 7/8 没有内核 handler，点了只 500。删掉，`POST /api/features` 对不支持的 id 返回 409。
+- 网页端 `app.js` 两个同名 `toggleFeature`，后定义覆盖前一个 → **首页功能开关自 4.1 起全部点不动**，改名分开。
+- `FlashMiuix` 的 `TopBar` 漏传 `isJailbreak`，三皮肤在越狱进度页显示不一致。
+
+### 13.5 仍未解决（下一轮/真机）
+
+1. **Ctrl-C 清理**：ksud 没有 SIGINT 处理，`kill -INT` 会跳过 `discard_staged_module`。建议加 signal handler 或让安装脚本用临时目录 + 启动时清理孤儿目录。
+2. **音量键三路径未真机验证**（+ / - / 不按超时），需一台已 root 机器。
+3. **静态扫描的固有边界**（已写进规范，不再当缺陷）：base64 等编码载荷只能到黄；模块外脚本（`sh /data/adb/stage2.sh`）只能到黄；native ELF 里的写操作扫不到；用户按了音量+ 之后不再审计。
+4. **`cargo test` 没有 CI job**：145 条语料目前靠人工/脚本复刻验证，建议下一轮做成 `#[test]`。
+
+### 13.6 CI
+
+`41181987279`（Build Manager）、`41181987168`（Clippy）、`41181987154`（Rustfmt）全部 success（commit `c2df61b8`）。
