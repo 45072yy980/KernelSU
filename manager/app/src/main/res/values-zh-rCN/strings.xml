@@ -631,4 +631,5 @@
     <string name="nav_gate_not_loaded_reason">管理器还没有被内核认领，超级用户与模块管理暂不可用。请到首页完成安装或提权。</string>
     <string name="nav_gate_not_loaded_action">前往首页处理</string>
     <string name="nav_gate_dismiss">知道了</string>
+    <string name="foxsu_manager_settings">管理器设置</string>
 </resources>

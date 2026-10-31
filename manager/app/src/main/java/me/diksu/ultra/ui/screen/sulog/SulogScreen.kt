@@ -58,7 +58,7 @@ fun SulogScreen() {
 
     when (uiMode) {
         UiMode.Material -> SulogScreenMaterial(state, actions)
-        UiMode.Miuix, UiMode.MiuixStock -> SulogScreenMiuix(state, actions)
+        UiMode.Miuix, UiMode.MiuixStock, UiMode.Fresh, UiMode.Glass, UiMode.Nocturne -> SulogScreenMiuix(state, actions)
     }
 }
 

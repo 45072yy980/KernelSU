@@ -82,6 +82,83 @@ private fun uiPrefix(): String = when (settingsPrefs().getString("ui_mode", UiMo
 /** Namespace a mode-specific key for the mode that is currently selected. */
 private fun modeKey(key: String) = uiPrefix() + key
 
+/**
+ * 自定义外观（Fresh / Glass / Nocturne 三种界面风格）的偏好命名空间。
+ *
+ * 这批项原先是 FoxSu 移植带来的第二套偏好（`customization` 文件里的裸键名），
+ * 和我们自己的设置互不相识：同一台机器上两套存储各存一半，用户换个皮肤就丢配置，
+ * 「恢复默认」也只清得动其中一套。现在统一落到 [SETTINGS_PREFS] 这一份偏好里，
+ * 全部加 `fx_` 前缀，与 `miuix_*` / `material_*` 并存但不互相覆盖。
+ *
+ * 键名本身由 CustomizationStore 维护；这里只负责「前缀 + 类型 + 一次批量写」，
+ * 免得每个调用点都手拼前缀、拼漏一个就变成一个永远读不回来的键。
+ */
+object FoxsuAppearanceStore {
+    /** 所有键统一加这个前缀。 */
+    const val PREFIX = "fx_"
+
+    fun getString(key: String, defaultValue: String?): String? =
+        settingsPrefs().getString(PREFIX + key, defaultValue)
+
+    fun getInt(key: String, defaultValue: Int): Int =
+        settingsPrefs().getInt(PREFIX + key, defaultValue)
+
+    fun getFloat(key: String, defaultValue: Float): Float =
+        settingsPrefs().getFloat(PREFIX + key, defaultValue)
+
+    fun getBoolean(key: String, defaultValue: Boolean): Boolean =
+        settingsPrefs().getBoolean(PREFIX + key, defaultValue)
+
+    fun contains(key: String): Boolean = settingsPrefs().contains(PREFIX + key)
+
+    /**
+     * 取某个二级前缀下的全部字符串项，返回键已去掉 [PREFIX] 与 [innerPrefix]。
+     *
+     * 逐模块卡面配图是按模块 id 动态开键的，只能靠遍历现存的键来还原。
+     */
+    fun stringMap(innerPrefix: String): Map<String, String> {
+        val full = PREFIX + innerPrefix
+        return settingsPrefs().all.entries.mapNotNull { (key, value) ->
+            if (key.startsWith(full) && value is String) key.removePrefix(full) to value else null
+        }.toMap()
+    }
+
+    /**
+     * 批量写一次。
+     *
+     * 一次 `edit()` 只做一次磁盘提交；逐项写会把整份偏好重新加载几十次，
+     * 定制页拖一次滑杆就能卡出几十毫秒。
+     */
+    fun edit(block: FoxsuAppearanceEditor.() -> Unit) {
+        val editor = settingsPrefs().edit()
+        FoxsuAppearanceEditor(editor).block()
+        editor.apply()
+    }
+
+    /**
+     * 恢复默认：只清 `fx_` 开头的键。
+     *
+     * 绝不能像原来那样 `clear()` 整份偏好——这份偏好现在装着我们自己的全部设置，
+     * 清一次等于把越狱开关、隐藏应用、皮肤选择一起重置。
+     */
+    fun clearAll() {
+        val keys = settingsPrefs().all.keys.filter { it.startsWith(PREFIX) }
+        if (keys.isEmpty()) return
+        settingsPrefs().edit { keys.forEach { remove(it) } }
+    }
+}
+
+/** [FoxsuAppearanceStore.edit] 的写入器：自动补 `fx_` 前缀，调用点不用手拼。 */
+class FoxsuAppearanceEditor internal constructor(
+    private val editor: android.content.SharedPreferences.Editor,
+) {
+    fun putString(key: String, value: String?) = editor.putString(FoxsuAppearanceStore.PREFIX + key, value)
+    fun putInt(key: String, value: Int) = editor.putInt(FoxsuAppearanceStore.PREFIX + key, value)
+    fun putFloat(key: String, value: Float) = editor.putFloat(FoxsuAppearanceStore.PREFIX + key, value)
+    fun putBoolean(key: String, value: Boolean) = editor.putBoolean(FoxsuAppearanceStore.PREFIX + key, value)
+    fun remove(key: String) = editor.remove(FoxsuAppearanceStore.PREFIX + key)
+}
+
 /** Prefer soft reboot: always in jailbreak mode, or when the setting is enabled. */
 fun isSoftRebootPreferred(): Boolean =
     Natives.isLateLoadMode || settingsPrefs().getBoolean(KEY_USE_SOFT_REBOOT, false)

@@ -251,7 +251,7 @@ private fun StatusCard(
                         contentColor = MaterialTheme.colorScheme.onError
                     )
                 ) {
-                    Text(stringResource(R.string.fx_home_jailbreak))
+                    Text(stringResource(R.string.home_jailbreak))
                 }
             }
         } else null
@@ -317,7 +317,7 @@ private fun StatusCard(
                         if (ksuActive && state.isLateLoadMode) {
                             Spacer(Modifier.width(8.dp))
                             StatusTag(
-                                label = stringResource(id = R.string.fx_jailbreak_mode),
+                                label = stringResource(id = R.string.jailbreak_mode),
                                 contentColor = MaterialTheme.colorScheme.onErrorContainer,
                                 backgroundColor = MaterialTheme.colorScheme.errorContainer
                             )

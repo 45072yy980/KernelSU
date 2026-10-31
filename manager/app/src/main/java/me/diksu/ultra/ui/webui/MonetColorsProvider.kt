@@ -27,7 +27,7 @@ object MonetColorsProvider {
     @Composable
     fun UpdateCss(materialColorScheme: ColorScheme? = null) {
         when (LocalUiMode.current) {
-            UiMode.Miuix, UiMode.MiuixStock -> UpdateCssMiuix()
+            UiMode.Miuix, UiMode.MiuixStock, UiMode.Fresh, UiMode.Glass, UiMode.Nocturne -> UpdateCssMiuix()
             UiMode.Material -> UpdateCssMaterial(materialColorScheme ?: MaterialTheme.colorScheme)
         }
     }

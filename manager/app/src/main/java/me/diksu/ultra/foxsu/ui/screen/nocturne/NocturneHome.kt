@@ -17,6 +17,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
@@ -54,6 +55,8 @@ fun NocturneHomeScreen(
     var showStylePicker by remember { mutableStateOf(false) }
     // 越狱入口条件：未安装 + GKI 内核 + SELinux 宽容（与 Fresh / Miuix 完全一致）
     val canJailbreak = state.ksuVersion == null && state.kernelVersion.isGKI() && state.isSELinuxPermissive
+    // 越狱文案统一走我们的字符串资源，和 Miuix / Material 外壳说的是同一句话。
+    val jailbreakModeLabel = stringResource(R.string.jailbreak_mode)
     val sideDock = useSideDock()
     val donateNav = me.diksu.ultra.foxsu.ui.navigation3.LocalNavigator.current
     val onClickDonate = { donateNav.push(me.diksu.ultra.foxsu.ui.navigation3.Route.Donate) }
@@ -195,12 +198,13 @@ fun NocturneHomeScreen(
                             }
                         },
                     )
-                    // 越狱模式入口：真实启动 MagicaService（仅在可越狱时显示）
+                    // 越狱入口：只触发我们的实现（JailbreakBridge → AutoEscalation）；
+                    // FoxSu 自己那条 magica 启动链已删除，不再出现在这里。
                     if (canJailbreak) {
                         NcRow(
                             iconRes = R.drawable.fx_nc_terminal,
-                            title = "越狱模式",
-                            subtitle = "无需解锁 Bootloader 启动 KernelSU",
+                            title = stringResource(R.string.home_jailbreak),
+                            subtitle = stringResource(R.string.fx_fresh_home_jailbreak_sub),
                             accent = NcAccentTone.Amber,
                             showDivider = true,
                             onClick = { actions.onJailbreakClick() },
@@ -216,7 +220,7 @@ fun NocturneHomeScreen(
                         append(state.displayKernelVersion())
                         append("  ·  ")
                         append(state.heroState().modeLabel ?: "非 GKI")
-                        if (state.heroState().jailbreakMode) append("  ·  越狱模式")
+                        if (state.heroState().jailbreakMode) append("  ·  $jailbreakModeLabel")
                     },
                     tag = kernelTag(state.systemInfo.kernelVersion),
                     iconRes = R.drawable.fx_nc_terminal,
@@ -370,7 +374,7 @@ private fun NcHero(
                                 .padding(horizontal = 8.dp, vertical = 4.dp)
                         ) {
                             Text(
-                                text = "越狱",
+                                text = stringResource(R.string.home_jailbreak),
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = t.heroBadgeText,

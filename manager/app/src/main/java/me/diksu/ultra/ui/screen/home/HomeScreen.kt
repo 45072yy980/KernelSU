@@ -123,7 +123,7 @@ fun HomePager(
     )
 
     when (LocalUiMode.current) {
-        UiMode.Miuix -> HomePagerMiuix(
+        UiMode.Miuix, UiMode.Fresh, UiMode.Glass, UiMode.Nocturne -> HomePagerMiuix(
             state = uiState,
             actions = actions,
             bottomInnerPadding = bottomInnerPadding,

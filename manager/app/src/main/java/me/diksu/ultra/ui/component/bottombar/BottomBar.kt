@@ -134,7 +134,7 @@ fun BottomBar(
     modifier: Modifier = Modifier,
 ) {
     when (LocalUiMode.current) {
-        UiMode.Miuix, UiMode.MiuixStock -> BottomBarMiuix(blurBackdrop, backdrop, navigationBadge, modifier)
+        UiMode.Miuix, UiMode.MiuixStock, UiMode.Fresh, UiMode.Glass, UiMode.Nocturne -> BottomBarMiuix(blurBackdrop, backdrop, navigationBadge, modifier)
         UiMode.Material -> BottomBarMaterial(navigationBadge)
     }
 }
@@ -146,7 +146,7 @@ fun SideRail(
     modifier: Modifier = Modifier,
 ) {
     when (LocalUiMode.current) {
-        UiMode.Miuix -> NavigationRailMiuix(navigationBadge, backdrop, modifier)
+        UiMode.Miuix, UiMode.Fresh, UiMode.Glass, UiMode.Nocturne -> NavigationRailMiuix(navigationBadge, backdrop, modifier)
         UiMode.MiuixStock -> NavigationRailMiuixStock(navigationBadge, modifier)
         UiMode.Material -> NavigationRailMaterial(navigationBadge, modifier)
     }

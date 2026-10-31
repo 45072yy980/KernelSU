@@ -97,6 +97,8 @@ fun EditorialHome(
                 onInstall = if (hero.canFlash) ({ actions.onInstallClick() }) else null,
             )
             Spacer(Modifier.height(12.dp))
+            // 越狱文案统一走我们的字符串资源（FoxSu 侧不再自带一套）。
+            val jailbreakLabel = stringResource(R.string.home_jailbreak)
             EdStatusBand(
                 kicker = "CURRENT STATUS · 当前状态",
                 big = when (hero.phase) {
@@ -115,7 +117,7 @@ fun EditorialHome(
                         "模式",
                         listOfNotNull(
                             hero.modeLabel,
-                            if (hero.jailbreakMode) "越狱" else null,
+                            if (hero.jailbreakMode) jailbreakLabel else null,
                         ).joinToString(" · ").ifEmpty { "—" },
                         false,
                     ),
@@ -192,11 +194,12 @@ fun EditorialHome(
                 trailing = { Text("›", fontSize = 13.sp, color = t.faint) },
                 onClick = { actions.onOpenUrl("https://github.com/Cmry-mlc/FoxSu") },
             )
-            // 越狱模式入口：真实启动 MagicaService（条件与 Fresh / Miuix / Glass / Nocturne 一致）
+            // 越狱入口：只触发我们的实现（JailbreakBridge → AutoEscalation）；
+            // FoxSu 自己那条 magica 启动链已删除。条件与 Fresh / Miuix / Glass / Nocturne 一致。
             if (state.ksuVersion == null && state.kernelVersion.isGKI() && state.isSELinuxPermissive) {
                 EdRow(
                     iconRes = R.drawable.fx_ic_d_terminal, glyphBg = t.amber.copy(alpha = 0.10f), glyphColor = t.amber,
-                    title = stringResource(R.string.fx_home_jailbreak),
+                    title = stringResource(R.string.home_jailbreak),
                     subtitle = stringResource(R.string.fx_fresh_home_jailbreak_sub),
                     trailing = { Text("›", fontSize = 13.sp, color = t.faint) },
                     onClick = { actions.onJailbreakClick() },

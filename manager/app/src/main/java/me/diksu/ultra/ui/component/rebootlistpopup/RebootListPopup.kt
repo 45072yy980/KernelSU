@@ -60,7 +60,7 @@ fun rememberRebootAction(): (String) -> Unit {
 @Composable
 fun RebootListPopup() {
     when (LocalUiMode.current) {
-        UiMode.Miuix, UiMode.MiuixStock -> RebootListPopupMiuix()
+        UiMode.Miuix, UiMode.MiuixStock, UiMode.Fresh, UiMode.Glass, UiMode.Nocturne -> RebootListPopupMiuix()
         UiMode.Material -> RebootListPopupMaterial()
     }
 }

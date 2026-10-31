@@ -309,7 +309,7 @@ private fun StatusCard(
                         append(" [${stringResource(id = R.string.fx_safe_mode)}]")
                     }
                     if (state.isLateLoadMode) {
-                        append(" [${stringResource(id = R.string.fx_jailbreak_mode)}]")
+                        append(" [${stringResource(id = R.string.jailbreak_mode)}]")
                     }
                 }
                 // 运行模式：仅在真实 LKM/GKI 时显示
@@ -543,7 +543,7 @@ private fun StatusCard(
                             endActions = {
                                 if (state.isSELinuxPermissive) {
                                     TextButton(
-                                        text = stringResource(R.string.fx_home_jailbreak),
+                                        text = stringResource(R.string.home_jailbreak),
                                         onClick = actions.onJailbreakClick,
                                         colors = ButtonDefaults.textButtonColorsPrimary()
                                     )

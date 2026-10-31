@@ -1,16 +1,12 @@
 package me.diksu.ultra.foxsu.data.repository
 
-import android.content.ComponentName
 import android.content.Context
-import android.content.pm.PackageManager
-import android.util.Log
 import androidx.core.content.edit
 import com.materialkolor.PaletteStyle
 import com.materialkolor.dynamiccolor.ColorSpec
 import com.topjohnwu.superuser.ShellUtils
 import me.diksu.ultra.Natives
 import me.diksu.ultra.ksuApp
-import me.diksu.ultra.foxsu.magica.BootCompletedReceiver
 import me.diksu.ultra.foxsu.ui.UiMode
 import me.diksu.ultra.foxsu.ui.screen.modulerepo.RepoSort
 import me.diksu.ultra.foxsu.ui.util.execKsud
@@ -149,18 +145,26 @@ class SettingsRepositoryImpl : SettingsRepository {
         get() = prefs.getStringSet("sulog_filters", null)?.toSet()
         set(filters) = prefs.edit { putStringSet("sulog_filters", filters) }
 
+    /**
+     * 开机自动提权并越狱的总开关。
+     *
+     * 越狱的开机链路归我们的
+     * [me.diksu.ultra.jailbreak.AutoEscalationBootReceiver]：它用普通应用的开机自启
+     * 权限（BOOT_COMPLETED）在应用进程里跑我们的提权链（ghostlock → DirtyFrag），
+     * 不需要预先有 root，也不碰系统分区。
+     *
+     * 这里**只写偏好**，不再顺带启用 FoxSu 的
+     * [me.diksu.ultra.foxsu.magica.BootCompletedReceiver]：那个接收器会在开机时拉起
+     * FoxSu 自己的 MagicaService（app zygote preload → `ksud late-load`）。越狱用户在
+     * 完整重启后根本没有 root，这条路径只会在没有权限的情况下试图往内核注入模块，
+     * 既不会成功还可能留下痕迹——和我们 4.1 从自己的设置里拆掉的那条完全同因。
+     *
+     * 两边的键是同一个（prefs `settings` / key `auto_jailbreak`），所以 FoxSu 设置页
+     * 里的这个开关仍然作用到我们的自动提权，只是不再触发它自己的开机接收器。
+     */
     override var autoJailbreak: Boolean
         get() = prefs.getBoolean("auto_jailbreak", false)
         set(value) {
-            runCatching {
-                ksuApp.packageManager.setComponentEnabledSetting(
-                    ComponentName(ksuApp, BootCompletedReceiver::class.java),
-                    if (value) PackageManager.COMPONENT_ENABLED_STATE_ENABLED else PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
-                    PackageManager.DONT_KILL_APP
-                )
-            }.onFailure {
-                Log.e("Settings", "failed to change boot receiver state to $value", it)
-            }
             prefs.edit {
                 putBoolean("auto_jailbreak", value)
             }

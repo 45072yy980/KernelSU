@@ -180,6 +180,9 @@ fun SettingPagerMiuixStock(
                         )
                     }
 
+                    // 与原版 Miuix 设置页同一组行：底栏/特效/配色/背景/卡面/字体/标题。
+                    FoxsuAppearanceGroupMiuix()
+
                     KsuIsValid {
                     SmallTitle(
                         text = stringResource(R.string.settings_section_features),

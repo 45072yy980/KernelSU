@@ -1141,7 +1141,7 @@ private fun FreshStatusCard(
                         if (ksuActive && state.isLateLoadMode && workingMode.isEmpty()) {
                             Spacer(Modifier.width(8.dp))
                             FreshTag(
-                                text = stringResource(R.string.fx_jailbreak_mode),
+                                text = stringResource(R.string.jailbreak_mode),
                                 container = jailContainer,
                                 content = jailContent,
                             )
@@ -1184,7 +1184,7 @@ private fun FreshStatusCard(
                             if (ksuActive && heroSt.jailbreakMode) {
                                 Spacer(Modifier.width(8.dp))
                                 FreshTag(
-                                    text = stringResource(R.string.fx_jailbreak_mode),
+                                    text = stringResource(R.string.jailbreak_mode),
                                     container = jailContainer,
                                     content = jailContent,
                                 )
@@ -1255,7 +1255,7 @@ private fun FreshStatusCard(
                                 .clickable { onJailbreak() },
                         ) {
                             Text(
-                                text = stringResource(R.string.fx_home_jailbreak),
+                                text = stringResource(R.string.home_jailbreak),
                                 style = MaterialTheme.typography.labelLarge,
                                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                             )

@@ -51,7 +51,7 @@ fun AboutScreen() {
     )
 
     when (LocalUiMode.current) {
-        UiMode.Miuix, UiMode.MiuixStock -> AboutScreenMiuix(state, actions)
+        UiMode.Miuix, UiMode.MiuixStock, UiMode.Fresh, UiMode.Glass, UiMode.Nocturne -> AboutScreenMiuix(state, actions)
         UiMode.Material -> AboutScreenMaterial(state, actions)
     }
 }

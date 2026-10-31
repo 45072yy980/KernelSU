@@ -136,6 +136,10 @@ fun SettingPagerMaterial(
                 }
             )
 
+            // 自定义外观：Material 行版，取值与 Miuix 版是同一份设置。
+            // 老风格（含 Material 自己）下整组置灰并给一句说明。
+            FoxsuAppearanceGroupMaterial()
+
             SectionTitle(stringResource(R.string.settings_section_features))
             // The two secondary screens, in one column as the beautified
             // skin has them. Basic settings holds the per-feature switches

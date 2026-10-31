@@ -1,11 +1,9 @@
 package me.diksu.ultra.foxsu.data.settings
 
-import android.content.Context
-import androidx.core.content.edit
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import me.diksu.ultra.ksuApp
+import me.diksu.ultra.data.repository.FoxsuAppearanceStore
 
 /**
  * User personalisation of the ColorUI look: wallpaper, card surfaces and launcher icon.
@@ -239,7 +237,9 @@ const val HERO_SLOT = 0
 const val MODULE_SLOT = KPI_CARD_COUNT + 1
 
 object CustomizationStore {
-    private const val PREFS = "customization"
+    // 键名本身不带前缀：`fx_` 前缀由 [FoxsuAppearanceStore] 统一补，避免这里拼漏一个
+    // 就变成一个永远读不回来的键。存储也从原来独立的 `customization` 偏好挪到了
+    // 管理器的 `settings` 偏好，和 `miuix_*` / `material_*` 放在同一份文件里。
     private const val KEY_WALLPAPER = "wallpaper_uri"
     private const val KEY_SCALE = "wallpaper_scale"
     private const val KEY_OFFSET_X = "wallpaper_offset_x"
@@ -284,7 +284,7 @@ private const val KEY_DOCK_STYLE = "dock_style"
     private const val KEY_DOCK_SIDE = "dock_side"
     private const val KEY_DOCK_BUTTON = "dock_button_style"
     private const val KEY_DOCK_AUTOHIDE = "dock_auto_hide"
-    private const val KEY_FX_LEVEL = "fx_level"
+    private const val KEY_FX_LEVEL = "effect_level"
     private const val KEY_CLASSIC_DOCK = "classic_dock"
     private const val KEY_CLASSIC_DOCK_STYLE = "classic_dock_style"
     private const val KEY_DOCK_WATER_DROP = "dock_water_drop"
@@ -298,7 +298,6 @@ private const val KEY_DOCK_STYLE = "dock_style"
     private const val KEY_DOCK_FX_RING = "dock_fx_ring"
     private const val KEY_DOCK_ICON_PACK = "dock_icon_pack"
     private const val KEY_DONATE_AVATAR = "donate_avatar"
-    private const val KEY_BRAND_DEFAULTS = "brand_defaults_v1"
 
     val cardColorOptions = listOf(
         0x00000000, // follow theme
@@ -312,34 +311,11 @@ private const val KEY_DOCK_STYLE = "dock_style"
         0xFFE9F7EF.toInt(),
     )
 
-    private val prefs by lazy {
-        ksuApp.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-    }
-
-    /**
-     * 品牌默认值迁移（珊瑚橙 + 正圆按钮）。
-     *
-     * 老安装里 `accent_palette=0` / `dock_button=0` 就是「从来没改过」的旧默认值，
-     * 直接抬到新默认；只要用户动过（`!= 0`）就原样保留。标记位保证只跑一次。
-     */
-    private fun migrateBrandDefaults() {
-        val p = prefs
-        if (p.getBoolean(KEY_BRAND_DEFAULTS, false)) return
-        p.edit {
-            if (p.getInt(KEY_ACCENT_CUSTOM, 0) == 0 && p.getInt(KEY_ACCENT_PALETTE, 0) == 0) {
-                putInt(KEY_ACCENT_PALETTE, 2)
-            }
-            if (p.getInt(KEY_DOCK_BUTTON, 0) == 0) putInt(KEY_DOCK_BUTTON, 1)
-            putBoolean(KEY_BRAND_DEFAULTS, true)
-        }
-    }
-
     /** Compose-observable snapshot so every screen repaints as soon as it changes. */
     var current by mutableStateOf(read())
         private set
 
-    private fun read(): Customization = with(prefs) {
-        migrateBrandDefaults()
+    private fun read(): Customization = with(FoxsuAppearanceStore) {
         Customization(
             wallpaperUri = getString(KEY_WALLPAPER, null),
             wallpaperScale = getFloat(KEY_SCALE, 1f),
@@ -353,9 +329,7 @@ private const val KEY_DOCK_STYLE = "dock_style"
             heroDim = getFloat(KEY_HERO_DIM, 0.35f),
             kpiImages = List(KPI_CARD_COUNT) { getString(KEY_KPI_IMAGE + it, null) },
             kpiAlphas = List(KPI_CARD_COUNT) { getFloat(KEY_KPI_ALPHA + it, 0.7f) },
-            moduleImages = all.entries
-                .filter { it.key.startsWith(KEY_MODULE_IMAGE_PREFIX) && it.value is String }
-                .associate { it.key.removePrefix(KEY_MODULE_IMAGE_PREFIX) to it.value as String },
+            moduleImages = stringMap(KEY_MODULE_IMAGE_PREFIX),
             moduleImageAlpha = getFloat(KEY_MODULE_IMAGE_ALPHA, 0.7f),
             surfaceColors = List(SURFACE_SLOT_COUNT) { getInt(KEY_SURFACE_COLOR + it, 0) },
             surfaceAlphas = List(SURFACE_SLOT_COUNT) { getFloat(KEY_SURFACE_ALPHA + it, -1f) },
@@ -519,14 +493,17 @@ private const val KEY_DOCK_STYLE = "dock_style"
     fun setDockIconPack(index: Int) = update { it.copy(dockIconPack = index.coerceIn(0, 20)) }
 
     /**
-     * 恢复默认：直接把整份 SharedPreferences 清空再读回默认值。
+     * 恢复默认：清掉 `fx_` 命名空间再读回默认值。
      *
      * 旧实现只把默认值「写一遍」，凡是没被写到的键（历史遗留 / 后续新增）都会留在里面，
      * 于是「恢复默认」之后仍有若干项保持原样；而且 `update` 遇到与当前值相同就直接返回，
-     * 从默认态点重置时连一次写入都不会发生。清表是唯一能真正回到初始状态的写法。
+     * 从默认态点重置时连一次写入都不会发生。清表是唯一能真正回到初始状态的写法——
+     * 但只清 `fx_` 那批键，见 [FoxsuAppearanceStore.clearAll]。
      */
     fun reset() {
-        prefs.edit { clear() }
+        // 只清 fx_ 前缀：这份偏好现在也装着管理器自己的设置，整份 clear() 会把
+        // 越狱开关、隐藏应用、皮肤选择一起重置掉。
+        FoxsuAppearanceStore.clearAll()
         current = Customization()
     }
 
@@ -535,8 +512,8 @@ private const val KEY_DOCK_STYLE = "dock_style"
         // Dragging a colour slider fires many identical values; skip the disk write for them.
         if (next == current) return
         // 逐模块图片：先清掉旧键再写，避免残留已删除模块的图片
-        val staleModuleKeys = prefs.all.keys.filter { it.startsWith(KEY_MODULE_IMAGE_PREFIX) }
-        prefs.edit {
+        val staleModuleKeys = FoxsuAppearanceStore.stringMap(KEY_MODULE_IMAGE_PREFIX).keys
+        FoxsuAppearanceStore.edit {
             putString(KEY_WALLPAPER, next.wallpaperUri)
             putFloat(KEY_SCALE, next.wallpaperScale)
             putFloat(KEY_OFFSET_X, next.wallpaperOffsetX)

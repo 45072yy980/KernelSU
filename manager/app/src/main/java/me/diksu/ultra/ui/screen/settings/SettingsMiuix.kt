@@ -166,6 +166,10 @@ fun SettingPagerMiuix(
                         )
                     }
 
+                    // 自定义外观：只在 Fresh / Glass / Nocturne 三种 FoxSu 风格下可用，
+                    // 老风格下整组可见但置灰（并给一句说明）。
+                    FoxsuAppearanceGroupMiuix()
+
 
                     KsuIsValid {
                         SmallTitle(

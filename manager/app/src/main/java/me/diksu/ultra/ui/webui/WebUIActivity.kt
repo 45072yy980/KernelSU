@@ -118,7 +118,7 @@ private fun MainContent(activity: ComponentActivity, onFinish: () -> Unit) {
 @Composable
 private fun LoadingContent() {
     when (LocalUiMode.current) {
-        UiMode.Miuix, UiMode.MiuixStock -> {
+        UiMode.Miuix, UiMode.MiuixStock, UiMode.Fresh, UiMode.Glass, UiMode.Nocturne -> {
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center

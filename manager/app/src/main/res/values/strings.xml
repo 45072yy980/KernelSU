@@ -668,4 +668,5 @@
     <string name="nav_gate_not_loaded_reason">The manager has not been claimed by the kernel yet, so Superuser and Modules are unavailable. Finish installation or escalation on the Home page.</string>
     <string name="nav_gate_not_loaded_action">Fix on Home</string>
     <string name="nav_gate_dismiss">Got it</string>
+    <string name="foxsu_manager_settings">Manager settings</string>
 </resources>

@@ -99,6 +99,8 @@ import me.diksu.ultra.ui.screen.susfs.SusfsScreen
 import me.diksu.ultra.ui.screen.shizuku.ShizukuScreen
 import me.diksu.ultra.ui.screen.shizuku.ShizukuLogScreen
 import me.diksu.ultra.ui.screen.sulog.SulogScreen
+import me.diksu.ultra.foxsu.ui.FoxSuHost
+import me.diksu.ultra.foxsu.ui.UiMode as FoxSuUiMode
 import me.diksu.ultra.ui.screen.superuser.SuperUserPager
 import me.diksu.ultra.ui.screen.template.AppProfileTemplateScreen
 import me.diksu.ultra.ui.screen.templateeditor.TemplateEditorScreen
@@ -173,6 +175,14 @@ import top.yukonga.miuix.kmp.utils.PagerInterceptionMode
 import top.yukonga.miuix.kmp.utils.PagerNavigationSpringSpec
 import top.yukonga.miuix.kmp.utils.pagerGestureOverride
 
+/** Our style -> the FoxSu style that renders it. Only the three FoxSu values are real inputs. */
+private fun UiMode.toFoxSuMode(): FoxSuUiMode = when (this) {
+    UiMode.Fresh -> FoxSuUiMode.Fresh
+    UiMode.Glass -> FoxSuUiMode.Glass
+    UiMode.Nocturne -> FoxSuUiMode.Nocturne
+    else -> FoxSuUiMode.Fresh
+}
+
 open class MainActivity : ComponentActivity() {
 
     private val intentChannel = Channel<Intent>(capacity = Channel.BUFFERED)
@@ -226,6 +236,19 @@ open class MainActivity : ComponentActivity() {
             val selectedMainPage by viewModel.selectedMainPage.collectAsStateWithLifecycle()
             val appSettings = uiState.appSettings
             val uiMode = uiState.uiMode
+            // FoxSu styles hand the whole window to FoxSuHost. The entry in its corner comes
+            // back into this very composition, where LocalUiMode is still the FoxSu style, so
+            // our settings page renders with the current style (Fresh/Glass/Nocturne fall into
+            // the miuix arms of every `when`).
+            var managerSettingsOpen by remember { mutableStateOf(false) }
+            if (uiMode.isFoxSuStyle && !managerSettingsOpen) {
+                FoxSuHost(
+                    mode = uiMode.toFoxSuMode(),
+                    onOpenManagerSettings = { managerSettingsOpen = true },
+                )
+                SideEffect { contentReady = true }
+                return@setContent
+            }
             // The picture is the mode: no picture is the light app, a picture is the dark one.
             val hasWallpaper = rememberWallpaperSet()
             val themeSettings = if (uiMode == UiMode.Miuix) appSettings.withWallpaperMode(hasWallpaper) else appSettings
@@ -267,7 +290,8 @@ open class MainActivity : ComponentActivity() {
                 }
             }
 
-            val navigator = rememberNavigator(Route.Main)
+            // Opening the manager settings from a FoxSu style starts this shell on Settings.
+            val navigator = rememberNavigator(if (managerSettingsOpen) Route.Settings else Route.Main)
             val systemDensity = LocalDensity.current
             val density = remember(systemDensity, uiState.pageScale) {
                 Density(systemDensity.density * uiState.pageScale, systemDensity.fontScale)
@@ -319,7 +343,11 @@ open class MainActivity : ComponentActivity() {
                             backStack = navigator.backStack,
                             effects = NavDisplayEffects(cornerClipRadius = rememberNavSystemCornerRadius()),
                             onBack = {
-                                when (val top = navigator.current()) {
+                                // Back at the root of the settings opened from a FoxSu style
+                                // closes the overlay and returns to that style.
+                                if (managerSettingsOpen && navigator.current() is Route.Settings) {
+                                    managerSettingsOpen = false
+                                } else when (val top = navigator.current()) {
                                     is Route.TemplateEditor -> {
                                         if (!top.readOnly) {
                                             navigator.setResult("template_edit", true)
@@ -385,7 +413,7 @@ open class MainActivity : ComponentActivity() {
                             containerColor = MaterialTheme.colorScheme.surfaceContainer
                         ) { navDisplay() }
 
-                        UiMode.Miuix, UiMode.MiuixStock -> Scaffold { navDisplay() }
+                        UiMode.Miuix, UiMode.MiuixStock, UiMode.Fresh, UiMode.Glass, UiMode.Nocturne -> Scaffold { navDisplay() }
                     }
                     SideEffect { contentReady = true }
                 }
@@ -523,7 +551,7 @@ fun MainScreen(
     val uiMode = LocalUiMode.current
     val surfaceColor = when (uiMode) {
         UiMode.Material -> MaterialTheme.colorScheme.surface // Blur is not used in Material, this is just a placeholder
-        UiMode.Miuix, UiMode.MiuixStock -> MiuixTheme.colorScheme.surface
+        UiMode.Miuix, UiMode.MiuixStock, UiMode.Fresh, UiMode.Glass, UiMode.Nocturne -> MiuixTheme.colorScheme.surface
     }
     val blurBackdrop = rememberBlurBackdrop(enableBlur)
 
@@ -626,7 +654,7 @@ fun MainScreen(
                         }
                     }
                 }
-                UiMode.Miuix -> Scaffold { _ ->
+                UiMode.Miuix, UiMode.Fresh, UiMode.Glass, UiMode.Nocturne -> Scaffold { _ ->
                     // The home's backdrop, re-read whenever the picture is replaced.
                     val wallpaperContext = LocalContext.current
                     val wallpaperVersion = HomeWallpaperStore.version
@@ -918,7 +946,7 @@ fun MainScreen(
                     pagerContent(innerPadding.calculateBottomPadding())
                 }
 
-                UiMode.Miuix, UiMode.MiuixStock -> Scaffold(bottomBar = bottomBar) { innerPadding ->
+                UiMode.Miuix, UiMode.MiuixStock, UiMode.Fresh, UiMode.Glass, UiMode.Nocturne -> Scaffold(bottomBar = bottomBar) { innerPadding ->
                     pagerContent(innerPadding.calculateBottomPadding())
                 }
             }

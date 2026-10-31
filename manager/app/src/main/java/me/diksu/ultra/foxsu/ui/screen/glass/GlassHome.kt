@@ -131,14 +131,15 @@ fun GlassHome(
                 )
             }
         }
-        // 越狱模式入口：真实启动 MagicaService（条件与 Fresh / Miuix / Nocturne 一致）
+        // 越狱入口：只触发我们的实现（JailbreakBridge → AutoEscalation）；
+        // 条件与 Fresh / Miuix / Nocturne 一致。
         if (state.ksuVersion == null && state.kernelVersion.isGKI() && state.isSELinuxPermissive) {
             item {
                 GlassNCard(
                     modifier = Modifier.fillMaxWidth(),
                     iconRes = R.drawable.fx_ic_d_terminal,
-                    title = stringResource(R.string.fx_home_jailbreak),
-                    value = stringResource(R.string.fx_jailbreak_mode),
+                    title = stringResource(R.string.home_jailbreak),
+                    value = stringResource(R.string.jailbreak_mode),
                     caption = stringResource(R.string.fx_fresh_home_jailbreak_sub),
                     accent = glassTokens().amber,
                     onClick = { actions.onJailbreakClick() },
@@ -524,7 +525,7 @@ fun GlassHeroCard(
                     // 越狱模式：仅在真实越狱时显示
                     if (hero.jailbreakMode) {
                         GlassTag(
-                            text = stringResource(R.string.fx_glass_tag_jailbreak),
+                            text = stringResource(R.string.jailbreak_mode),
                             color = t.cyan,
                             bgAlpha = 0.12f,
                         )

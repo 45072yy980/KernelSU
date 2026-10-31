@@ -1,6 +1,5 @@
 package me.diksu.ultra.foxsu.ui.screen.home
 
-import android.content.Intent
 import android.widget.Toast
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -22,12 +21,11 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.diksu.ultra.R
 import me.diksu.ultra.foxsu.data.settings.CustomizationStore
-import me.diksu.ultra.foxsu.magica.MagicaService
+import me.diksu.ultra.foxsu.ui.FoxSuJailbreakDialog
 import me.diksu.ultra.foxsu.ui.LocalMainPagerState
 import me.diksu.ultra.foxsu.ui.LocalUiMode
 import me.diksu.ultra.foxsu.ui.UiMode
@@ -42,7 +40,6 @@ import me.diksu.ultra.foxsu.ui.screen.flash.FlashIt
 import me.diksu.ultra.foxsu.ui.util.LkmSelection
 import me.diksu.ultra.foxsu.ui.util.checkNewVersion
 import me.diksu.ultra.foxsu.ui.viewmodel.HomeViewModel
-import kotlin.time.Duration.Companion.milliseconds
 
 @Composable
 fun HomePager(
@@ -66,6 +63,8 @@ fun HomePager(
     )
     val latestIsCurrentPage by rememberUpdatedState(isCurrentPage)
     val initialResumeHandled = rememberSaveable { mutableStateOf(false) }
+    // 越狱对话框的开关：五套 FoxSu 皮肤共用同一个入口，所以状态放在这里。
+    var showJailbreak by rememberSaveable { mutableStateOf(false) }
 
     var hasActivated by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(isCurrentPage) {
@@ -86,19 +85,10 @@ fun HomePager(
     val actions = HomeActions(
         onInstallClick = { navigator.push(Route.Install) },
         onOpenUrl = uriHandler::openUri,
-        onJailbreakClick = {
-            loadingDialog.showLoading()
-            context.startService(Intent(context, MagicaService::class.java))
-            // Manager will be force-stopped and restarted by late-load on success.
-            // If that doesn't happen within timeout, jailbreak likely failed.
-            scope.launch(Dispatchers.IO) {
-                delay(30_000.milliseconds)
-                withContext(Dispatchers.Main) {
-                    loadingDialog.hide()
-                    Toast.makeText(context, R.string.fx_jailbreak_timeout, Toast.LENGTH_LONG).show()
-                }
-            }
-        },
+        // 越狱入口：FoxSu 首页只负责"点一下"，真正的逻辑全部经 JailbreakBridge
+        // 落到我们的 AutoEscalation（ghostlock → DirtyFrag）。
+        // 原先这里直接启动 FoxSu 自己的 magica 服务，那条触发链已删除。
+        onJailbreakClick = { showJailbreak = true },
         onCheckUpdate = {
             scope.launch {
                 loadingDialog.showLoading()
@@ -205,4 +195,10 @@ fun HomePager(
             }
         }
     }
+
+    // 越狱对话框放在皮肤分派之外：五套 FoxSu 首页共用同一个入口，逻辑也只有这一份。
+    FoxSuJailbreakDialog(
+        show = showJailbreak,
+        onDismiss = { showJailbreak = false },
+    )
 }

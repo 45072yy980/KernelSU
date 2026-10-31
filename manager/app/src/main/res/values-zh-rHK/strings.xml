@@ -390,4 +390,5 @@
     <string name="settings_section_privacy">隱私</string>
     <string name="settings_section_about">關於</string>
     <string name="settings_section_danger">危險操作</string>
+    <string name="foxsu_manager_settings">管理器設定</string>
 </resources>
