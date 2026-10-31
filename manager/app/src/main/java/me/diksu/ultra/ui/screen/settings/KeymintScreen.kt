@@ -168,7 +168,7 @@ fun KeymintScreen() {
     )
 
     when (LocalUiMode.current) {
-        UiMode.Miuix, UiMode.MiuixStock -> KeymintMiuix(groups, onBack)
+        UiMode.Miuix, UiMode.MiuixStock, UiMode.Themed -> KeymintMiuix(groups, onBack)
         UiMode.Material -> KeymintMaterial(groups, onBack)
     }
 
@@ -1017,7 +1017,7 @@ private fun Loading() {
     Box(modifier = Modifier.fillMaxWidth().height(72.dp), contentAlignment = Alignment.Center) {
         when (LocalUiMode.current) {
             UiMode.Material -> CircularProgressIndicator()
-            UiMode.Miuix, UiMode.MiuixStock -> InfiniteProgressIndicator()
+            UiMode.Miuix, UiMode.MiuixStock, UiMode.Themed -> InfiniteProgressIndicator()
         }
     }
 }
@@ -1030,7 +1030,7 @@ private fun RowMessage(message: String) {
         .padding(horizontal = 4.dp, vertical = 12.dp)
     when (LocalUiMode.current) {
         // The Material one draws black inside a Miuix dialog: no Material theme is in scope there.
-        UiMode.Miuix, UiMode.MiuixStock -> MiuixText(text = message, color = colorScheme.onSurface, modifier = modifier)
+        UiMode.Miuix, UiMode.MiuixStock, UiMode.Themed -> MiuixText(text = message, color = colorScheme.onSurface, modifier = modifier)
         UiMode.Material -> Text(text = message, modifier = modifier)
     }
 }

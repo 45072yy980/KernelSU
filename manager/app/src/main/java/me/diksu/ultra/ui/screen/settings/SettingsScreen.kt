@@ -59,12 +59,9 @@ fun SettingPager(
         onSetCheckModuleUpdate = viewModel::setCheckModuleUpdate,
         onOpenTheme = { navigator.push(Route.ColorPalette) },
         onSetUiModeIndex = { index ->
-            val mode = when (index) {
-                0 -> UiMode.Miuix
-                1 -> UiMode.MiuixStock
-                else -> UiMode.Material
-            }
-            viewModel.setUiMode(mode.value)
+            // Index into the same list the pickers render (UiMode.entries). The old
+            // 0/1/else mapping silently turned any further style into Material.
+            UiMode.entries.getOrNull(index)?.let { viewModel.setUiMode(it.value) }
         },
         onOpenProfileTemplate = { navigator.push(Route.AppProfileTemplate) },
         onOpenBasicSettings = { navigator.push(Route.BasicSettings) },
@@ -124,7 +121,7 @@ fun SettingPager(
     }
 
     when (LocalUiMode.current) {
-        UiMode.Miuix -> SettingPagerMiuix(uiState, actions, bottomInnerPadding)
+        UiMode.Miuix, UiMode.Themed -> SettingPagerMiuix(uiState, actions, bottomInnerPadding)
         UiMode.MiuixStock -> SettingPagerMiuixStock(uiState, actions, bottomInnerPadding)
         UiMode.Material -> SettingPagerMaterial(uiState, actions, bottomInnerPadding)
     }

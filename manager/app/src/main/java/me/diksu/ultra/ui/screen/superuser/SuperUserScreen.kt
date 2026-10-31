@@ -84,7 +84,7 @@ fun SuperUserPager(
     )
 
     when (LocalUiMode.current) {
-        UiMode.Miuix, UiMode.MiuixStock -> SuperUserPagerMiuix(
+        UiMode.Miuix, UiMode.MiuixStock, UiMode.Themed -> SuperUserPagerMiuix(
             uiState = uiState,
             actions = actions,
             bottomInnerPadding = bottomInnerPadding,

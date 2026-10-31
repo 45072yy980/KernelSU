@@ -48,6 +48,7 @@ import me.diksu.ultra.ui.util.installBoot
 import me.diksu.ultra.ui.util.restoreBoot
 import me.diksu.ultra.ui.util.uninstallPermanently
 import me.diksu.ultra.ui.isMiuixFamily
+import me.diksu.ultra.ui.isMiuixLook
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -340,7 +341,7 @@ fun JailbreakFlashWarningDialog(
         stringResource(R.string.install_next)
     }
 
-    if (LocalUiMode.current == UiMode.Miuix) {
+    if (LocalUiMode.current.isMiuixLook) {
         OverlayDialog(
             show = true,
             title = stringResource(android.R.string.dialog_alert_title),

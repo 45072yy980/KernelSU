@@ -323,7 +323,7 @@ fun InstallScreen() {
     )
 
     when (LocalUiMode.current) {
-        UiMode.Miuix, UiMode.MiuixStock -> InstallScreenMiuix(state, actions, miuixSnackbarHost)
+        UiMode.Miuix, UiMode.MiuixStock, UiMode.Themed -> InstallScreenMiuix(state, actions, miuixSnackbarHost)
         UiMode.Material -> InstallScreenMaterial(state, actions, snackbarHost)
     }
 }

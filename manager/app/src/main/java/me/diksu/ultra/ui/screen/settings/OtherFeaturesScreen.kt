@@ -236,7 +236,7 @@ fun OtherFeaturesScreen() {
             onSoftReboot = onSoftReboot,
             onSoftRebootHidden = onSoftRebootHidden,
         )
-        UiMode.Miuix, UiMode.MiuixStock -> OtherFeaturesMiuix(
+        UiMode.Miuix, UiMode.MiuixStock, UiMode.Themed -> OtherFeaturesMiuix(
             onBack = onBack,
             onOpenKeymint = onOpenKeymint,
             onHideAppList = onHideAppList,

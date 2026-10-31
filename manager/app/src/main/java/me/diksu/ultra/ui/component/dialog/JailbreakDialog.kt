@@ -38,7 +38,7 @@ fun JailbreakDialog(
     onCancel: () -> Unit,
 ) {
     when (LocalUiMode.current) {
-        UiMode.Miuix, UiMode.MiuixStock ->
+        UiMode.Miuix, UiMode.MiuixStock, UiMode.Themed ->
             JailbreakDialogMiuix(show, onExploit, onDirtyFrag, onManualInstall, onCancel)
         UiMode.Material -> JailbreakDialogMaterial(show, onExploit, onDirtyFrag, onManualInstall, onCancel)
     }

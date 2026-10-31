@@ -228,7 +228,7 @@ open class MainActivity : ComponentActivity() {
             val uiMode = uiState.uiMode
             // The picture is the mode: no picture is the light app, a picture is the dark one.
             val hasWallpaper = rememberWallpaperSet()
-            val themeSettings = if (uiMode == UiMode.Miuix) appSettings.withWallpaperMode(hasWallpaper) else appSettings
+            val themeSettings = if (uiMode.isMiuixLook) appSettings.withWallpaperMode(hasWallpaper) else appSettings
             val darkMode = themeSettings.colorMode.isDark || (themeSettings.colorMode.isSystem && isSystemInDarkTheme())
 
             DisposableEffect(darkMode) {
@@ -254,7 +254,7 @@ open class MainActivity : ComponentActivity() {
                 val window = hostActivity?.window
                 val controller = window?.let { WindowCompat.getInsetsController(it, rootView) }
                 if (controller != null) {
-                    if (uiMode == UiMode.Miuix) {
+                    if (uiMode.isMiuixLook) {
                         controller.systemBarsBehavior =
                             WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
                         controller.hide(WindowInsetsCompat.Type.statusBars())
@@ -385,7 +385,7 @@ open class MainActivity : ComponentActivity() {
                             containerColor = MaterialTheme.colorScheme.surfaceContainer
                         ) { navDisplay() }
 
-                        UiMode.Miuix, UiMode.MiuixStock -> Scaffold { navDisplay() }
+                        UiMode.Miuix, UiMode.MiuixStock, UiMode.Themed -> Scaffold { navDisplay() }
                     }
                     SideEffect { contentReady = true }
                 }
@@ -523,7 +523,7 @@ fun MainScreen(
     val uiMode = LocalUiMode.current
     val surfaceColor = when (uiMode) {
         UiMode.Material -> MaterialTheme.colorScheme.surface // Blur is not used in Material, this is just a placeholder
-        UiMode.Miuix, UiMode.MiuixStock -> MiuixTheme.colorScheme.surface
+        UiMode.Miuix, UiMode.MiuixStock, UiMode.Themed -> MiuixTheme.colorScheme.surface
     }
     val blurBackdrop = rememberBlurBackdrop(enableBlur)
 
@@ -626,7 +626,7 @@ fun MainScreen(
                         }
                     }
                 }
-                UiMode.Miuix -> Scaffold { _ ->
+                UiMode.Miuix, UiMode.Themed -> Scaffold { _ ->
                     // The home's backdrop, re-read whenever the picture is replaced.
                     val wallpaperContext = LocalContext.current
                     val wallpaperVersion = HomeWallpaperStore.version
@@ -918,7 +918,7 @@ fun MainScreen(
                     pagerContent(innerPadding.calculateBottomPadding())
                 }
 
-                UiMode.Miuix, UiMode.MiuixStock -> Scaffold(bottomBar = bottomBar) { innerPadding ->
+                UiMode.Miuix, UiMode.MiuixStock, UiMode.Themed -> Scaffold(bottomBar = bottomBar) { innerPadding ->
                     pagerContent(innerPadding.calculateBottomPadding())
                 }
             }

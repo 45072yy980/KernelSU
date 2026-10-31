@@ -16,6 +16,7 @@ import me.diksu.ultra.ui.util.rememberWallpaperSet
 import me.diksu.ultra.ui.webui.MonetColorsProvider
 import me.diksu.ultra.ui.LocalUiMode
 import me.diksu.ultra.ui.UiMode
+import me.diksu.ultra.ui.isMiuixLook
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import top.yukonga.miuix.kmp.theme.LocalContentColor
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -82,7 +83,10 @@ fun MiuixKernelSUTheme(
                 }
             }
             MonetColorsProvider.UpdateCss()
-            if (LocalUiMode.current == UiMode.Miuix) {
+            // isMiuixLook, not isMiuixFamily: 原版 (MiuixStock) keeps the theme's own text
+            // colours, while a custom theme rides along with 美化版 until its tokens carry
+            // their own typography.
+            if (LocalUiMode.current.isMiuixLook) {
                 // The picture decides how the text reads, and it does so for everything the app draws —
                 // a page, a pushed screen, a dialog. With one the app is the dark one, where the greys
                 // the theme hands out are too dim: the text climbs to the bright tint the home's own
@@ -110,16 +114,35 @@ fun MiuixKernelSUTheme(
                     CompositionLocalProvider(
                         LocalContentColor provides MiuixTheme.colorScheme.onBackground,
                     ) {
-                        content()
+                        ProvideThemeTokens(content)
                     }
                 }
             } else {
                 CompositionLocalProvider(
                     LocalContentColor provides MiuixTheme.colorScheme.onBackground,
                 ) {
-                    content()
+                    ProvideThemeTokens(content)
                 }
             }
         }
     )
+}
+
+/**
+ * Hands the current tokens to everything below when the custom-theme style is active.
+ *
+ * The three shipped styles deliberately skip the provider: `LocalThemeTokens` then keeps
+ * its default value, which is what the Miuix screens already hard-code, so their rendering
+ * cannot move. Tokens are read by the components we draw ourselves; the plan for that layer
+ * is `docs/theme-freedom-plan.md` §2.
+ */
+@Composable
+private fun ProvideThemeTokens(content: @Composable () -> Unit) {
+    if (LocalUiMode.current == UiMode.Themed) {
+        CompositionLocalProvider(LocalThemeTokens provides ThemeTokens()) {
+            content()
+        }
+    } else {
+        content()
+    }
 }

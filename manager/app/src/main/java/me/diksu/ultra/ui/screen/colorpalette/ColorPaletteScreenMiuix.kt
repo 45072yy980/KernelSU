@@ -249,7 +249,7 @@ fun ColorPaletteScreenMiuix(
                         OverlayDropdownPreference(
                             title = stringResource(id = R.string.settings_ui_mode),
                             summary = stringResource(id = R.string.settings_ui_mode_summary),
-                            items = UiMode.entries.map { it.displayName },
+                            items = UiMode.entries.map { stringResource(it.labelRes) },
                             startAction = {
                                 Icon(
                                     Icons.Rounded.DisplaySettings,

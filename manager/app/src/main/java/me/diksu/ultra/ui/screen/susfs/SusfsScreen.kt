@@ -97,7 +97,7 @@ fun SusfsScreen() {
     var pendingStatic by remember { mutableStateOf(false) }
 
     when (LocalUiMode.current) {
-        UiMode.Miuix, UiMode.MiuixStock -> SusfsMiuix(
+        UiMode.Miuix, UiMode.MiuixStock, UiMode.Themed -> SusfsMiuix(
             state = state,
             onBack = onBack,
             onRefresh = viewModel::refresh,

@@ -273,4 +273,8 @@
     <string name="settings_section_privacy">隱私</string>
     <string name="settings_section_about">關於</string>
     <string name="settings_section_danger">危險操作</string>
+    <string name="ui_mode_name_miuix">miuix(美化版)</string>
+    <string name="ui_mode_name_miuix_stock">miuix(原版)</string>
+    <string name="ui_mode_name_material">Material 3</string>
+    <string name="ui_mode_name_themed">自訂主題</string>
 </resources>

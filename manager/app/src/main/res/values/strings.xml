@@ -326,6 +326,13 @@
     <string name="settings_key_color_default">Default</string>
     <string name="settings_ui_mode">UI Style</string>
     <string name="settings_ui_mode_summary">Choose the interface style.</string>
+    <!-- Style names. The three shipped styles keep the literals they have always shown,
+         in every locale, so switching the picker over to resources cannot change their
+         text; translating those three is a separate, visible change. -->
+    <string name="ui_mode_name_miuix">miuix(美化版)</string>
+    <string name="ui_mode_name_miuix_stock">miuix(原版)</string>
+    <string name="ui_mode_name_material">Material 3</string>
+    <string name="ui_mode_name_themed">Custom theme</string>
     <string name="settings_page_scale">Page Scale</string>
     <string name="settings_page_scale_summary">Adjust the global display scale.</string>
     <string name="settings_module_description_max_lines">Module description max lines</string>

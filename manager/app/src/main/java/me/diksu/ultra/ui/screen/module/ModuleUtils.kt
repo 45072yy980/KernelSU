@@ -112,7 +112,7 @@ fun ExpandableDescriptionText(
                 overflow = overflow,
             )
 
-            UiMode.Miuix -> MiuixText(
+            UiMode.Miuix, UiMode.Themed -> MiuixText(
                 text = text,
                 color = color,
                 style = style ?: MiuixTheme.textStyles.main,

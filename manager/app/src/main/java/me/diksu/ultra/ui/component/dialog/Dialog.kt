@@ -309,7 +309,7 @@ fun rememberLoadingDialog(): LoadingDialogHandle {
     val coroutineScope = rememberCoroutineScope()
 
     when (LocalUiMode.current) {
-        UiMode.Miuix, UiMode.MiuixStock -> LoadingDialogMiuix(visible)
+        UiMode.Miuix, UiMode.MiuixStock, UiMode.Themed -> LoadingDialogMiuix(visible)
         UiMode.Material -> LoadingDialogMaterial(visible)
     }
 
@@ -336,7 +336,7 @@ private fun rememberConfirmDialog(visuals: ConfirmDialogVisuals, callback: Confi
     )
 
     when (LocalUiMode.current) {
-        UiMode.Miuix, UiMode.MiuixStock -> ConfirmDialogMiuix(
+        UiMode.Miuix, UiMode.MiuixStock, UiMode.Themed -> ConfirmDialogMiuix(
             handle.visuals,
             confirm = { coroutineScope.launch { resultChannel.send(ConfirmResult.Confirmed) } },
             dismiss = { coroutineScope.launch { resultChannel.send(ConfirmResult.Canceled) } },

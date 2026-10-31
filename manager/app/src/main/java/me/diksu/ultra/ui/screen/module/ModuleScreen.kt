@@ -198,7 +198,7 @@ fun ModulePager(
     )
 
     when (uiMode) {
-        UiMode.Miuix, UiMode.MiuixStock -> ModulePagerMiuix(
+        UiMode.Miuix, UiMode.MiuixStock, UiMode.Themed -> ModulePagerMiuix(
             uiState = rawUiState,
             confirmDialogState = rawUiState.confirmDialogState,
             moduleEvent = viewModel.moduleEvent,

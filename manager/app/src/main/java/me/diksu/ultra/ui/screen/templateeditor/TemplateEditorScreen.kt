@@ -130,7 +130,7 @@ fun TemplateEditorScreen(template: TemplateViewModel.TemplateInfo, readOnly: Boo
     )
 
     when (uiMode) {
-        UiMode.Miuix, UiMode.MiuixStock -> TemplateEditorScreenMiuix(
+        UiMode.Miuix, UiMode.MiuixStock, UiMode.Themed -> TemplateEditorScreenMiuix(
             state = uiState,
             actions = actions,
         )
