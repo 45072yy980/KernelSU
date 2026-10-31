@@ -1,161 +1,414 @@
+#!/usr/bin/env node
 /**
- * dsha-diksu-git 自测：用真实临时仓库跑一遍工具，不依赖网络与 DSH 运行时。
- * 运行：node test/run-tests.mjs
+ * dsha-diksu-git 自测：只依赖 node 内建 + 本机 git，不装 DSH 也能跑。
+ *
+ *   node test/run-tests.mjs
+ *
+ * 覆盖两层：
+ * 1) core.js 的纯函数与解析（参数校验、porcelain -z、审计规则、版本号、lossless、token 解析）；
+ * 2) 临时 git 仓库上的真实调用（status / commit / tag / 发布说明 / 审计 / 定位仓库 / 分支 / stash）。
  */
-import { mkdtemp, writeFile, readFile, mkdir, rm } from 'node:fs/promises'
+import assert from 'node:assert/strict'
+import { mkdtemp, writeFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { execFileSync } from 'node:child_process'
-import * as plugin from '../lib/index.js'
+import process from 'node:process'
 
-const root = await mkdtemp(join(tmpdir(), 'diksu-git-test-'))
-const repo = join(root, 'repo')
-const remote = join(root, 'remote.git')
-const clone = join(root, 'clone')
-const env = { ...process.env, DSH_GIT_TOKEN: 'test-token-not-real' }
-process.env.DSH_GIT_TOKEN = 'test-token-not-real'
+import {
+  auditDiff,
+  auditSource,
+  auditStagedFiles,
+  buildReleaseNotes,
+  git,
+  gitLine,
+  inProgressOperations,
+  isProtectedBranch,
+  lossless,
+  mask,
+  parseStatusZ,
+  repoRoot,
+  repoSlug,
+  resolveToken,
+  run,
+  safeBranchName,
+  safePath,
+  safePaths,
+  safeRemoteName,
+  safeRevision,
+  safeTagName,
+  safeWorkflowName,
+  statusSummary,
+  truncateText,
+  unquoteGitPath,
+  versionCodeFor,
+  versionInfo,
+  writeRepoFile,
+} from '../lib/core.js'
 
-function sh(command, args, cwd = repo) {
-  return execFileSync(command, args, { cwd, encoding: 'utf8', env, stdio: ['ignore', 'pipe', 'pipe'] }).trim()
+const results = []
+let failed = 0
+
+function test(name, fn) {
+  try {
+    fn()
+    results.push(`  ✓ ${name}`)
+  } catch (error) {
+    failed += 1
+    results.push(`  ✗ ${name}\n      ${String(error?.message ?? error).split('\n').join('\n      ')}`)
+  }
 }
-function ok(condition, label) {
-  if (!condition) throw new Error(`断言失败：${label}`)
-  console.log(`  ✓ ${label}`)
+
+async function testAsync(name, fn) {
+  try {
+    await fn()
+    results.push(`  ✓ ${name}`)
+  } catch (error) {
+    failed += 1
+    results.push(`  ✗ ${name}\n      ${String(error?.message ?? error).split('\n').join('\n      ')}`)
+  }
 }
-function expectThrow(fn, label) {
-  return fn().then(
-    () => {
-      throw new Error(`断言失败（应当抛错）：${label}`)
+
+function section(title) {
+  results.push(`\n${title}`)
+}
+
+const throws = (fn, pattern) => assert.throws(fn, (error) => (pattern instanceof RegExp ? pattern.test(error.message) : true))
+
+// ────────────────────────────── 参数校验 ──────────────────────────────
+
+section('参数校验')
+
+test('safePath 接受仓库内相对路径并规范化', () => {
+  assert.equal(safePath('a/b.txt'), 'a/b.txt')
+  assert.equal(safePath('./a/b.txt'), 'a/b.txt')
+  assert.equal(safePath('a\\b'), 'a/b')
+  assert.equal(safePath('.'), '.')
+})
+
+test('safePath 拒绝绝对路径/上跳/NUL', () => {
+  throws(() => safePath('../etc/passwd'), /\.\./)
+  throws(() => safePath('/etc/passwd'), /绝对/)
+  throws(() => safePath('C:\\Windows\\x'), /绝对/)
+  throws(() => safePath(''))
+  throws(() => safePath('a\0b'))
+  assert.deepEqual(safePaths(['a', 'b/c']), ['a', 'b/c'])
+  throws(() => safePaths(['a', '../b']), /\.\./)
+  assert.deepEqual(safePaths('not-an-array'), [])
+})
+
+test('safeBranchName 拒绝 git 非法分支名', () => {
+  assert.equal(safeBranchName('feat/nested-1'), 'feat/nested-1')
+  for (const bad of ['-x', 'a b', 'a..b', 'a~b', 'a^b', 'a:b', 'a?b', 'a*b', 'a[b', 'x.lock', 'a/', 'a@{1}']) {
+    throws(() => safeBranchName(bad))
+  }
+})
+
+test('safeRemoteName 只放行安全字符', () => {
+  assert.equal(safeRemoteName('origin'), 'origin')
+  assert.equal(safeRemoteName('upstream-2'), 'upstream-2')
+  for (const bad of ['-x', '../y', 'a b', 'x;rm', 'a\0b', 'a/']) throws(() => safeRemoteName(bad))
+})
+
+test('safeRevision 拒绝选项注入', () => {
+  assert.equal(safeRevision('HEAD~1'), 'HEAD~1')
+  assert.equal(safeRevision('main...HEAD'), 'main...HEAD')
+  assert.equal(safeRevision('@{upstream}'), '@{upstream}')
+  for (const bad of ['--output=/tmp/x', '', 'a b', 'a\nb', '-x'.padEnd(600, 'a')]) throws(() => safeRevision(bad))
+})
+
+test('safeTagName / safeWorkflowName', () => {
+  assert.equal(safeTagName('v4.2.0-ultra'), 'v4.2.0-ultra')
+  throws(() => safeTagName('-v1'))
+  throws(() => safeTagName('v1 x'))
+  assert.equal(safeWorkflowName('build-manager.yml'), 'build-manager.yml')
+  assert.equal(safeWorkflowName('release.yaml'), 'release.yaml')
+  for (const bad of ['a.yml;rm -rf /', 'a.txt', 'sub/a.yml', '']) throws(() => safeWorkflowName(bad))
+})
+
+test('isProtectedBranch 支持通配前缀', () => {
+  const config = { protectedBranches: 'main, master,release/*,hotfix/*' }
+  assert.equal(isProtectedBranch(config, 'main'), true)
+  assert.equal(isProtectedBranch(config, 'release/4.2'), true)
+  assert.equal(isProtectedBranch(config, 'release'), false)
+  assert.equal(isProtectedBranch(config, 'feat/x'), false)
+})
+
+test('truncateText 按字节截断并加标记', () => {
+  const cut = truncateText('a'.repeat(50), 20)
+  assert.equal(cut.truncated, true)
+  assert.ok(cut.text.length < 50)
+  assert.match(cut.text, /已截断/)
+  assert.deepEqual(truncateText('short', 100), { text: 'short', truncated: false })
+})
+
+test('mask 只替换已知 token', () => {
+  const token = 'ghp_abcdefghijklmnopqrstuvwxyz0123456789'
+  const masked = mask(`token=${token}`, token)
+  assert.ok(!masked.includes(token))
+  assert.equal(mask('nothing', ''), 'nothing')
+  assert.equal(mask('nothing', undefined), 'nothing')
+})
+
+// ────────────────────────────── 输出与解析 ──────────────────────────────
+
+section('输出与解析')
+
+test('lossless 消掉 NaN/Infinity/undefined，避免 DSH "not lossless JSON"', () => {
+  assert.equal(lossless(Number.NaN), 0)
+  assert.equal(lossless(Infinity), 0)
+  assert.equal(lossless(undefined), undefined)
+  const out = lossless({ a: Number.NaN, b: undefined, c: [1, undefined, Infinity], d: new Date(0) })
+  assert.deepEqual(out, { a: 0, c: [1, null, 0], d: new Date(0).toISOString() })
+  assert.equal(lossless(Buffer.from('hi')), 'hi')
+  assert.doesNotThrow(() => JSON.parse(JSON.stringify(out)))
+})
+
+test('versionCodeFor 与仓库约定一致', () => {
+  assert.equal(versionCodeFor('v4.2.0-ultra', 5), 42005)
+  assert.equal(versionCodeFor('v1.0.0', 0), 10000)
+  assert.equal(versionCodeFor('4.2.0', 0), null)
+  assert.equal(versionCodeFor('', 0), null)
+  assert.equal(versionCodeFor('v4.2.0', Number.NaN), 42000)
+})
+
+test('parseStatusZ 解析状态/重命名/冲突/未跟踪', () => {
+  const raw = ['M  staged.txt', ' M unstaged.txt', '?? untracked.txt', 'R  renamed-new.txt', 'renamed-old.txt', 'UU conflict.txt', ''].join('\0')
+  const summary = parseStatusZ(raw)
+  assert.ok(summary.dirty.length > 0)
+  assert.deepEqual(summary.staged, ['M staged.txt', 'R renamed-new.txt ← renamed-old.txt'])
+  assert.deepEqual(summary.unstaged, ['M unstaged.txt'])
+  assert.deepEqual(summary.untracked, ['untracked.txt'])
+  assert.deepEqual(summary.conflicts, ['conflict.txt'])
+  assert.deepEqual(parseStatusZ(''), { staged: [], unstaged: [], untracked: [], conflicts: [], dirty: [], entries: [] })
+})
+
+test('auditDiff 命中 token/私钥/冲突标记，并报告大文件', () => {
+  const diff = [
+    'diff --git a/config.txt b/config.txt',
+    '+++ b/config.txt',
+    '@@ -0,0 +1,3 @@',
+    '+token = "ghp_abcdefghijklmnopqrstuvwxyz0123456789"',
+    'diff --git a/key.pem b/key.pem',
+    '+++ b/key.pem',
+    '@@ -0,0 +1 @@',
+    '+-----BEGIN RSA PRIVATE KEY-----',
+    'diff --git a/x.txt b/x.txt',
+    '+++ b/x.txt',
+    '@@ -0,0 +1 @@',
+    '+<<<<<<< HEAD',
+  ].join('\n')
+  const report = auditDiff(diff, { maxFileMB: 2, largeFiles: [{ path: 'big.bin', sizeMB: 5 }] })
+  const text = report.findings.join('\n')
+  assert.match(text, /HIGH github-pat: config\.txt:1/)
+  assert.match(text, /HIGH private-key: key\.pem:1/)
+  assert.match(text, /HIGH conflict-marker: x\.txt:1/)
+  assert.match(text, /WARN large-file: big\.bin/)
+  assert.deepEqual(report.highPaths.sort(), ['config.txt', 'key.pem', 'x.txt'])
+  assert.doesNotMatch(text, /ghp_abcdefghij/)
+})
+
+test('unquoteGitPath 还原空格 TAB 与 C 风格引号路径', () => {
+  assert.equal(unquoteGitPath('se cret.txt\t'), 'se cret.txt')
+  assert.equal(unquoteGitPath('plain.txt'), 'plain.txt')
+  // "b/\346\226\207\344\273\266.txt" 是 core.quotePath 对「文档.txt」的编码
+  assert.equal(unquoteGitPath('"b/\\346\\226\\207\\344\\273\\266.txt"'), 'b/文件.txt')
+})
+
+// ────────────────────────────── token 解析 ──────────────────────────────
+
+section('token 解析（"设了环境变量却读不到"的核心）')
+
+await testAsync('插件配置里的 token 优先', async () => {
+  const hit = await resolveToken({ token: ' config-token ', tokenEnv: 'DSH_GIT_TOKEN', tokenFile: '~/nope' }, undefined)
+  assert.equal(hit.value, 'config-token')
+  assert.equal(hit.source, '插件配置 token')
+})
+
+await testAsync('token 文件次之', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'diksu-token-'))
+  const file = join(dir, 'token')
+  await writeFile(file, 'file-token\n')
+  try {
+    const hit = await resolveToken({ token: '', tokenFile: file }, undefined)
+    assert.equal(hit.value, 'file-token')
+    assert.match(hit.source, /文件/)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+await testAsync('凭据服务（ctx.credentials）优先于进程环境', async () => {
+  const credentials = {
+    async resolve(name) {
+      return name === 'DSH_GIT_TOKEN' ? { value: 'cred-token' } : undefined
     },
-    (error) => {
-      console.log(`  ✓ ${label} → ${String(error.message).split('\n')[0]}`)
-      return error
+    async describe() {
+      return { set: true }
     },
+  }
+  const hit = await resolveToken({ token: '', tokenFile: '~/nope', tokenEnv: 'DSH_GIT_TOKEN' }, credentials)
+  assert.equal(hit.value, 'cred-token')
+  assert.match(hit.source, /凭据/)
+})
+
+await testAsync('四层都没有时报错里带可照做的指引', async () => {
+  await assert.rejects(
+    () => resolveToken({ token: '', tokenFile: '~/nope', tokenEnv: 'DSH_GIT_TOKEN_UNSET_X' }, undefined),
+    /DSH_GIT_TOKEN_UNSET_X|\.dsh/,
   )
-}
+})
 
-await mkdir(repo, { recursive: true })
-await mkdir(remote, { recursive: true })
-sh('git', ['init', '-b', 'main'])
-sh('git', ['config', 'user.name', 'tester'])
-sh('git', ['config', 'user.email', 'tester@localhost'])
-await writeFile(join(repo, 'a.txt'), 'line1\nline2\nline3\n')
-sh('git', ['add', '.'])
-sh('git', ['commit', '-m', 'feat(core): 初始提交'])
-sh('git', ['init', '--bare', remote])
-sh('git', ['remote', 'add', 'origin', remote])
+// ────────────────────────────── 真实 git 仓库 ──────────────────────────────
 
-const tools = new Map()
-plugin.apply(
-  { tools: { register: (tool) => tools.set(tool.name, tool) }, logger: { info: () => {} } },
-  {
+section('真实仓库集成')
+
+const probe = await run('git', ['--version'])
+if (probe.code !== 0) {
+  results.push('  ! 本机没有 git，跳过集成测试')
+} else {
+  const repo = await mkdtemp(join(tmpdir(), 'diksu-repo-'))
+  const config = {
     repoPath: repo,
     remote: 'origin',
-    tokenEnv: 'DSH_GIT_TOKEN',
-    apiBase: 'https://api.github.com',
-    hostsPin: '',
-    hostsFile: '/etc/hosts',
     authorName: 'dsh-agent',
     authorEmail: 'dsh-agent@localhost',
-    maxAttempts: 1,
-    retryDelayMs: 10,
-    protectedBranches: 'main,master,develop,trunk,release/*,hotfix/*',
-    maxDiffBytes: 200_000,
-    auditMaxFileMB: 2,
-  },
-)
-const call = (name, args = {}) => tools.get(name).execute(args, {})
+    protectedBranches: 'main,master',
+  }
+  const gitOk = async (args, options) => {
+    const result = await git(config, args, options)
+    assert.equal(result.code, 0, `git ${args.join(' ')} 失败：${result.stderr}`)
+    return result
+  }
 
-console.log('1. git_status / git_push 设置上游')
-let status = await call('git_status')
-ok(status.branch === 'main', '当前分支 main')
-ok(status.upstream === '', '初始没有上游')
-let push = await call('git_push')
-ok(push.ok === true, 'git_push 成功并设置上游')
-status = await call('git_status')
-ok(status.upstream === 'origin/main', '上游已设置为 origin/main')
+  await testAsync('初始化临时仓库', async () => {
+    const init = await run('git', ['init', '-q', '-b', 'main'], { cwd: repo })
+    assert.equal(init.code, 0, init.stderr)
+  })
 
-console.log('2. git_diff / git_stage')
-await writeFile(join(repo, 'a.txt'), 'line1\nline2 changed\nline3\n')
-let diff = await call('git_diff')
-ok(diff.files.length === 1 && diff.patch.includes('line2 changed'), '未暂存 diff 能看到改动')
-await call('git_stage', { paths: ['a.txt'] })
-diff = await call('git_diff', { staged: true })
-ok(diff.patch.includes('line2 changed'), 'staged diff 能看到改动')
-await call('git_stage', { paths: ['a.txt'], unstage: true })
-ok((await call('git_diff', { staged: true })).files.length === 0, '取消暂存生效')
+  await testAsync('repoRoot 认得配置的 repoPath', async () => {
+    assert.equal(await repoRoot(config), repo)
+  })
 
-console.log('3. git_audit / git_commit 拦截 secret')
-await writeFile(join(repo, 'secret.txt'), 'token = ghp_abcdefghijklmnopqrstuvwxyz0123456789\n')
-await call('git_stage', { paths: ['secret.txt'] })
-const audit = await call('git_audit', { scope: 'staged' })
-ok(audit.ok === false && audit.findings.some((item) => item.includes('github-pat')), '审计识别 GitHub PAT')
-await expectThrow(() => call('git_commit', { paths: ['secret.txt'], message: 'chore: 测试' }), '提交被审计拦截')
-const afterAudit = await call('git_diff', { staged: true })
-ok(afterAudit.files.length === 0, '高风险文件已被移出暂存区')
-await rm(join(repo, 'secret.txt'))
-await call('git_stage', { paths: ['a.txt'] })
-const commit = await call('git_commit', { paths: ['a.txt'], message: 'fix(core): 修改第二行' })
-ok(commit.committed === true && commit.hash.length >= 7, '正常提交成功')
-ok(commit.audit.length === 0, '正常提交审计无告警')
+  await testAsync('repoRoot 对非仓库目录报可执行的错', async () => {
+    const empty = await mkdtemp(join(tmpdir(), 'diksu-empty-'))
+    try {
+      await assert.rejects(() => repoRoot({ ...config, repoPath: empty }), /不是 git 仓库/)
+    } finally {
+      await rm(empty, { recursive: true, force: true })
+    }
+  })
 
-console.log('4. git_log / git_show / git_blame')
-const log = await call('git_log', { count: 5, withFiles: true })
-ok(log.total === 2 && log.commits[0].includes('fix(core)'), 'git_log 返回最近提交')
-const show = await call('git_show', { ref: 'HEAD', stat: true })
-ok(show.subject.includes('fix(core)') && show.stat.includes('a.txt'), 'git_show 返回元信息与统计')
-const blame = await call('git_blame', { path: 'a.txt', startLine: 1, endLine: 2 })
-ok(blame.lines.length === 2 && blame.lines[1].includes('dsh-agent'), 'git_blame 返回行级信息')
+  await testAsync('statusSummary 能看见未跟踪文件', async () => {
+    await writeFile(join(repo, 'a.txt'), 'hello\n')
+    const summary = await statusSummary(config)
+    assert.ok(summary.dirty.length > 0)
+    assert.deepEqual(summary.untracked, ['a.txt'])
+  })
 
-console.log('5. git_branch')
-await call('git_branch', { action: 'create', name: 'feature/x' })
-await call('git_branch', { action: 'switch', name: 'feature/x' })
-ok((await call('git_status')).branch === 'feature/x', '切换分支成功')
-await call('git_branch', { action: 'switch', name: 'main' })
-const deleted = await call('git_branch', { action: 'delete', name: 'feature/x' })
-ok(deleted.backupRef.startsWith('refs/backup/dsha-diksu-git/'), '删除分支前写入备份 ref')
-await expectThrow(() => call('git_branch', { action: 'delete', name: 'main' }), '受保护分支拒绝删除')
+  await testAsync('commit 注入作者身份并回读文件列表', async () => {
+    await gitOk(['add', '-A'])
+    const summary = await statusSummary(config)
+    assert.deepEqual(summary.staged, ['A a.txt'])
+    const commit = await git(config, ['commit', '-q', '-F', '-'], { withAuthor: true, input: 'feat(scope): 初始提交\n' })
+    assert.equal(commit.code, 0, commit.stderr)
+    const files = await gitLine(config, ['show', '--name-status', '--format=', 'HEAD'])
+    assert.match(files, /A\s+a\.txt/)
+    assert.equal(await gitLine(config, ['log', '-1', '--pretty=%an <%ae>']), 'dsh-agent <dsh-agent@localhost>')
+  })
 
-console.log('6. git_stash')
-await writeFile(join(repo, 'a.txt'), 'line1\nstash me\nline3\n')
-await call('git_stash', { action: 'save', message: '测试贮藏' })
-ok((await call('git_status')).dirty.length === 0, '贮藏后工作区干净')
-const stashList = await call('git_stash', { action: 'list' })
-ok(stashList.stashes.length === 1, '贮藏列表有 1 条')
-await call('git_stash', { action: 'pop' })
-ok((await readFile(join(repo, 'a.txt'), 'utf8')).includes('stash me'), 'pop 恢复改动')
-sh('git', ['checkout', '--', 'a.txt'])
+  await testAsync('versionInfo 无 tag 时返回 null 而不是 NaN', async () => {
+    const info = await versionInfo(config)
+    assert.equal(info.tag, '')
+    assert.equal(info.versionCode, null)
+    assert.equal(info.commitsAfterTag, null)
+    assert.doesNotThrow(() => JSON.parse(JSON.stringify(lossless(info))))
+  })
 
-console.log('7. git_sync fetch / pull')
-sh('git', ['push', 'origin', 'main'])
-sh('git', ['clone', '-b', 'main', remote, clone])
-sh('git', ['config', 'user.name', 'tester'], clone)
-sh('git', ['config', 'user.email', 'tester@localhost'], clone)
-await writeFile(join(clone, 'b.txt'), 'from clone\n')
-sh('git', ['add', '.'], clone)
-sh('git', ['commit', '-m', 'docs: 克隆端提交'], clone)
-sh('git', ['push', 'origin', 'main'], clone)
-const fetched = await call('git_sync', { action: 'fetch', prune: true })
-ok(fetched.behind === 1, 'fetch 后落后 1 个提交')
-const pulled = await call('git_sync', { action: 'pull' })
-ok(pulled.ok === true && pulled.behind === 0, 'pull --ff-only 成功')
-ok((await readFile(join(repo, 'b.txt'), 'utf8')).includes('from clone'), 'pull 拿到远端文件')
+  await testAsync('打 tag 后 versionInfo 算出 versionCode', async () => {
+    const tag = await git(config, ['tag', '-a', 'v4.2.0-ultra', '-m', 'release'], { withAuthor: true })
+    assert.equal(tag.code, 0, tag.stderr)
+    const info = await versionInfo(config)
+    assert.equal(info.tag, 'v4.2.0-ultra')
+    assert.equal(info.headTag, 'v4.2.0-ultra')
+    assert.equal(info.versionCode, 42000)
+    assert.equal(info.commitsAfterTag, 0)
+  })
 
-console.log('8. git_tag / git_release_notes / git_push tag')
-const tagged = await call('git_tag', { tag: 'v1.0.0-ultra', message: 'v1.0.0 测试' })
-ok(tagged.versionCode === 10000, 'versionCode = 10000')
-const tagPush = await call('git_push', { tag: 'v1.0.0-ultra' })
-ok(tagPush.ok === true, 'tag 推送成功')
-await writeFile(join(repo, 'c.txt'), 'release note\n')
-sh('git', ['add', '.'])
-sh('git', ['commit', '-m', 'feat(ui): 新增发布说明'])
-const notes = await call('git_release_notes', { from: 'v1.0.0-ultra', to: 'HEAD', version: 'v1.1.0' })
-ok(notes.markdown.includes('### 新功能') && notes.markdown.includes('新增发布说明'), '发布说明按类型分组')
-const written = await call('git_release_notes', { from: 'v1.0.0-ultra', to: 'HEAD', version: 'v1.1.0', writeTo: 'RELEASE_NOTES.md' })
-ok(written.path === 'RELEASE_NOTES.md' && (await readFile(join(repo, 'RELEASE_NOTES.md'), 'utf8')).includes('新增发布说明'), '发布说明写入文件')
+  await testAsync('发布说明按 conventional commit 分组', async () => {
+    await writeFile(join(repo, 'b.txt'), 'b\n')
+    await gitOk(['add', '-A'])
+    await gitOk(['commit', '-q', '-F', '-'], { withAuthor: true, input: 'fix: 修掉一个 bug\n' })
+    const notes = await buildReleaseNotes(config, 'v4.2.0-ultra', 'HEAD', 'v4.2.1-ultra')
+    assert.match(notes.markdown, /## v4\.2\.1-ultra/)
+    assert.match(notes.markdown, /修掉一个 bug/)
+    assert.equal(notes.commits.length, 1)
+    assert.equal(notes.commits[0].subject, 'fix: 修掉一个 bug')
+  })
 
-console.log('9. 受保护分支强推拦截')
-await expectThrow(() => call('git_push', { force: true }), '受保护分支 main 拒绝强推')
+  await testAsync('审计范围包含未跟踪文件内容', async () => {
+    await writeFile(join(repo, 'leak.txt'), 'token = "ghp_abcdefghijklmnopqrstuvwxyz0123456789"\n')
+    const source = await auditSource(config, 'worktree')
+    const report = auditDiff(source.diff, { maxFileMB: 2, largeFiles: source.largeFiles })
+    assert.match(report.findings.join('\n'), /HIGH github-pat: leak\.txt:1/)
+    await rm(join(repo, 'leak.txt'))
+  })
 
-console.log('\n全部测试通过')
-await rm(root, { recursive: true, force: true })
+  await testAsync('writeRepoFile 自动建父目录', async () => {
+    const path = await writeRepoFile(config, 'docs/release/notes.md', '# hi\n')
+    assert.equal(path, join(repo, 'docs/release/notes.md'))
+    await assert.rejects(() => writeRepoFile(config, '../../escape.md', 'x'), /\.\./)
+  })
+
+  await testAsync('repoSlug 解析带点仓库名', async () => {
+    await gitOk(['remote', 'add', 'origin', 'https://github.com/owner/repo.name.git'])
+    assert.equal(await repoSlug(config), 'owner/repo.name')
+  })
+
+  await testAsync('含空格文件的暂存审计能精确退回索引', async () => {
+    const name = 'se cret.txt'
+    await writeFile(join(repo, name), 'token = "ghp_abcdefghijklmnopqrstuvwxyz0123456789"\n')
+    await gitOk(['add', '-A'])
+    const report = await auditStagedFiles(config, [name])
+    assert.ok(report.highPaths.includes(name), JSON.stringify(report))
+    const reset = await git(config, ['reset', '--', ...report.highPaths])
+    assert.equal(reset.code, 0, reset.stderr)
+    const still = await gitLine(config, ['diff', '--cached', '--name-only', '-z'])
+    assert.ok(!still.split('\0').includes(name), `仍在索引：${still}`)
+    await rm(join(repo, name), { force: true })
+  })
+
+  await testAsync('分支：创建/切换/列表', async () => {
+    await gitOk(['branch', 'feat/x'])
+    const list = await gitLine(config, ['for-each-ref', '--format=%(refname:short)', 'refs/heads/'])
+    assert.match(list, /feat\/x/)
+    await gitOk(['switch', '-q', 'feat/x'])
+    assert.equal(await gitLine(config, ['rev-parse', '--abbrev-ref', 'HEAD']), 'feat/x')
+    await gitOk(['switch', '-q', 'main'])
+  })
+
+  await testAsync('stash：保存/列表/取回', async () => {
+    await writeFile(join(repo, 'a.txt'), 'hello again\n')
+    const save = await git(config, ['stash', 'push', '-u', '-m', 'wip'], { withAuthor: true })
+    assert.equal(save.code, 0, save.stderr)
+    const list = await gitLine(config, ['stash', 'list', '--pretty=format:%gd%x1f%s'])
+    assert.match(list, /wip/)
+    const pop = await git(config, ['stash', 'pop'])
+    assert.equal(pop.code, 0, pop.stderr)
+  })
+
+  await testAsync('inProgressOperations 干净仓库为空', async () => {
+    assert.deepEqual(await inProgressOperations(config), [])
+  })
+
+  await testAsync('清理临时仓库', async () => {
+    await rm(repo, { recursive: true, force: true })
+  })
+}
+
+// ────────────────────────────── 结果 ──────────────────────────────
+
+const total = results.filter((line) => /^ {2}[✓✗]/.test(line)).length
+process.stdout.write(`dsha-diksu-git 自测（node ${process.version}）\n`)
+process.stdout.write(results.join('\n') + '\n\n')
+process.stdout.write(`共 ${total} 项，失败 ${failed} 项\n`)
+process.exit(failed === 0 ? 0 : 1)

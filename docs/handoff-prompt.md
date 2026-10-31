@@ -31,8 +31,8 @@ git_push（推分支） → ci_dispatch（workflow_dispatch，可带 abi=arm64-v
 - **改完 Rust 记得 rustfmt**：4.1 就因为在 `#[cfg]` 属性下方插函数导致 `get_features` 重复定义 + 两处格式不符，连挂两次 CI。
 
 **② token 只能从环境变量走，不许出现在任何地方。**
-- 插件 `dsha-diksu-git` 1.1.0 已装好（18 个工具）：`git_status` / `git_diff` / `git_log` / `git_show` / `git_blame` / `git_stage` / `git_commit` / `git_branch` / `git_stash` / `git_sync` / `git_push` / `git_tag` / `git_release_notes` / `git_audit` / `ci_dispatch` / `ci_watch` / `ci_logs` / `release_publish`。
-- 它读 `DSH_GIT_TOKEN`（其次 `GITHUB_TOKEN` / `GH_TOKEN`）。**没有 token 就先去设置环境变量，不要在对话里贴 token，不要写进文件。**
+- 插件 `dsha-diksu-git` 2.0.0 已装好（19 个工具）：`git_status` / `git_diff` / `git_log` / `git_show` / `git_blame` / `git_stage` / `git_commit` / `git_branch` / `git_stash` / `git_sync` / `git_push` / `git_auth` / `git_tag` / `git_release_notes` / `git_audit` / `ci_dispatch` / `ci_watch` / `ci_logs` / `release_publish`。
+- token 走四层：插件配置 `token` → `~/.dsh/git-token`（或配置 `tokenFile`）→ DSH 凭据库（引用名 `DSH_GIT_TOKEN`）→ 环境变量 / `~/.dsh/.env`。**shell 里 `export` 到不了 harness 进程**，优先写 `~/.dsh/.env` 后重启，或用 `git_auth` 诊断。**不要在对话里贴 token。**
 - 需要直连不稳时，插件支持 `hostsPin`（临时改 hosts 并自动还原），不要手搓 askpass 脚本。
 - 插件源码随仓库保存了一份副本：`tools/dsha-diksu-git/`（安装方法见该目录 README）。
 - 上一轮的 PAT 已在对话中出现过明文，**必须吊销重发**（见 handoff 的 P0-1）。

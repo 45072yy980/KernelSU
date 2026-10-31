@@ -1,7 +1,7 @@
 {
   "name": "dsha-diksu-git",
-  "description": "Diksu Ultra 专用 git/CI/发布工具：token 只从环境变量读取，带提交审计、diff/log/branch/stash/sync、网络重试、产物护栏与 CI 编排",
-  "version": "1.1.0",
+  "description": "Diksu Ultra 专用 git/CI/发布工具（19 个）：仓库自动定位、四层 token 解析、提交审计、diff/log/branch/stash/sync/push、CI 编排与 Release 发布",
+  "version": "2.0.0",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
@@ -15,8 +15,14 @@
   "peerDependencies": {
     "@deepseek-ai/dsh-tools": "0.2.1-rc.2"
   },
+  "engines": {
+    "node": ">=20"
+  },
   "license": "MIT",
   "scripts": {
-    "test": "node test/run-tests.mjs"
+    "test": "node test/run-tests.mjs",
+    "test:registry": "node test/smoke-registry.mjs",
+    "test:schema": "node test/schema-check.mjs",
+    "deploy": "bash scripts/deploy.sh"
   }
 }
