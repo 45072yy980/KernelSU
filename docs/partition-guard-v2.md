@@ -24,8 +24,9 @@
 **`--force` 的新语义**：只跳过 🟡 的按键确认，**永不**放行 🔴。
 （旧行为是 `--force` 可以放行一切，本次收紧。）
 
-**何时启用**：与现状一致——越狱（late-load）模式**始终启用**；普通模式由设置项
-「系统分区保护」决定（安装时以 `KSU_PARTITION_GUARD=1` 传入）。
+**何时启用**：ksud **默认开启**扫描——越狱（late-load）模式始终开启；普通模式下管理器关闭设置项时
+显式传 `KSU_PARTITION_GUARD=0`，终端 / WebUI 安装没有这个变量时同样会扫描。
+（旧行为是"没有 `=1` 就不扫描"，导致普通模式下的终端与网页安装完全绕过守卫。）
 
 ---
 
@@ -38,7 +39,13 @@
    `service.sh`、`boot-completed.sh`、`late-load.sh`、`metainstall.sh`、`metamount.sh`
 2. 模块目录下**递归**所有 `*.sh`（含 `system/bin/*.sh`、`scripts/`、`bin/` 等子目录）
 3. **其它可执行脚本**：有 shebang（`#!` 开头）且无扩展名的文件（很多模块直接放 `system/bin/foo`）
-4. 单个文件上限 2 MiB，最多扫 200 个脚本（防 zip 炸弹）；超限时报告里注明"已截断"。
+4. 扫描预算：**最多 1000 个脚本、总量 32 MiB、递归深度 8**（防 zip 炸弹）。
+   **任一上限触发 ⇒ 等级至少为 🟡**：没法完整审计就不允许直接装。
+   （旧行为是"单文件只读前 2 MiB、只扫 200 个、截断只标注不影响判定"，等于把载荷放到文件尾部
+   或第 201 个脚本里就能绕过。总量预算比"单文件截断"更安全：不会在正常脚本内部留一段没扫的区域。）
+5. 固定脚本名是**软链**时要解析一跳目标并扫描（限模块目录内）；指向模块外的链接记一条 🟡。
+6. 安装脚本**生成**出来的模块脚本（如 `cp payload.txt service.sh`）要在安装结束后再扫一遍，
+   命中红就删掉暂存目录并拒绝——这些脚本要重启才执行，事后扫仍来得及。
 
 > 注意：`system/` 目录本身是 overlay，不碰真实分区；但 `system/` 里的**脚本**会被执行，
 > 所以照样要扫。"写 `$MODPATH/system/...`" 属于 🟢，不是 🟡。
@@ -54,8 +61,8 @@
 | R1 | 裸写块设备 | `dd ... of=/dev/block/...`、`> /dev/block/...`、`tee /dev/block/...`、`cp ... /dev/block/...`、`cat ... > /dev/block/...` | 直接把数据写进分区原始扇区，文件系统与校验值立刻损坏，**重启也修不回来**，只能重刷整机 |
 | R2 | 格式化 / 抹除 | `mkfs*`、`mke2fs`、`wipefs`、`blkdiscard`、`sgdisk`、`parted`、`sfdisk`、`e2fsck -y` 指向 `/dev/` | 抹掉分区元数据，整分区数据不可恢复 |
 | R3 | 刷镜像 | `fastboot flash`、`flash_image`、`nandwrite`、`flashcp`、`update_engine`、`payload.bin` 写入 | 覆盖 boot/system/vbmeta，**可能导致设备无法开机** |
-| R4 | 写引导分区 | 任何写操作目标匹配 `/dev/block/.../(boot\|init_boot\|vendor_boot\|dtbo\|vbmeta\|super\|aboot\|sbl1)` | 破坏引导链，是变砖概率最高的一类操作 |
-| R5 | 关闭 AVB / verity | `avbctl`、`disable-verity`、`set-avb`、`dm-verity ... disable` | 破坏 verified boot；OTA 会失败，部分机型直接拒绝启动 |
+| R4 | 写引导分区 | **写操作的目标**匹配 `/dev/block/.../(boot\|init_boot\|vendor_boot\|dtbo\|vbmeta\|super\|aboot\|sbl1)`（`of=`、`>`、`tee`、`cp/mv` 的目标）。**读**引导分区做备份（`dd if=… of=/sdcard/…`、`cp /dev/block/... /tmp/`）**不算红** | 破坏引导链，是变砖概率最高的一类操作 |
+| R5 | 关闭 AVB / verity | `avbctl`（写操作）、`disable-verity`、`set-avb`、`dm-verity ... disable`。**只读校验**（`avbtool verify_image` / `info_image`）不算红 | 破坏 verified boot；OTA 会失败，部分机型直接拒绝启动 |
 | R6 | 裸设备挂载写 | `mount … rw/remount … /dev/block/…`（只读挂载降为 Y6） | 绕过文件系统层直接改分区 |
 | R7 | 无法解析的块设备写入 | 变量间接指向 `/dev/block`（如 `DEV=/dev/block/by-name/boot; dd of=$DEV`）且静态无法确定目标 | 无法审计目标，按最坏情况处理 |
 
@@ -63,12 +70,23 @@
 
 | # | 检测目标 | 匹配要点 | 风险文案 |
 |---|---|---|---|
-| Y1 | 系统分区 remount 读写 | `mount -o remount,rw <sys>`、`mount -o rw,remount <sys>`（两种参数顺序都要匹配） | 把只读系统分区改成可写；此后对它的修改**会真实落到分区**，重启不会还原 |
-| Y2 | 直接改系统分区文件 | `sed -i`、`cp/mv/rm/ln/install`、`echo … >`、`chmod/chown` 作用于 `/system`、`/system_ext`、`/vendor`、`/product`、`/odm`、`/my_*` | 直接改系统文件；写坏会导致无法开机或 OTA 失败，通常只能重刷 |
+| Y1 | 系统分区 remount 读写 | `mount -o remount,rw <sys>`、`mount -o rw,remount <sys>`（两种参数顺序都要匹配）。**必须出现 `rw`**：`mount -o remount /system`（仍是只读）不算 | 把只读系统分区改成可写；此后对它的修改**会真实落到分区**，重启不会还原 |
+| Y2 | 直接改系统分区文件 | `sed -i`、`rm/chmod/chown`（任意参数）、`cp/mv/ln/install`（**只看目标是系统分区的那个**）、`echo … >`、`dd of=…`、`mkdir/touch/truncate`，作用于 `/system*`、`/system_ext`、`/vendor*`、`/product`、`/odm`、`/my_*`（**允许无尾斜杠与引号**） | 直接改系统文件；写坏会导致无法开机或 OTA 失败，通常只能重刷 |
 | Y3 | 强制块设备可写 | `blockdev --setrw` | 让只读块设备接受写入 |
-| Y4 | 混淆 / 动态执行 | `eval`、`base64 -d \| sh`、`xxd -r`、`printf '\x..' \| sh`、`sh -c "$(…)"` | 脚本内容被编码/拼接，**无法静态审计**，可能藏着任意写分区逻辑 |
-| Y5 | 联网取回并执行 | `curl … \| sh`、`wget -O- … \| sh`、`curl -o x && sh x` | 实际执行的代码在安装时才会下载，**无法审计** |
+| Y4 | 混淆 / 动态执行 | `eval`、`base64 -d \| sh`、`xxd -r`、`printf '\x..' \| sh`、`sh -c "$(…)"`、`sh -c "$VAR"`、`bash -c "$VAR"`、`printf … \| sh`、`cat 未知文件 \| sh` | 脚本内容被编码/拼接，**无法静态审计**，可能藏着任意写分区逻辑 |
+| Y5 | 联网取回并执行 | `curl … \| sh`、`wget -O- … \| sh`、`curl -o x && sh x`、`curl -o x u; sh x`；管道目标是 `/system/bin/sh` 之类也要中 | 实际执行的代码在安装时才会下载，**无法审计** |
 | Y6 | 挂载裸块设备 | `mount … /dev/block/…`（可写方式见 R6，直接判红） | 只读挂载本身不能写，但脚本随后可能重挂可写、或把 fd 交给别的工具 |
+| Y7 | 安装期生成可执行脚本 | `cp/mv/ln/install` 的目标是模块根脚本名（`service.sh`、`post-fs-data.sh`、`boot-completed.sh` …）、用**重定向/heredoc** 写这些文件（`printf … > $MODPATH/service.sh`、`cat <<EOF > …`）、或对模块内文件 `chmod +x` | 安装时生成的脚本会在下次开机以 root 执行，内容没被扫描过 |
+
+### 系统分区名单（唯一一份，实现与文案都用它）
+
+```
+/system  /system_root  /system_ext  /system_dlkm
+/vendor  /vendor_dlkm
+/product /odm  /oem
+/my_product  /my_stock  /my_carrier  /my_region  /my_bigball  /my_manifest
+以及根挂载 /（`mount -o remount,rw /` 属 Y1）
+```
 
 > 判定优先级：同一行/同一文件同时命中红与黄时，**红优先**。
 > 一个模块只要有一处 🔴 就是 🔴，不接受"其它都是绿的"来调和。
@@ -129,8 +147,11 @@
 2. **不要** `EVIOCGRAB`（不独占设备，系统音量照常工作）。
 3. 超时 60 秒 → 取消（安全默认）。
 4. 一个输入设备都打不开（无权限/无设备）→ 打印"读不到音量键"，取消，并提示
-   `--force` 或改到终端安装。
-5. 终止信号（Ctrl-C / kill）时按"取消"处理，不能留下半安装状态。
+   `--force`（**不要**建议"改到终端安装"——终端走的是同一个函数，同样读不到）。
+5. 终止信号（Ctrl-C / kill）时按"取消"处理。
+6. **任何非通过路径（红 / 音量- / 超时 / 读不到设备 / 安装脚本失败）都必须删除
+   `/data/adb/modules_update/<id>`**：`handle_updated_modules()` 每次开机会把这个目录无条件
+   rename 进 `modules/`，不清理等于"用户看到失败、重启后模块照样生效"。
 
 ---
 
@@ -162,3 +183,6 @@
 | 绿 | 普通模块（只写 `$MODPATH/system`）→ 直接安装，报告显示"未发现真实分区写入" |
 | 报告 | 每条含 文件:行号 + 片段 + 风险说明 |
 | 运行时 | 内核里搜不到 `partition_guard_runtime`；管理器无该子开关；老配置不报错 |
+| 反绕过 | 续行 `\\` 拼接、变量拼路径（`D=/dev/block`+`of=$D/x`）、命令名变量化、>2 MiB 载荷、第 201 个脚本、安装期生成的 `service.sh`、软链——每一种都必须至少判黄，不能出现"绿且照装" |
+| 不误报 | `cp -a /vendor/lib/*.so $MODPATH/system/`、`cp /system/... /data/`、只读备份 `dd if=/dev/block/... of=/sdcard/...`、`mount -o remount,ro`、行内注释里的关键字——必须判绿 |
+| 失败必须清理 | 红 / 取消 / 超时 / 读不到按键 / 安装脚本失败之后，`/data/adb/modules_update/<id>` 不存在；重启后模块不得出现在 `modules/` |

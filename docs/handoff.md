@@ -55,8 +55,10 @@ manager/                    Android 管理器（Kotlin/Compose，三套皮肤）
     susfs/                          SusfsRepository（规则持久化）、SusfsCommands、SusfsBootReceiver
     magica/                         基线的 app-zygote 注入路径（**4.1 起不再被自动提权使用**）
 userspace/ksud/             Rust 用户态（root 侧真正干活的部分）
-  src/webui.rs                    网页端 HTTP 服务 + API 路由
-  assets/web/index.html           网页端全部前端（单文件，约 4700 行）
+  src/webui.rs                    网页端 HTTP 服务 + API 路由（含 /ui/* 内置资产）
+  assets/web/index.html           网页端 DOM（4.2 起拆成三件套，不再单文件）
+  assets/web/app.css              网页端样式（语义 token + 组件层覆盖）
+  assets/web/app.js               网页端逻辑（经典脚本，全局函数，无构建步骤）
   src/module.rs                   模块列表/安装（含 4.0 新增的目录大小计算）
 kernel/                     内核模块（C），Kbuild 里固定 KSU_PACKAGE_NAME
 .github/workflows/          CI（build-manager / release / clippy / rustfmt / shellcheck）
@@ -101,7 +103,7 @@ kernel/                     内核模块（C），Kbuild 里固定 KSU_PACKAGE_N
 3. **Material 3 清理**：主设置页删掉已迁到「基础功能设置」的整块开关（su compat、sulog、
    ADB root、内核卸载、SELinux 隐藏、Shell su 仅 ADB、默认卸载模块、Web 调试、软重启），
    以及已废弃的"自动越狱"和"应用配置模板"。
-4. **网页端**：新增「内核特性」区块（直接读写内核 supercall，8 个特性开关，不支持的置灰）
+4. **网页端**：新增「内核特性」区块（直接读写内核 supercall，按 `/api/features` 返回的清单渲染，不支持的特性置灰）
    与「工具」（重载模块、软重启）；后端 `/api/features` 补齐清单，新增 `/api/tools/reload-modules`。
 
 ---
@@ -112,7 +114,7 @@ kernel/                     内核模块（C），Kbuild 里固定 KSU_PACKAGE_N
 
 1. **PAT 已泄露**：本轮开发用的 GitHub token 在对话里出现过明文，**必须去 GitHub 设置里吊销并重新签发**。
    仓库里没有写入 token（推送用的是临时 askpass 文件 + `/etc/hosts` 固定 IP，用完即删），但 token 本身要换。
-2. **网页端 SuSFS / Shizuku 面板缺失**：4.1 只补了内核特性开关，这两块仍是空白（见第五节）。
+2. **网页端 SuSFS / Shizuku 面板**：4.2 已补齐（SuSFS 4 条接口：`status` / `toggle` / `add` / `remove`；Shizuku 3 条：`status` / `start` / `stop`，授权仍只读、回 App 改），不再是空白。剩下的是真机核对开关是否真作用于 `/proc/susfs_*`（见 §11.3）。
 
 ### P1 — 影响体验或正确性
 
@@ -429,7 +431,7 @@ task-6 的做法是"先拆不改样式，再改 token"两步，各自可单独 r
 ### 12.3 验证边界（别当成已验证）
 
 - CI：`41173193923`（push）、`41173193936`（clippy）、`41173193930`（rustfmt）、`41173205947`（arm64 自用包）全部 success。
-- 规则表用 Python 复刻跑了 8 组样例（可写挂载/只读挂载/overlay 写入/系统文件读取），结论符合预期。
+- 规则表当时只做了 8 条冒烟样例（可写挂载 / 只读挂载 / overlay 写入 / 系统文件读取），**未覆盖续行、变量拼路径、截断、动态执行等绕过面**；这 8 条不足以证明规则达标（后来的独立复刻在 125 条样例里查出 39 条不一致，见 12.7）。
 - **没有真机验证**：音量键轮询（`/dev/input/event*`）在没有设备 shell 通道的情况下无法实测；
   首次装机后应手动试一次"黄 → 按音量+ / 音量- / 不按" 三条路径。
 - 内核删除运行时拦截后，`ksud feature set partition_guard_runtime` 会报 Unknown feature，

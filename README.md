@@ -122,9 +122,9 @@ bootstrap → ksud late-load --package-name <本 App 包名>
 ### 你在 App 里会看到什么
 
 - 首页状态卡片显示 **「工作中（越狱模式）」**，而不是普通的「工作中」
-- 下方有一张 **越狱守卫卡片**，说明当前状态下系统分区写入受保护、**重启即还原**
+- 下方有一张 **越狱守卫卡片**，说明当前状态下**安装模块会在安装前做三级扫描**（红拒绝 / 黄按音量键确认 / 绿直接装）
 - 越狱激活弹窗里两条路径并列：**ghostlock（推荐）** 与 **DirtyFrag**，各自带说明
-- 越狱模式下的模块安装会被拦截真正写入分区的部分，避免把系统改坏
+- 越狱模式下的模块安装会先做三级静态扫描：会真正写分区的脚本被拒绝或要求音量键确认，避免把系统改坏
 
 ### 为什么它值得存在
 
@@ -138,37 +138,44 @@ bootstrap → ksud late-load --package-name <本 App 包名>
 
 ## 2. 系统分区保护（Partition Guard）
 
-越狱模式本身不改分区，但**越狱之后拿到的 root 可以改**。于是本分支加了一层运行时的分区写保护。
+越狱模式本身不改分区，但**越狱之后拿到的 root 可以改**。所以安装模块前有一层
+**三级静态扫描**：把模块里会被执行的脚本逐行读一遍，给出"会不会真正动分区"的结论。
 
-代码在 `kernel/feature/partition_guard.c`。
+> 4.1.1 起，原来的**运行时内核拦截**（`kernel/feature/partition_guard.c` 的 6 个 syscall 钩子）
+> 已整块删除：它挂在 `write`/`writev` 这类极热路径上，收益低、风险高，实际几乎没人开。
+> 现在的保护全部在安装前完成，规范见 [`docs/partition-guard-v2.md`](docs/partition-guard-v2.md)。
 
-### 它拦什么
+### 三级判定
 
-只拦**真正会破坏系统分区的写入**，共 6 个系统调用钩子，分三类路径：
+| 等级 | 判什么 | 处置 |
+|---|---|---|
+| 🟢 绿 | 没有触及真实分区（模块自己的 `$MODPATH/system` 是 overlay，不算） | 直接安装 |
+| 🟡 黄 | 会改真实分区，或存在无法静态审计的动态执行（`eval`、`base64 -d`、`curl \| sh` …） | 打印报告，**等用户按音量键**：音量+ 继续 / 音量- 取消 / 60 秒无操作取消 |
+| 🔴 红 | 不可逆或影响引导链（直写块设备、格式化、刷镜像、写 boot/vbmeta、关 AVB …） | **禁止安装，`--force` 也不放行** |
 
-| 路径 | 拦截内容 |
-|---|---|
-| `openat` / `openat2` | 以**写模式**打开 `/dev/block/*` 原始块设备 |
-| `mount` | 把系统分区**重挂为读写** |
-| `write` / `pwrite64` / `writev` | 通过**已经打开的**块设备 fd 写入数据 |
+### 报告里有什么
 
-### 它不拦什么
+每条命中都给 **文件:行号 + 原文片段 + 风险说明**，例如：
 
-**其余一切照旧**，包括：
+```
+🔴 严重（不可逆，禁止安装）
+  1. service.sh:42  [R4] 写入引导分区
+     dd if=... of=/dev/block/by-name/boot
+     风险：写 boot / init_boot / vbmeta / super，会破坏引导链，设备可能无法开机
+```
 
-- loop 设备、overlayfs、tmpfs、bind mount
-- 命名空间相关的挂载
-- `/data`、`/mnt`、`/sdcard` 下的任何操作
-- 正常的模块挂载
+### 扫描范围
 
-这样设计的目的是：**模块系统、沙箱、日常使用完全不受影响**，只有"往系统分区里写"这件事会被拒绝。
+10 个固定脚本名（`customize.sh`、`install.sh`、`service.sh`、`post-fs-data.sh` …）+
+递归所有 `*.sh` + 带 shebang 的可执行文件。单文件 2 MiB、最多 200 个脚本；
+**任一上限触发时会降级为黄色**（无法完整审计就不允许直接装）。
 
 ### 覆盖的分区
 
 ```
 /system  /system_ext  /system_dlkm
 /vendor  /vendor_dlkm
-/product /odm
+/product /odm  /oem
 /my_product  /my_stock  /my_carrier  /my_region  /my_bigball  /my_manifest
 ```
 
@@ -176,22 +183,8 @@ bootstrap → ksud late-load --package-name <本 App 包名>
 
 ### 开关
 
-- 顶层开关在**管理器设置**里，默认**开启**
-- 运行时拦截是**第二层开关**，**默认关闭**——因为它挂在 `write` 这种极热的系统调用上，开启前你需要在 UI 里显式确认
-- 越狱模式下这两层同样有效
-
-### 效果
-
-拦截发生时，内核日志会打印：
-
-```
-partition_guard: blocked remount rw of /system (src /dev/block/sda1)
-```
-
-写入方拿到的是 `-EACCES`。**重启之后，一切回到分区原本的样子。**
-
-> 更细的设计说明（开关语义、已知边界、feature id、逐条测试方法）见
-> [`docs/partition-guard.md`](docs/partition-guard.md)。
+- 顶层开关在**管理器设置**里；越狱模式下**始终开启**（那个会话没法像重启那样把分区还原）。
+- 4.1.1 起 ksud 默认开启扫描，管理器关闭时显式传 `KSU_PARTITION_GUARD=0`。
 
 ---
 
@@ -496,7 +489,7 @@ CI 完成构建后，由维护者手工创建 Release 并上传产物。
 **本分支新增的部分：**
 
 - **越狱模式（Jailbreak / Magica / late-load）** —— 面向未解锁 BL 设备的整套加载链路
-- **系统分区保护（Partition Guard）** —— 运行时的系统分区写拦截
+- **系统分区保护（Partition Guard）** —— 安装前的三级静态扫描（绿/黄/红 + 音量键确认）
 - 与之配套的管理器侧改动（状态卡片、守卫卡片、提示卡片、滑动控制、图标与更新检测地址）
 - **DirtyFrag 提权路径** —— 移植自 [mitschud/DirtyFrag](https://github.com/mitschud/DirtyFrag)（上游为 [diabl0w/DFRoot](https://github.com/diabl0w/DFRoot)），源码内置、改为本应用可用的暂存路径；上游未声明许可证，此处仅作来源标注
 - **ghostlock 提权路径** —— 来自 [45072yy980/ghostlock-app](https://github.com/45072yy980/ghostlock-app)
@@ -508,7 +501,7 @@ CI 完成构建后，由维护者手工创建 Release 并上传产物。
 具体来说，DeepSeek 承担了：
 
 - **越狱模式**（`AppZygotePreload` → `fork` → `exec ksud` → `insmod`，以及 late-load 下 SELinux、init、ksud 对接的整套适配）
-- **系统分区保护**（`partition_guard.c` 的六个系统调用钩子、分区匹配、双层开关）
+- **系统分区保护**（`partition_guard.rs` 的三级静态扫描、规则表与音量键确认）
 - **版本号体系**（管理器与内核共用的 tag 推导公式，替换掉原先会漂移的手写值）
 - **发布与 CI**（多架构构建、产物打包与上传流程）
 - **移植期的全部缺陷修复**（图标、滑动、毛玻璃、更新地址、误报的 PR 构建标志等）
