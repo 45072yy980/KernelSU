@@ -163,11 +163,12 @@ CVE-2026-43284 是另一条完全独立的提权路，和 ghostlock 不共用任
 ### 3.3 feature 开关（管理器 ↔ 内核）
 
 - 内核侧表：`kernel/policy/feature.c`，id 定义在 `kernel/include/uapi/feature.h`。
-- 当前 id：`su_compat=0, kernel_umount=1, sulog=2, adb_root=3, selinux_hide=4, partition_guard=5, partition_guard_runtime=6`。
+- 当前 id：`su_compat=0, kernel_umount=1, sulog=2, adb_root=3, selinux_hide=4, shell_su_adb_only=6, partition_guard=7`。
+  （id 5 空置、id 8 的 `partition_guard_runtime` 已在 4.1.1 删除；见 `docs/partition-guard-v2.md`。）
 - ksud 侧另有一份 `FeatureId` 枚举（`userspace/ksud/src/feature.rs`），并把值持久化到 `/data/adb/ksu/.feature_config`，加载时重放。
 - 管理器里两类驱动方式：
   - **JNI 直连**（`Natives.isSelinuxHideEnabled` 等 → `ksu.cc` 用 `KSU_FEATURE_*` 常量）；
-  - **shell 走名字**（`SettingsRepositoryImpl` 里 `execKsud("feature set partition_guard_runtime 1")`）。
+  - **shell 走名字**（`ksud feature set <name> <0|1>`；4.1.1 起不再有运行时拦截这一项）。
 
 ### 3.4 分区保护 `kernel/feature/partition_guard.c`（335 行）
 
@@ -177,7 +178,8 @@ CVE-2026-43284 是另一条完全独立的提权路，和 ghostlock 不共用任
   注册在 `hook/syscall_hook_manager.c:166`。
 - 保护目标：`/`、`/system`、`/system_ext`、`/system_dlkm`、`/vendor`、`/vendor_dlkm`、`/product`、`/odm`、
   `my_product/my_stock/my_carrier/my_region/my_bigball/my_manifest`。
-- 双层开关：静态扫描 `partition_guard`(5) + 运行时拦截 `partition_guard_runtime`(6)，**运行时默认关闭**（挂在 write 热路径上）。
+- 4.1.1 起只剩**安装前三级静态扫描**（绿/黄/红 + 音量键确认，见 `docs/partition-guard-v2.md`）；
+  运行时拦截已整块删除（它挂在 write 热路径上，收益低风险高）。
 - 未覆盖：`ioctl`（`BLKFLSBUF`）、`io_uring`、`memfd`/`O_DIRECT` 等非常规写路径（文档已声明）。
 
 ### 3.5 模块安装与 WebUI
