@@ -334,8 +334,8 @@ const FIXED_SCRIPTS: &[&str] = &[
 
 /// Binary-ish suffixes that are never shells scripts.
 const SKIP_SUFFIXES: &[&str] = &[
-    "so", "apk", "dex", "jar", "png", "jpg", "jpeg", "webp", "gif", "zip", "gz", "xz", "zst", "img",
-    "ko", "o", "a", "luac", "odex", "vdex", "art", "ttf", "otf", "woff", "woff2",
+    "so", "apk", "dex", "jar", "png", "jpg", "jpeg", "webp", "gif", "zip", "gz", "xz", "zst",
+    "img", "ko", "o", "a", "luac", "odex", "vdex", "art", "ttf", "otf", "woff", "woff2",
 ];
 
 const MAX_SCRIPTS: usize = 200;
@@ -465,7 +465,10 @@ pub fn print_report(report: &ScanReport) {
     if report.level() == Level::Green {
         println!();
         println!("🟢 已检查");
-        println!("  ✓ 未发现真实分区写入（脚本 {} 个，已全部扫描）", report.scripts);
+        println!(
+            "  ✓ 未发现真实分区写入（脚本 {} 个，已全部扫描）",
+            report.scripts
+        );
     }
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     println!();
