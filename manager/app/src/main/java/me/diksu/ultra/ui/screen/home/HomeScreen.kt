@@ -106,6 +106,8 @@ fun HomePager(
         // The card's own click, or the small "jailbreak" button when SELinux is
         // permissive: open the chooser (exploit vs manual install).
         onNotInstalledClick = { jailbreakChooserShown = true },
+        onUpdateKsud = viewModel::updateKsud,
+        onDismissKsudUpdate = viewModel::clearKsudUpdate,
         onJailbreakClick = {
             loadingDialog.showLoading()
             context.startService(Intent(context, com.mngr.app.magica.MagicaService::class.java))

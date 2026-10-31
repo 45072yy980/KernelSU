@@ -42,6 +42,10 @@ import androidx.compose.material.icons.filled.VolunteerActivism
 import androidx.compose.material.icons.rounded.CheckCircleOutline
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -257,6 +261,21 @@ private fun StatusCard(
     actions: HomeActions,
 ) {
     Column {
+        // While the manager and ksud disagree, a tap on the card opens this instead of the
+        // install flow; otherwise the card behaves exactly as it did before.
+        var showKsudDialog by remember { mutableStateOf(false) }
+        // Also visible while the update is still running, so leaving and returning to the
+        // home screen does not lose the outcome.
+        if (showKsudDialog || state.ksudUpdate != KsudUpdateStatus.Idle) {
+            KsudUpdateDialog(
+                state = state,
+                onConfirm = actions.onUpdateKsud,
+                onDismiss = {
+                    showKsudDialog = false
+                    actions.onDismissKsudUpdate()
+                },
+            )
+        }
         when {
             state.ksuVersion != null -> {
                 val workingState = buildString {
@@ -290,11 +309,13 @@ private fun StatusCard(
                             }
                         ),
                         onClick = {
-                            if (!state.isLateLoadMode) {
+                            if (state.hasVersionMismatch) {
+                                showKsudDialog = true
+                            } else if (!state.isLateLoadMode) {
                                 actions.onInstallClick()
                             }
                         },
-                        showIndication = !state.isLateLoadMode,
+                        showIndication = state.hasVersionMismatch || !state.isLateLoadMode,
                         pressFeedbackType = PressFeedbackType.Tilt
                     ) {
                         Box {

@@ -18,10 +18,12 @@ import me.diksu.ultra.data.repository.SettingsRepositoryImpl
 import me.diksu.ultra.getKernelVersion
 import me.diksu.ultra.ksuApp
 import me.diksu.ultra.ui.screen.home.HomeUiState
+import me.diksu.ultra.ui.screen.home.KsudUpdateStatus
 import me.diksu.ultra.ui.screen.home.SystemInfo
 import me.diksu.ultra.ui.screen.home.getManagerVersion
 import me.diksu.ultra.ui.util.checkNewVersion
 import me.diksu.ultra.ui.util.getSELinuxStatusRaw
+import me.diksu.ultra.ui.util.install
 import me.diksu.ultra.ui.util.module.LatestVersionInfo
 import me.diksu.ultra.ui.util.resolveDeviceName
 import me.diksu.ultra.ui.util.rootAvailable
@@ -42,6 +44,37 @@ class HomeViewModel(
                 _uiState.update { it.copy(latestVersionInfo = latestVersionInfo) }
             }
         }
+    }
+
+    /**
+     * Re-installs the bundled ksud so the userspace binary matches this manager again.
+     *
+     * The whole point is that a jailbreak user does not have to reboot and re-exploit: the
+     * install runs in the session that already has root. [install] reports whether `ksud
+     * install` succeeded; either way the status is rebuilt so the card shows the truth, and
+     * the outcome is kept in [HomeUiState.ksudUpdate] for the dialog to display.
+     */
+    fun updateKsud() {
+        if (_uiState.value.ksudUpdate == KsudUpdateStatus.Running) return
+        _uiState.update { it.copy(ksudUpdate = KsudUpdateStatus.Running) }
+        viewModelScope.launch {
+            val installed = withContext(Dispatchers.IO) {
+                runCatching { install() }.getOrDefault(false)
+            }
+            val rebuilt = withContext(Dispatchers.IO) { buildState() }
+            _uiState.update { previous ->
+                rebuilt.copy(
+                    latestVersionInfo = previous.latestVersionInfo,
+                    ksudUpdate = if (installed) KsudUpdateStatus.Succeeded else KsudUpdateStatus.Failed,
+                )
+            }
+        }
+    }
+
+    /** Clears the result of [updateKsud] so the next card tap starts from a clean dialog. */
+    fun clearKsudUpdate() {
+        if (_uiState.value.ksudUpdate == KsudUpdateStatus.Running) return
+        _uiState.update { it.copy(ksudUpdate = KsudUpdateStatus.Idle) }
     }
 
     private fun buildState(): HomeUiState {

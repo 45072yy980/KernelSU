@@ -51,6 +51,10 @@ import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.material3.contentColorFor
 import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -213,6 +217,21 @@ private fun StatusCard(
     actions: HomeActions,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(13.dp)) {
+        // While the manager and ksud disagree, a tap on the card opens this instead of the
+        // install flow; otherwise the card behaves exactly as it did before.
+        var showKsudDialog by remember { mutableStateOf(false) }
+        // Also visible while the update is still running, so leaving and returning to the
+        // home screen does not lose the outcome.
+        if (showKsudDialog || state.ksudUpdate != KsudUpdateStatus.Idle) {
+            KsudUpdateDialog(
+                state = state,
+                onConfirm = actions.onUpdateKsud,
+                onDismiss = {
+                    showKsudDialog = false
+                    actions.onDismissKsudUpdate()
+                },
+            )
+        }
         val ksuActive = state.ksuVersion != null
         val notInstalled = !ksuActive && state.kernelVersion.isGKI()
 

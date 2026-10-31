@@ -4,6 +4,14 @@
     <string name="home_not_installed">尚未安裝</string>
     <string name="home_click_to_install">點選開始安裝</string>
     <string name="home_working">已開始運作</string>
+    <string name="home_ksud_update_title">更新 ksud</string>
+    <string name="home_ksud_update_message">管理器與目前執行的 ksud 版本不一致。更新 ksud 不需要重新開機；越獄模式下會重新注入到正在執行的會話。</string>
+    <string name="home_ksud_update_confirm">立即更新</string>
+    <string name="home_ksud_update_cancel">取消</string>
+    <string name="home_ksud_update_running">正在更新 ksud…</string>
+    <string name="home_ksud_update_success">ksud 已更新，狀態卡片重新整理後會顯示新版本。</string>
+    <string name="home_ksud_update_failure">更新失敗。請確認已授予 root 權限後再試。</string>
+    <string name="home_ksud_update_done">完成</string>
     <string name="home_working_version">版本：%s</string>
     <string name="home_lkm_update_available">有可用的內建 LKM 更新，點選更新</string>
     <string name="home_lkm_custom">自訂</string>

@@ -134,11 +134,18 @@ private suspend fun readFeatureValue(args: String): Long? = withContext(Dispatch
     valueLine.substringAfter("Value:").trim().toLongOrNull()
 }
 
-fun install() {
+/**
+ * Installs the bundled ksud userspace binary (and, when the kernel side needs it, the rest of
+ * the payload). Called on start-up and from the home screen when the manager and ksud versions
+ * disagree. Returns whether the command itself succeeded, so the caller can report a failure
+ * instead of pretending the update went through.
+ */
+fun install(): Boolean {
     val start = SystemClock.elapsedRealtime()
     val libadbroot = File(ksuApp.applicationInfo.nativeLibraryDir, "libadbroot.so").absolutePath
     val result = execKsud("install --libadbroot $libadbroot --data-path ${ksuApp.applicationInfo.deviceProtectedDataDir}", true)
     Log.w(TAG, "install result: $result, cost: ${SystemClock.elapsedRealtime() - start}ms")
+    return result
 }
 
 fun listModules(): String {

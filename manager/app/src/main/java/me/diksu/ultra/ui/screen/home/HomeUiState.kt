@@ -4,6 +4,9 @@ import androidx.compose.runtime.Immutable
 import me.diksu.ultra.KernelVersion
 import me.diksu.ultra.ui.util.module.LatestVersionInfo
 
+/** Progress of the "manager and ksud disagree, update ksud" action. */
+enum class KsudUpdateStatus { Idle, Running, Succeeded, Failed }
+
 @Immutable
 data class HomeUiState(
     val kernelVersion: KernelVersion,
@@ -38,12 +41,26 @@ data class HomeUiState(
      * the kernel — including when it arrived as the standalone LKM after boot.
      */
     val susfsVersion: String? = null,
+    /** State of the "update ksud" action offered by the status card. */
+    val ksudUpdate: KsudUpdateStatus = KsudUpdateStatus.Idle,
 ) {
     val isSELinuxPermissive: Boolean
         get() = systemInfo.selinuxStatus == "Permissive"
 
     val showGkiWarning: Boolean
         get() = ksuVersion != null && lkmMode == false
+
+    /**
+     * The manager and the running ksud disagree about the version.
+     *
+     * Distinct from [showLkmUpdate]: that one also requires the LKM to be bundled and both
+     * UAPI versions to line up, because it offers a kernel flash. This one only means the
+     * userspace binary is stale, so the status card may offer `ksud install` instead.
+     */
+    val hasVersionMismatch: Boolean
+        get() = isManager &&
+                ksuVersion != null &&
+                ksuVersion.toLong() != currentManagerVersionCode
 
     val showLkmUpdate: Boolean
         get() = isManager &&
@@ -84,4 +101,8 @@ data class HomeActions(
     // Clicking the "not installed" card itself: offer the exploit jailbreak or the
     // ordinary install flow.
     val onNotInstalledClick: () -> Unit = {},
+    // Re-install the ksud userspace binary (see HomeViewModel.updateKsud).
+    val onUpdateKsud: () -> Unit = {},
+    // Leaves the "updated" / "failed" state so the next card tap starts clean.
+    val onDismissKsudUpdate: () -> Unit = {},
 )
