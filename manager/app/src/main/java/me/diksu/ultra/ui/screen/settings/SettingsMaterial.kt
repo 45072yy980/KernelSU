@@ -114,7 +114,7 @@ fun SettingPagerMaterial(
                             icon = Icons.Filled.DisplaySettings,
                             title = stringResource(id = R.string.settings_ui_mode),
                             summary = stringResource(id = R.string.settings_ui_mode_summary),
-                            items = UiMode.entries.map { stringResource(it.labelRes) },
+                            items = UiMode.entries.map { it.displayName },
                             selectedIndex = UiMode.entries.indexOfFirst { it.value == uiState.uiMode }.coerceAtLeast(0),
                             onItemSelected = actions.onSetUiModeIndex
                         )
@@ -125,20 +125,6 @@ fun SettingPagerMaterial(
                             headlineContent = { Text(stringResource(id = R.string.settings_theme)) },
                             supportingContent = { Text(stringResource(id = R.string.settings_theme_summary)) },
                             leadingContent = { Icon(Icons.Filled.Palette, stringResource(id = R.string.settings_theme)) },
-                            trailingContent = {
-                                Icon(
-                                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                    null
-                                )
-                            }
-                        )
-                    }
-                    add {
-                        SegmentedListItem(
-                            onClick = actions.onOpenCustomTheme,
-                            headlineContent = { Text(stringResource(id = R.string.theme_page_title)) },
-                            supportingContent = { Text(stringResource(id = R.string.theme_entry_summary)) },
-                            leadingContent = { Icon(Icons.Filled.Palette, stringResource(id = R.string.theme_page_title)) },
                             trailingContent = {
                                 Icon(
                                     Icons.AutoMirrored.Filled.KeyboardArrowRight,

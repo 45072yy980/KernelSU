@@ -55,7 +55,7 @@ fun OpenSourceLicenseScreen() {
         }
     }
     when (LocalUiMode.current) {
-        UiMode.Miuix, UiMode.MiuixStock, UiMode.Themed -> OpenSourceLicenseScreenMiuix(libraries)
+        UiMode.Miuix, UiMode.MiuixStock -> OpenSourceLicenseScreenMiuix(libraries)
         UiMode.Material -> OpenSourceLicenseScreenMaterial(libraries)
     }
 }

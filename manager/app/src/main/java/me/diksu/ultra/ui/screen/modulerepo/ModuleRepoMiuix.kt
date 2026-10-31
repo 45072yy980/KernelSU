@@ -97,7 +97,6 @@ import me.diksu.ultra.ui.util.rememberBlurBackdrop
 import me.diksu.ultra.ui.util.rememberContentReady
 import me.diksu.ultra.ui.LocalUiMode
 import me.diksu.ultra.ui.UiMode
-import me.diksu.ultra.ui.isMiuixLook
 import me.diksu.ultra.ui.theme.isInDarkTheme
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
@@ -1299,7 +1298,7 @@ fun ModuleRepoDetailScreenMiuix(
     val enableBlur = LocalEnableBlur.current
     // Its own container's colour, not the page's: these chips are bright in either theme, and
     // the text the page turns white over a picture would vanish on them.
-    val actionIconTint = if (LocalUiMode.current.isMiuixLook) {
+    val actionIconTint = if (LocalUiMode.current == UiMode.Miuix) {
         colorScheme.onSecondaryContainer
     } else {
         colorScheme.onSurface.copy(alpha = if (isInDarkTheme()) 0.7f else 0.9f)

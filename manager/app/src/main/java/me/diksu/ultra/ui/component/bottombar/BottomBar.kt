@@ -17,7 +17,6 @@ import kotlinx.coroutines.launch
 import me.diksu.ultra.ui.LocalUiMode
 import me.diksu.ultra.ui.UiMode
 import me.diksu.ultra.ui.isMiuixFamily
-import me.diksu.ultra.ui.isMiuixLook
 import me.diksu.ultra.ui.util.shouldShowSplitPane
 import top.yukonga.miuix.kmp.blur.Backdrop
 import top.yukonga.miuix.kmp.blur.LayerBackdrop
@@ -120,7 +119,7 @@ internal fun badgeFor(index: Int, state: NavigationBadgeState): NavBadge? = when
 @Composable
 fun useNavigationRail(enableFloatingBottomBar: Boolean): Boolean {
     val miuixFloating = LocalUiMode.current.isMiuixFamily && enableFloatingBottomBar
-    return if (LocalUiMode.current.isMiuixLook) {
+    return if (LocalUiMode.current == UiMode.Miuix) {
         !miuixFloating
     } else {
         shouldShowSplitPane() && !miuixFloating
@@ -135,7 +134,7 @@ fun BottomBar(
     modifier: Modifier = Modifier,
 ) {
     when (LocalUiMode.current) {
-        UiMode.Miuix, UiMode.MiuixStock, UiMode.Themed -> BottomBarMiuix(blurBackdrop, backdrop, navigationBadge, modifier)
+        UiMode.Miuix, UiMode.MiuixStock -> BottomBarMiuix(blurBackdrop, backdrop, navigationBadge, modifier)
         UiMode.Material -> BottomBarMaterial(navigationBadge)
     }
 }
@@ -147,7 +146,7 @@ fun SideRail(
     modifier: Modifier = Modifier,
 ) {
     when (LocalUiMode.current) {
-        UiMode.Miuix, UiMode.Themed -> NavigationRailMiuix(navigationBadge, backdrop, modifier)
+        UiMode.Miuix -> NavigationRailMiuix(navigationBadge, backdrop, modifier)
         UiMode.MiuixStock -> NavigationRailMiuixStock(navigationBadge, modifier)
         UiMode.Material -> NavigationRailMaterial(navigationBadge, modifier)
     }

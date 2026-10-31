@@ -111,7 +111,7 @@ fun AppProfileTemplateScreen() {
         },
         onCreateTemplate = {
             when (uiMode) {
-                UiMode.Miuix, UiMode.MiuixStock, UiMode.Themed -> navigator.navigateForResult(
+                UiMode.Miuix, UiMode.MiuixStock -> navigator.navigateForResult(
                     Route.TemplateEditor(TemplateViewModel.TemplateInfo(), false),
                     requestKey,
                 )
@@ -123,7 +123,7 @@ fun AppProfileTemplateScreen() {
         },
         onOpenTemplate = { template ->
             when (uiMode) {
-                UiMode.Miuix, UiMode.MiuixStock, UiMode.Themed -> navigator.navigateForResult(
+                UiMode.Miuix, UiMode.MiuixStock -> navigator.navigateForResult(
                     Route.TemplateEditor(template, !template.local),
                     requestKey,
                 )
@@ -136,7 +136,7 @@ fun AppProfileTemplateScreen() {
     )
 
     when (uiMode) {
-        UiMode.Miuix, UiMode.MiuixStock, UiMode.Themed -> AppProfileTemplateScreenMiuix(
+        UiMode.Miuix, UiMode.MiuixStock -> AppProfileTemplateScreenMiuix(
             state = uiState,
             actions = actions,
             snackBarHost = miuixSnackbarHost,

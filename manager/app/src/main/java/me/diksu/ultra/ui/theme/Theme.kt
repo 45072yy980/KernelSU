@@ -128,7 +128,7 @@ fun KernelSUTheme(
 ) {
 
     when (uiMode) {
-        UiMode.Miuix, UiMode.MiuixStock, UiMode.Themed -> MiuixKernelSUTheme(
+        UiMode.Miuix, UiMode.MiuixStock -> MiuixKernelSUTheme(
             appSettings = appSettings,
             content = content
         )

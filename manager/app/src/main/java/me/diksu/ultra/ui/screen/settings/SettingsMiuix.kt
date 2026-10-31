@@ -139,7 +139,7 @@ fun SettingPagerMiuix(
                         OverlayDropdownPreference(
                             title = stringResource(id = R.string.settings_ui_mode),
                             summary = stringResource(id = R.string.settings_ui_mode_summary),
-                            items = UiMode.entries.map { stringResource(it.labelRes) },
+                            items = UiMode.entries.map { it.displayName },
                             startAction = {
                                 Icon(
                                     Icons.Rounded.DisplaySettings,
@@ -163,19 +163,6 @@ fun SettingPagerMiuix(
                                 )
                             },
                             onClick = actions.onOpenTheme
-                        )
-                        ArrowPreference(
-                            title = stringResource(id = R.string.theme_page_title),
-                            summary = stringResource(id = R.string.theme_entry_summary),
-                            startAction = {
-                                Icon(
-                                    Icons.Rounded.Palette,
-                                    modifier = Modifier.padding(end = 6.dp),
-                                    contentDescription = stringResource(id = R.string.theme_page_title),
-                                    tint = colorScheme.onBackground
-                                )
-                            },
-                            onClick = actions.onOpenCustomTheme
                         )
                     }
 

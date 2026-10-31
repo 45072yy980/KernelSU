@@ -84,7 +84,7 @@ fun BasicSettingsScreen() {
     val onOpenAutoEscalation = dropUnlessResumed { navigator.push(Route.AutoEscalation) }
 
     when (LocalUiMode.current) {
-        UiMode.Miuix, UiMode.MiuixStock, UiMode.Themed -> BasicSettingsMiuix(
+        UiMode.Miuix, UiMode.MiuixStock -> BasicSettingsMiuix(
             uiState, viewModel, onBack, onOpenProfileTemplate, onOpenAutoEscalation,
         )
         UiMode.Material -> BasicSettingsMaterial(

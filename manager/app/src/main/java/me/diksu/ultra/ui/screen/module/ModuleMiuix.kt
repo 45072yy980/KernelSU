@@ -124,7 +124,6 @@ import me.diksu.ultra.ui.util.reboot
 import me.diksu.ultra.ui.util.rememberBlurBackdrop
 import me.diksu.ultra.ui.LocalUiMode
 import me.diksu.ultra.ui.UiMode
-import me.diksu.ultra.ui.isMiuixLook
 import me.diksu.ultra.ui.theme.isInDarkTheme
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
@@ -779,7 +778,7 @@ fun ModuleItem(
     val secondaryContainer = colorScheme.secondaryContainer.copy(alpha = 0.8f)
     // Its own container's colour, not the page's: these chips are bright in either theme, and
     // the text the page turns white over a picture would vanish on them.
-    val actionIconTint = if (LocalUiMode.current.isMiuixLook) {
+    val actionIconTint = if (LocalUiMode.current == UiMode.Miuix) {
         colorScheme.onSecondaryContainer
     } else {
         colorScheme.onSurface.copy(alpha = if (isInDarkTheme()) 0.7f else 0.9f)

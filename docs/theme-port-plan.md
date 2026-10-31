@@ -153,13 +153,6 @@ UiMode: Miuix(美化) / MiuixStock(原版) / Material / Themed(自定义主题) 
 | 多主题并存 | 主题包是列表，选哪个用哪个；不像"全局注入"那样只能有一个当前值 |
 | DIY 自由度 | 以后要给主题加能力（布局、卡片背景、动效），只改 `Themed` 这条分支，不必迁就三个老皮肤 |
 
-### 5.2.1 自由度上限（先说清）
-
-Miuix 0.9.4 的 `MiuixTheme` 只接收 `colors`（53 个角色）与 `textStyles`（14 种样式），
-**不开放 shapes/dimens**——库组件的圆角与内边距改不了。因此"自由度"的完整分层、
-我们自己的组件能改什么、以及代价，见 [`theme-freedom-plan.md`](theme-freedom-plan.md)。
-一句话：**库渲染的部分能改颜色和字体；我们自己画的部分（卡片/底栏/背景/布局）几乎没有上限。**
-
 ### 5.3 第一期只做视觉 token，不做布局
 
 FolkPatch 的包里有 `homeLayoutStyle`（kernelsu/circle/focus/dashboard_ui/stats/sign）这类**布局**字段。

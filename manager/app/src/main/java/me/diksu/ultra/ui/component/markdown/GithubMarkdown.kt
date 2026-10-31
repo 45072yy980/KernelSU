@@ -518,7 +518,7 @@ private fun getMarkdownColors(containerColor: androidx.compose.ui.graphics.Color
             )
         }
 
-        UiMode.Miuix, UiMode.MiuixStock, UiMode.Themed -> {
+        UiMode.Miuix, UiMode.MiuixStock -> {
             val bgArgb = containerColor?.toArgb() ?: MiuixTheme.colorScheme.surfaceContainer.toArgb()
             val bgLuminance = relativeLuminance(bgArgb)
 
