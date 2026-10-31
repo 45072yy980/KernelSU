@@ -75,6 +75,7 @@ object ThemeStore {
 
     fun setCurrent(id: String?) {
         setCurrentThemeId(id)
+        ThemeRuntime.invalidate()
     }
 
     /**
@@ -126,6 +127,7 @@ object ThemeStore {
                         errors = listOf("cannot move the theme into place"),
                     )
                 }
+                ThemeRuntime.invalidate()
                 Log.i(TAG, "imported $id: ${validation.applied.size} applied, ${validation.ignored.size} ignored")
                 return@withContext ThemeImportResult(
                     applied = validation.applied,
@@ -154,7 +156,7 @@ object ThemeStore {
         if (!dir.exists()) return@withContext false
         if (currentThemeId() == id) setCurrentThemeId(null)
         val deleted = dir.deleteRecursively()
-        if (!deleted) Log.w(TAG, "could not delete $id")
+        if (!deleted) Log.w(TAG, "could not delete $id") else ThemeRuntime.invalidate()
         deleted
     }
 

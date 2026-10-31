@@ -17,6 +17,7 @@ import me.diksu.ultra.ui.webui.MonetColorsProvider
 import me.diksu.ultra.ui.LocalUiMode
 import me.diksu.ultra.ui.UiMode
 import me.diksu.ultra.ui.isMiuixLook
+import me.diksu.ultra.theme.ThemeRuntime
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import top.yukonga.miuix.kmp.theme.LocalContentColor
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -110,11 +111,35 @@ fun MiuixKernelSUTheme(
                         onSurfaceVariantSummary = Color.Black,
                     )
                 }
-                MiuixTheme(colors = textColors, textStyles = MiuixTheme.textStyles) {
-                    CompositionLocalProvider(
-                        LocalContentColor provides MiuixTheme.colorScheme.onBackground,
+                val resolvedTheme = if (LocalUiMode.current == UiMode.Themed) {
+                    ThemeRuntime.currentResolved(
+                        dark = darkTheme,
+                        amoled = appSettings.colorMode == ColorMode.DARK_AMOLED,
+                    )
+                } else {
+                    null
+                }
+                if (resolvedTheme != null) {
+                    // A package that says nothing about colours keeps the app's own palette
+                    // (textColors above); only its typography applies.
+                    val themeColors = if (resolvedTheme.hasColors) resolvedTheme.colors else textColors
+                    MiuixTheme(
+                        colors = themeColors,
+                        textStyles = resolvedTheme.textStyles,
                     ) {
-                        ProvideThemeTokens(content)
+                        CompositionLocalProvider(
+                            LocalContentColor provides themeColors.onBackground,
+                        ) {
+                            ProvideThemeTokens(content)
+                        }
+                    }
+                } else {
+                    MiuixTheme(colors = textColors, textStyles = MiuixTheme.textStyles) {
+                        CompositionLocalProvider(
+                            LocalContentColor provides MiuixTheme.colorScheme.onBackground,
+                        ) {
+                            ProvideThemeTokens(content)
+                        }
                     }
                 }
             } else {

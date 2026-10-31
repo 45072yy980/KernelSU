@@ -7,7 +7,6 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.doubleOrNull
-import kotlinx.serialization.json.intOrNull
 
 /** The manifest is unreadable as a whole (not JSON, not an object, or a schema we do not know). */
 class ThemeManifestException(message: String, cause: Throwable? = null) : Exception(message, cause)
