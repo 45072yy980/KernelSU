@@ -58,6 +58,7 @@ fun SettingPager(
         onSetCheckUpdate = viewModel::setCheckUpdate,
         onSetCheckModuleUpdate = viewModel::setCheckModuleUpdate,
         onOpenTheme = { navigator.push(Route.ColorPalette) },
+        onOpenCustomTheme = { navigator.push(Route.Theme) },
         onSetUiModeIndex = { index ->
             // Index into the same list the pickers render (UiMode.entries). The old
             // 0/1/else mapping silently turned any further style into Material.

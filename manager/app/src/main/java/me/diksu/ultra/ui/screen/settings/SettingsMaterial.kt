@@ -133,6 +133,20 @@ fun SettingPagerMaterial(
                             }
                         )
                     }
+                    add {
+                        SegmentedListItem(
+                            onClick = actions.onOpenCustomTheme,
+                            headlineContent = { Text(stringResource(id = R.string.theme_page_title)) },
+                            supportingContent = { Text(stringResource(id = R.string.theme_entry_summary)) },
+                            leadingContent = { Icon(Icons.Filled.Palette, stringResource(id = R.string.theme_page_title)) },
+                            trailingContent = {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                    null
+                                )
+                            }
+                        )
+                    }
                 }
             )
 

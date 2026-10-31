@@ -122,4 +122,9 @@ sealed interface Route : NavKey, Parcelable {
     @Parcelize
     @Serializable
     data class ScriptRun(@Serializable(with = ScriptRunArgSerializer::class) val arg: ScriptRunArg) : Route
+
+    /** Theme package library: import / apply / export / delete. */
+    @Parcelize
+    @Serializable
+    data object Theme : Route
 }

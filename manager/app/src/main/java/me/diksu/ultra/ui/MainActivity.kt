@@ -99,6 +99,7 @@ import me.diksu.ultra.ui.screen.susfs.SusfsScreen
 import me.diksu.ultra.ui.screen.shizuku.ShizukuScreen
 import me.diksu.ultra.ui.screen.shizuku.ShizukuLogScreen
 import me.diksu.ultra.ui.screen.sulog.SulogScreen
+import me.diksu.ultra.ui.screen.theme.ThemeScreen
 import me.diksu.ultra.ui.screen.superuser.SuperUserPager
 import me.diksu.ultra.ui.screen.template.AppProfileTemplateScreen
 import me.diksu.ultra.ui.screen.templateeditor.TemplateEditorScreen
@@ -338,6 +339,7 @@ open class MainActivity : ComponentActivity() {
                             }
                             entry<Route.Sulog>(swipeDismiss = swipeDismiss) { SulogScreen() }
                             entry<Route.ColorPalette>(swipeDismiss = swipeDismiss) { ColorPaletteScreen() }
+                            entry<Route.Theme>(swipeDismiss = swipeDismiss) { ThemeScreen() }
                             entry<Route.AppProfileTemplate>(swipeDismiss = swipeDismiss) { AppProfileTemplateScreen() }
                             entry<Route.TemplateEditor>(swipeDismiss = swipeDismiss) { key -> TemplateEditorScreen(key.template, key.readOnly) }
                             entry<Route.AppProfile>(swipeDismiss = swipeDismiss) { key -> AppProfileScreen(key.uid) }

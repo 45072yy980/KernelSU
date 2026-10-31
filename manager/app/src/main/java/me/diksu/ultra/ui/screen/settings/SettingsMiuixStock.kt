@@ -178,6 +178,19 @@ fun SettingPagerMiuixStock(
                             },
                             onClick = actions.onOpenTheme
                         )
+                        ArrowPreference(
+                            title = stringResource(id = R.string.theme_page_title),
+                            summary = stringResource(id = R.string.theme_entry_summary),
+                            startAction = {
+                                Icon(
+                                    Icons.Rounded.Palette,
+                                    modifier = Modifier.padding(end = 6.dp),
+                                    contentDescription = stringResource(id = R.string.theme_page_title),
+                                    tint = colorScheme.onBackground
+                                )
+                            },
+                            onClick = actions.onOpenCustomTheme
+                        )
                     }
 
                     KsuIsValid {
