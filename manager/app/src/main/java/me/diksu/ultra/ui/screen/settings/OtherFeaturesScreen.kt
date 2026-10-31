@@ -11,7 +11,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Calculate
-import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.VisibilityOff
@@ -58,10 +57,7 @@ import me.diksu.ultra.ui.util.isStealthEnabled
 import me.diksu.ultra.ui.util.isStealthSupported
 import me.diksu.ultra.ui.util.setStealthEnabled
 import me.diksu.ultra.data.repository.isPartitionGuardEnabled
-import me.diksu.ultra.data.repository.isRuntimeGuardEnabled
 import me.diksu.ultra.data.repository.setPartitionGuardEnabled
-import me.diksu.ultra.data.repository.setRuntimeGuardEnabled
-import me.diksu.ultra.data.repository.syncRuntimeGuardToKernel
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Icon as MiuixIcon
 import top.yukonga.miuix.kmp.basic.IconButton as MiuixIconButton
@@ -105,38 +101,9 @@ fun OtherFeaturesScreen() {
     // otherwise it follows the user setting.
     val isLateLoad = Natives.isLateLoadMode
     var guardEnabled by remember { mutableStateOf(isPartitionGuardEnabled()) }
-    // The runtime layer is a *child* of the guard switch: it only shows (and
-    // only means anything) while the parent protection is on, and it is OFF by
-    // default in every mode, including jailbreak. It hooks very hot syscalls
-    // (write/writev), so we never turn it on for the user.
-    var runtimeGuardEnabled by remember { mutableStateOf(isRuntimeGuardEnabled()) }
     val onGuardChange: (Boolean) -> Unit = { value ->
         setPartitionGuardEnabled(value)
         guardEnabled = isPartitionGuardEnabled()
-        // setPartitionGuardEnabled(false) also clears the child; mirror that here.
-        runtimeGuardEnabled = isRuntimeGuardEnabled()
-    }
-    val onRuntimeGuardChange: (Boolean) -> Unit = { value ->
-        setRuntimeGuardEnabled(value)
-        runtimeGuardEnabled = isRuntimeGuardEnabled()
-    }
-    // Push the runtime switch to the kernel when (and only when) it changes.
-    // The kernel flag is what actually blocks a *live* write from a rooted
-    // process, and it is in-memory, so the value has to be re-sent per session.
-    //
-    // We skip the very first composition: the kernel already reflects this
-    // value right after load (ksud replays it from the feature config), and
-    // re-sending "ksud feature set ... 0" on every visit would silently undo a
-    // value another screen/instance had just set.
-    var syncedOnce by remember { mutableStateOf(false) }
-    LaunchedEffect(runtimeGuardEnabled) {
-        if (!syncedOnce) {
-            syncedOnce = true
-            return@LaunchedEffect
-        }
-        withContext(Dispatchers.IO) {
-            runCatching { syncRuntimeGuardToKernel(runtimeGuardEnabled) }
-        }
     }
 
     // Kernel stealth mode: with it on, GET_INFO stops reporting the manager and
@@ -260,8 +227,6 @@ fun OtherFeaturesScreen() {
             guardEnabled = guardEnabled,
             guardLocked = isLateLoad,
             onGuardChange = onGuardChange,
-            runtimeGuardEnabled = runtimeGuardEnabled,
-            onRuntimeGuardChange = onRuntimeGuardChange,
             stealthSupported = stealthSupported,
             stealthEnabled = stealthEnabled,
             onStealthChange = onStealthChange,
@@ -279,8 +244,6 @@ fun OtherFeaturesScreen() {
             guardEnabled = guardEnabled,
             guardLocked = isLateLoad,
             onGuardChange = onGuardChange,
-            runtimeGuardEnabled = runtimeGuardEnabled,
-            onRuntimeGuardChange = onRuntimeGuardChange,
             stealthSupported = stealthSupported,
             stealthEnabled = stealthEnabled,
             onStealthChange = onStealthChange,
@@ -376,8 +339,6 @@ private fun OtherFeaturesMaterial(
     guardEnabled: Boolean,
     guardLocked: Boolean,
     onGuardChange: (Boolean) -> Unit,
-    runtimeGuardEnabled: Boolean,
-    onRuntimeGuardChange: (Boolean) -> Unit,
     stealthSupported: Boolean,
     stealthEnabled: Boolean,
     onStealthChange: (Boolean) -> Unit,
@@ -488,17 +449,6 @@ private fun OtherFeaturesMaterial(
                             onCheckedChange = onGuardChange,
                         )
                     }
-                    // Runtime child: only surfaced (and only meaningful) while
-                    // the parent guard is on. Off by default in every mode.
-                    if (guardEnabled) add {
-                        SegmentedSwitchItem(
-                            icon = Icons.Filled.Lock,
-                            title = stringResource(R.string.settings_runtime_guard),
-                            summary = stringResource(R.string.settings_runtime_guard_summary),
-                            checked = runtimeGuardEnabled,
-                            onCheckedChange = onRuntimeGuardChange,
-                        )
-                    }
                 },
             )
 
@@ -556,8 +506,6 @@ private fun OtherFeaturesMiuix(
     guardEnabled: Boolean,
     guardLocked: Boolean,
     onGuardChange: (Boolean) -> Unit,
-    runtimeGuardEnabled: Boolean,
-    onRuntimeGuardChange: (Boolean) -> Unit,
     stealthSupported: Boolean,
     stealthEnabled: Boolean,
     onStealthChange: (Boolean) -> Unit,
@@ -679,22 +627,6 @@ private fun OtherFeaturesMiuix(
                         checked = guardEnabled,
                         onCheckedChange = onGuardChange,
                     )
-                    if (guardEnabled) {
-                        SwitchPreference(
-                            title = stringResource(R.string.settings_runtime_guard),
-                            summary = stringResource(R.string.settings_runtime_guard_summary),
-                            startAction = {
-                                MiuixIcon(
-                                    imageVector = Icons.Filled.Lock,
-                                    contentDescription = null,
-                                    tint = colorScheme.onBackground,
-                                    modifier = Modifier.padding(end = 6.dp),
-                                )
-                            },
-                            checked = runtimeGuardEnabled,
-                            onCheckedChange = onRuntimeGuardChange,
-                        )
-                    }
                 }
             }
             item {

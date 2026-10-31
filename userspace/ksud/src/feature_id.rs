@@ -14,13 +14,14 @@ pub enum FeatureId {
     SelinuxHide = 4,
     // 5 was webview_zygote_umount (v3.3.0), keep it unused so stale configs don't apply
     ShellSuAdbOnly = 6,
-    // DikSU: 分区写保护（7 = 总开关，8 = 运行时拦截）
+    // DikSU: 分区写保护（7 = 总开关）
     PartitionGuard = 7,
-    PartitionGuardRuntime = 8,
+    // 8 was the runtime partition-write guard (removed in 4.1.1), keep it unused so stale
+    // configs don't apply
 }
 
 impl FeatureId {
-    pub const ALL: [Self; 8] = [
+    pub const ALL: [Self; 7] = [
         Self::SuCompat,
         Self::KernelUmount,
         Self::Sulog,
@@ -28,7 +29,6 @@ impl FeatureId {
         Self::SelinuxHide,
         Self::ShellSuAdbOnly,
         Self::PartitionGuard,
-        Self::PartitionGuardRuntime,
     ];
 
     pub const fn from_u32(id: u32) -> Option<Self> {
@@ -40,7 +40,6 @@ impl FeatureId {
             4 => Some(Self::SelinuxHide),
             6 => Some(Self::ShellSuAdbOnly),
             7 => Some(Self::PartitionGuard),
-            8 => Some(Self::PartitionGuardRuntime),
             _ => None,
         }
     }
@@ -54,7 +53,6 @@ impl FeatureId {
             Self::SelinuxHide => "selinux_hide",
             Self::ShellSuAdbOnly => "shell_su_adb_only",
             Self::PartitionGuard => "partition_guard",
-            Self::PartitionGuardRuntime => "partition_guard_runtime",
         }
     }
 
@@ -76,9 +74,6 @@ impl FeatureId {
             Self::PartitionGuard => {
                 "Partition Guard - reject writes that would modify the system partitions (DikSU)"
             }
-            Self::PartitionGuardRuntime => {
-                "Partition Guard Runtime - intercept openat/mount/write on block devices at runtime (DikSU)"
-            }
             Self::ShellSuAdbOnly => {
                 "Shell SU ADB Only - when shell is granted root, additionally require the process to be spawned by adbd or a KernelSU root process (ksu domain)"
             }
@@ -95,7 +90,6 @@ pub fn parse_feature_id(name: &str) -> Result<FeatureId> {
         "selinux_hide" | "4" => Ok(FeatureId::SelinuxHide),
         "shell_su_adb_only" | "6" => Ok(FeatureId::ShellSuAdbOnly),
         "partition_guard" | "7" => Ok(FeatureId::PartitionGuard),
-        "partition_guard_runtime" | "8" => Ok(FeatureId::PartitionGuardRuntime),
         _ => bail!("Unknown feature: {name}"),
     }
 }

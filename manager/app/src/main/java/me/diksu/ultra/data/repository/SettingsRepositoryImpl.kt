@@ -23,7 +23,6 @@ import java.security.SecureRandom
 private const val SETTINGS_PREFS = "settings"
 private const val KEY_USE_SOFT_REBOOT = "soft_reboot"
 private const val KEY_PARTITION_GUARD = "partition_guard"
-private const val KEY_RUNTIME_GUARD = "runtime_partition_guard"
 private const val KEY_HOME_CARD_BLUR = "home_card_blur"
 private const val KEY_DISABLE_PAGER_SWIPE = "disable_pager_swipe"
 private const val KEY_SIMPLE_MODE = "simple_mode"
@@ -98,42 +97,9 @@ fun isPartitionGuardEnabled(): Boolean =
 
 
 fun setPartitionGuardEnabled(enabled: Boolean) {
-    // commit() for the same reason as setRuntimeGuardEnabled(): the settings
-    // screen re-reads this right after the call and an async apply() could make
-    // the parent switch snap back.
-    settingsPrefs().edit().putBoolean(KEY_PARTITION_GUARD, enabled).commit()
-    // Turning the top-level protection off also disables the runtime layer: the
-    // child switch is only meaningful while the parent is on.
-    if (!enabled) {
-        setRuntimeGuardEnabled(false)
-    }
-}
-
-/**
- * The runtime (kernel-side) guard, an extra opt-in on top of the install-time
- * scan. It is OFF by default in every mode - including jailbreak (late-load) -
- * because it hooks very hot syscalls (write/writev) and a bug there can panic
- * the kernel. Users enable it deliberately.
- */
-fun isRuntimeGuardEnabled(): Boolean =
-    settingsPrefs().getBoolean(KEY_RUNTIME_GUARD, false)
-
-fun setRuntimeGuardEnabled(enabled: Boolean) {
     // commit(), not apply(): the settings screen reads the value back right after
     // this returns, so an async write could make the switch snap back.
-    settingsPrefs().edit().putBoolean(KEY_RUNTIME_GUARD, enabled).commit()
-    // NOTE: pushing the value to the kernel is deliberately left to the caller
-    // (the settings screen's LaunchedEffect). Pushing here too would fire the
-    // same "ksud feature set" twice per toggle.
-}
-
-/**
- * Hand the runtime-guard state to the kernel, where the actual live-write
- * interception happens. Safe to call repeatedly; does nothing if the kernel
- * does not support the feature (e.g. an older LKM).
- */
-fun syncRuntimeGuardToKernel(enabled: Boolean) {
-    execKsud("feature set partition_guard_runtime ${if (enabled) 1 else 0}", newShell = true)
+    settingsPrefs().edit().putBoolean(KEY_PARTITION_GUARD, enabled).commit()
 }
 
 /**

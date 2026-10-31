@@ -14,6 +14,16 @@ const FEATURE_CONFIG_PATH: &str = concatcp!(defs::WORKING_DIR, ".feature_config"
 const FEATURE_MAGIC: u32 = 0x7f4b5355;
 const FEATURE_VERSION: u32 = 1;
 
+/// Id 8 was the runtime partition-write guard; it was removed in 4.1.1 together
+/// with its kernel side. Older releases persisted it in `.feature_config`, so it
+/// is dropped on load (and therefore rewritten away by the next save) instead of
+/// being forwarded to the kernel and reported as a failure.
+const REMOVED_FEATURE_ID_RUNTIME_GUARD: u32 = 8;
+
+const fn is_removed_feature(id: u32) -> bool {
+    id == REMOVED_FEATURE_ID_RUNTIME_GUARD
+}
+
 fn on_feature_applied(feature_id: FeatureId, value: u64) {
     if feature_id == FeatureId::Sulog
         && value != 0
@@ -84,6 +94,13 @@ pub fn load_binary_config() -> Result<HashMap<u32, u64>> {
         let id = u32::from_le_bytes(id_buf);
         let value = u64::from_le_bytes(value_buf);
 
+        // Stale ids from an older release: drop them silently, and the next
+        // save_binary_config() rewrites the file without them.
+        if is_removed_feature(id) {
+            log::info!("Ignoring removed feature id {id} from config");
+            continue;
+        }
+
         features.insert(id, value);
     }
 
@@ -126,6 +143,13 @@ pub fn apply_config(features: &HashMap<u32, u64>) {
 
     let mut applied = 0;
     for (&id, &value) in features {
+        // Features tombstoned on purpose (gone from both kernel and userspace)
+        // are dropped, not forwarded: the kernel has no handler for them any
+        // more and forwarding would only produce a failure log.
+        if is_removed_feature(id) {
+            log::info!("Skip removed feature {id}");
+            continue;
+        }
         if is_forced(id) {
             log::info!("Skip feature {id}: forced by boot config");
             continue;
@@ -140,6 +164,8 @@ pub fn apply_config(features: &HashMap<u32, u64>) {
                     log::warn!("Failed to set feature {}: {e}", feature_id.name());
                 }
             },
+            // Not tombstoned, just unknown to this build: a newer kernel may
+            // still implement it, so forward it instead of dropping it.
             None => match crate::ksucalls::set_feature(id, value) {
                 Ok(()) => {
                     log::info!("Set feature {id} to {value}");
