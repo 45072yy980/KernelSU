@@ -69,7 +69,10 @@ function switchPage(page) {
   document.body.classList.toggle('fm-mode', isSubPage(page));
   document.body.classList.toggle('fm-files', page === 'files');
   fmSyncTopbar(page);
-  if (page === 'settings') {}
+  // 设置页三块状态（内核特性 / SuSFS / Shizuku）在启动时拉过一次；切回来时重拉，
+  // 否则越狱/停止 Shizuku 之后这里会一直停在旧结论。各 loader 自带无数据才显示 loading，
+  // 有数据时静默刷新，不会每切一次页就闪一下。
+  if (page === 'settings') loadSettings();
 }
 
 
@@ -659,7 +662,7 @@ async function loadHome() {
       const valueTyped = (f.id === 999 || f.id === 1000);
       const isSupported = valueTyped || f.enabled;
       const disabledAttr = isSupported ? '' : 'style="opacity:0.4;pointer-events:none;"';
-      const clickHandler = isSupported ? `onclick="toggleFeature(${f.id}, this)"` : '';
+      const clickHandler = isSupported ? `onclick="toggleHomeFeature(${f.id}, this)"` : '';
       const descText = isSupported ? (f.description || '') : (f.description || '') + '（当前内核不支持）';
       return `
       <div class="feature-item">
@@ -711,7 +714,7 @@ async function loadHome() {
       </div>
       <div class="warning-card">
         <svg class="warning-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-        <div class="warning-text">无法连接到 ksud 服务。请确认已刷入 KernelSU 且 webui 服务已启动。</div>
+        <div class="warning-text">无法连接到 ksud 服务。请确认已刷入 Diksu Ultra 且 webui 服务已启动。</div>
       </div>
     `;
   }
@@ -745,7 +748,9 @@ async function runHmaConfig(scene) {
   }
 }
 
-async function toggleFeature(id, el) {
+// 首页「功能开关」用：只看元素当前 class，不判断内核 supported。
+// 设置页「内核特性」用 toggleFeature(id, value, supported)；两者语义不同，不要合并。
+async function toggleHomeFeature(id, el) {
   const enabled = !el.classList.contains('active');
   el.classList.toggle('active');
   try {
@@ -1494,7 +1499,8 @@ const SUSFS = { status: null, sent: {}, featuresOpen: false };
 async function loadSusfs() {
   const card = document.getElementById('susfsCard');
   if (!card) return;
-  card.innerHTML = '<div class="loading">加载中...</div>';
+  // 已有状态时不闪「加载中」：切回设置页会重拉一次（见 switchPage），静默刷新即可。
+  if (!SUSFS.status) card.innerHTML = '<div class="loading">加载中...</div>';
   try {
     SUSFS.status = await api('/api/susfs/status');
   } catch (e) {
