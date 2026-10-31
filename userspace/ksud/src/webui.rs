@@ -297,6 +297,7 @@ fn send_response_with(
         403 => "Forbidden",
         404 => "Not Found",
         405 => "Method Not Allowed",
+        409 => "Conflict",
         500 => "Internal Server Error",
         _ => "OK",
     };
@@ -896,16 +897,10 @@ fn get_features() -> Result<Vec<FeatureState>> {
             "Shell su 仅限 ADB",
             "只有 adbd 或 KernelSU root 进程派生的 shell 才能拿到 root，防止普通应用先拿到 shell 再提权",
         ),
-        (
-            7,
-            "系统分区守卫",
-            "拦截对 system / vendor / product 等分区的写入，避免误改系统分区导致无法开机",
-        ),
-        (
-            8,
-            "运行时分区守卫",
-            "在分区守卫之外继续拦截运行期的块设备写入（需要内核支持）",
-        ),
+        // 7 (系统分区守卫) 没有内核 handler，8 (运行时分区守卫) 已在 4.1.1 删除。
+        // 两者都不能设置（ksu_set_feature 返回 -EOPNOTSUPP / -EINVAL），列表里保留
+        // 只会让用户点出一个 500，所以不再展示；分区守卫本身在 ksud 里默认开启，
+        // 由 KSU_PARTITION_GUARD=0 关闭。
         (
             999,
             "默认卸载模块",
@@ -2994,6 +2989,23 @@ fn handle_request(stream: &mut TcpStream, req: &HttpRequest, peer: Option<u32>) 
                         Ok(()) => json_response(stream, &ApiResponse::ok("Updated")),
                         Err(e) => error_response(stream, 500, &e.to_string()),
                     };
+                }
+                // Features without a kernel handler (e.g. the removed id 8, or
+                // id 7 which never got an implementation) would surface the
+                // kernel's -EOPNOTSUPP as a 500; answer with a readable 409
+                // instead of pretending the switch exists.
+                match ksucalls::get_feature(id) {
+                    Ok(state) if !state.supported => {
+                        return error_response(
+                            stream,
+                            409,
+                            &format!("特性 id {id} 在当前内核中没有实现，无法开启（无需设置）"),
+                        );
+                    }
+                    Ok(_) => {}
+                    Err(e) => {
+                        return error_response(stream, 500, &format!("读取特性状态失败：{e}"));
+                    }
                 }
                 match ksucalls::set_feature(id, value) {
                     Ok(()) => {

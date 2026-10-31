@@ -686,17 +686,18 @@ pub fn handle_updated_modules() -> Result<()> {
 /// Run the three-level system-partition guard before a module may run its
 /// installer (spec: `docs/partition-guard-v2.md`).
 ///
-/// The guard is active in jailbreak (late-load) sessions - which cannot undo a
-/// real partition write the way a reboot would - and in normal mode when the user
-/// turned on "system partition protection" (`KSU_PARTITION_GUARD=1`).
+/// The guard is **on by default**: late-load sessions, manager installs, the
+/// WebUI installer and a plain `ksud module install` from a terminal all scan.
+/// Only an explicit `KSU_PARTITION_GUARD=0` (or `false` / `off`) turns it off,
+/// so the manager setting can disable it for every install path.
 ///
 /// * green  - print the scan summary, continue.
 /// * yellow - print the report, wait for the volume keys (`--force` skips it).
 /// * red    - print the report, refuse; `--force` never overrides this.
 fn guard_partition(updated_dir: &Path, module_id: &str, force: bool) -> Result<()> {
-    let late_load = ksucalls::is_late_load();
-    let env_guard = std::env::var("KSU_PARTITION_GUARD").is_ok_and(|value| value == "1");
-    if !late_load && !env_guard {
+    let disabled = std::env::var("KSU_PARTITION_GUARD")
+        .is_ok_and(|value| matches!(value.as_str(), "0" | "false" | "off"));
+    if disabled {
         return Ok(());
     }
 
@@ -708,6 +709,9 @@ fn guard_partition(updated_dir: &Path, module_id: &str, force: bool) -> Result<(
         partition_guard::Level::Green => Ok(()),
         partition_guard::Level::Red => {
             println!("❌ 该模块包含不可逆的分区写操作，已拒绝安装（--force 也不会放行）。");
+            // Belt and braces: the caller also cleans the staging directory, but
+            // a leftover one is promoted to a real module at the next boot.
+            discard_staged_module(updated_dir);
             bail!("partition guard: module would write a real partition");
         }
         partition_guard::Level::Yellow => {
@@ -717,7 +721,7 @@ fn guard_partition(updated_dir: &Path, module_id: &str, force: bool) -> Result<(
             }
             println!("🟡 请确认上面的操作：");
             println!("   [音量+] 继续安装      [音量-] 取消");
-            println!("   60 秒无操作将自动取消");
+            println!("   {} 秒无操作将自动取消", partition_guard::CONFIRM_TIMEOUT.as_secs());
             match partition_guard::confirm_with_volume_keys(partition_guard::CONFIRM_TIMEOUT) {
                 partition_guard::Confirm::Continue => {
                     warn!("partition guard: user confirmed with the volume keys");
@@ -725,15 +729,33 @@ fn guard_partition(updated_dir: &Path, module_id: &str, force: bool) -> Result<(
                 }
                 partition_guard::Confirm::Cancel => {
                     println!("已取消安装（没有写入任何内容）。");
+                    discard_staged_module(updated_dir);
                     bail!("partition guard: cancelled by the user")
                 }
                 partition_guard::Confirm::Unavailable => {
                     println!("读不到音量键（没有可访问的 /dev/input 设备）。");
-                    println!("可以改用终端安装：ksud module install <zip>");
+                    println!(
+                        "确认模块可信时可以加 --force 跳过这次确认后重试；红色操作不会被放行。"
+                    );
+                    discard_staged_module(updated_dir);
                     bail!("partition guard: cannot ask for confirmation")
                 }
             }
         }
+    }
+}
+
+/// Remove the staging copy of a module whose install did not finish.
+///
+/// `handle_updated_modules()` promotes every directory in
+/// `modules_update/` at the next boot, so a refused, cancelled or failed
+/// install must not leave one behind - otherwise the module the user was told
+/// about ("已拒绝安装" / "已取消") becomes active after a reboot.
+fn discard_staged_module(updated_dir: &Path) {
+    if let Err(e) = std::fs::remove_dir_all(updated_dir)
+        && e.kind() != std::io::ErrorKind::NotFound
+    {
+        warn!("failed to remove staged module {}: {e}", updated_dir.display());
     }
 }
 
@@ -860,14 +882,34 @@ fn install_module_to_system(zip: &str, force: bool) -> Result<String> {
         restore_syscon(&module_system_dir)?;
     }
 
-    // Execute install script
-    // Jailbreak (late-load) sessions run from memory and cannot undo a real
-    // partition write, so refuse a module that would make one.
-    guard_partition(&updated_dir, module_id, force)?;
+    // Everything from here on can fail; a failure must not leave the extracted
+    // module in modules_update/, because boot-time handle_updated_modules()
+    // promotes whatever is staged there.
+    let result = finish_install(zip, module_id, &updated_dir, is_metamodule, force);
+    if result.is_err() {
+        discard_staged_module(&updated_dir);
+    }
+    result
+}
+
+/// Steps that run once the zip has been extracted into
+/// `MODULES_UPDATE_DIR/<id>`: guard, installer, post-install rescan, promote.
+fn finish_install(
+    zip: &str,
+    module_id: &str,
+    updated_dir: &Path,
+    is_metamodule: bool,
+    force: bool,
+) -> Result<String> {
+    guard_partition(updated_dir, module_id, force)?;
     println!("- Running module installer");
     exec_install_script(zip, is_metamodule, module_id)?;
+    // The installer can generate or rename a boot script that never existed in
+    // the zip (and therefore was never scanned). Nothing has run yet, so a red
+    // result here can still be fully undone by deleting the staging directory.
+    rescan_after_install(updated_dir, module_id)?;
 
-    if let Some(request) = hot_install::take_request(&updated_dir)
+    if let Some(request) = hot_install::take_request(updated_dir)
         && hot_install::apply(module_id, is_metamodule, &request)
     {
         println!("- Module installed successfully, no reboot required!");
@@ -895,6 +937,19 @@ fn install_module_to_system(zip: &str, force: bool) -> Result<String> {
     info!("Module {module_id} installed successfully!");
 
     Ok(module_id.to_owned())
+}
+
+/// Scan the staging directory again after the installer ran. Only red findings
+/// abort: yellow ones were already confirmed or would re-prompt for code the
+/// scan has just proved to be a normal install step.
+fn rescan_after_install(updated_dir: &Path, module_id: &str) -> Result<()> {
+    let report = partition_guard::scan_module(updated_dir, module_id);
+    if report.level() != partition_guard::Level::Red {
+        return Ok(());
+    }
+    partition_guard::print_report(&report);
+    println!("❌ 安装过程中生成了不可逆的分区写操作，已回滚（这些脚本还没有执行）。");
+    bail!("partition guard: generated script would write a real partition");
 }
 
 pub fn install_module(zip: &str, force: bool) -> Result<()> {
