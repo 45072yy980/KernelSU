@@ -22,10 +22,67 @@
     }
   },
   "peerDependencies": {
-    "@deepseek-ai/dsh-tools": "0.2.1-rc.2"
+    "@deepseek-ai/dsh-tools": "^0.2.1-rc.2"
   },
   "engines": {
     "node": ">=20"
+  },
+  "dshGo": {
+    "v": 1,
+    "title": {
+      "zh": "Git 仓库",
+      "en": "Git"
+    },
+    "icon": "fork",
+    "contributes": {
+      "composer.actions": [
+        {
+          "id": "review",
+          "label": {
+            "zh": "审改动",
+            "en": "Review"
+          },
+          "icon": "diff",
+          "effect": {
+            "type": "insert",
+            "text": "先用 git_status 和 git_diff 把当前改动过一遍，只看不改；用三条以内说清改了什么、有什么风险。"
+          }
+        },
+        {
+          "id": "commit",
+          "label": {
+            "zh": "提交",
+            "en": "Commit"
+          },
+          "icon": "save",
+          "effect": {
+            "type": "insert",
+            "text": "把当前改动提交上去：先跑 git_audit，再按约定式提交信息写清楚，commit 后告诉我 hash。"
+          }
+        }
+      ],
+      "composer.strip": [
+        {
+          "id": "repo",
+          "icon": "fork",
+          "panel": "status"
+        }
+      ],
+      "panels": [
+        {
+          "id": "status",
+          "title": {
+            "zh": "仓库",
+            "en": "Repo"
+          },
+          "icon": "fork",
+          "placement": [
+            "session.tab",
+            "features"
+          ]
+        }
+      ]
+    }
   },
   "license": "MIT",
   "scripts": {

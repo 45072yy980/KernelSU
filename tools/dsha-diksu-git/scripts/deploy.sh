@@ -19,11 +19,22 @@ if [ ! -d "$DST" ]; then
 fi
 
 if [ ! -e "$DST/node_modules" ]; then
-  DSH_MODULES="/usr/local/lib/node_modules/@deepseek-ai/dsh/node_modules"
-  if [ -d "$DSH_MODULES" ]; then
+  DSH_MODULES=""
+  # dsh 的安装位置随分发方式不同：npm 全局装、dsh-app（/opt/dsh，本机就是这种）都见过。
+  for candidate in \
+    /usr/local/lib/node_modules/@deepseek-ai/dsh/node_modules \
+    /opt/dsh/node_modules \
+    "$(npm root -g 2>/dev/null)/@deepseek-ai/dsh/node_modules"; do
+    if [ -n "$candidate" ] && [ -d "$candidate/@deepseek-ai/dsh-tools" ]; then
+      DSH_MODULES="$candidate"
+      break
+    fi
+  done
+  if [ -n "$DSH_MODULES" ]; then
     ln -sfn "$DSH_MODULES" "$DST/node_modules"
+    echo "已链接 node_modules → $DSH_MODULES"
   else
-    echo "警告：找不到 $DSH_MODULES，插件将无法 import @deepseek-ai/dsh-tools" >&2
+    echo "警告：找不到含 @deepseek-ai/dsh-tools 的 dsh node_modules，插件将无法 import @deepseek-ai/dsh-tools" >&2
   fi
 fi
 

@@ -31,6 +31,7 @@ import { registerWriteTools } from './tools-write.js'
 import { registerRemoteTools } from './tools-remote.js'
 import { registerCiTools } from './tools-ci.js'
 import { registerTokenRoute } from './token-route.js'
+import { registerNative, withCard } from './native.js'
 
 export const name = 'dsha-diksu-git'
 
@@ -101,7 +102,7 @@ export function apply(ctx, config) {
       name: spec.name,
       description: spec.description,
       parameters: spec.parameters,
-      output: spec.output,
+      output: withCard(spec.name, spec.output),
       async execute(args, exec) {
         try {
           return lossless(await spec.execute(args, exec))
@@ -122,6 +123,13 @@ export function apply(ctx, config) {
 
   // 浏览器端的 token 配置页（设置 → 插件 → Diksu Git 凭据）
   registerTokenRoute(ctx, config, credentials)
+
+  // dsh-go 原生界面：状态条 + 仓库面板 + 工具卡片（只在 dsh-go 主机上生效）
+  try {
+    registerNative(ctx, config)
+  } catch (error) {
+    ctx.logger?.warn?.(`dsha-diksu-git: 原生界面注册失败，其余功能不受影响：${error?.message ?? error}`)
+  }
 
   ctx.logger?.info?.(`dsha-diksu-git: 已注册 ${registered.length} 个工具（${registered.join(', ')}）`)
   if (credentials === undefined) {

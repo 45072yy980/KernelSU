@@ -25,6 +25,16 @@ import {
   repoRoot,
 } from './core.js'
 
+/**
+ * 模型能看到的文本：有补丁正文就把它接在摘要后面。
+ * 之前 render 只输出 summary，导致 git_diff / git_show(patch=true) 的补丁
+ * 虽然取到了、也按 maxBytes 截断了，却从来没有到达模型。
+ */
+const renderWithPatch = (_args, value) =>
+  typeof value.patch === 'string' && value.patch.length > 0
+    ? [{ type: 'text', text: `${value.summary}\n\n${value.patch}` }]
+    : [{ type: 'text', text: value.summary }]
+
 export function registerReadTools({ register, config, credentials, ctx }) {
   // 1. 仓库状态
   register({
@@ -165,7 +175,7 @@ export function registerReadTools({ register, config, credentials, ctx }) {
           summary: { type: 'string', required: true },
         },
       },
-      render: (_args, value) => [{ type: 'text', text: value.summary }],
+      render: renderWithPatch,
     },
     async execute(args, exec) {
       exec.signal?.throwIfAborted?.()
@@ -283,7 +293,7 @@ export function registerReadTools({ register, config, credentials, ctx }) {
           summary: { type: 'string', required: true },
         },
       },
-      render: (_args, value) => [{ type: 'text', text: value.summary }],
+      render: renderWithPatch,
     },
     async execute(args, exec) {
       exec.signal?.throwIfAborted?.()
