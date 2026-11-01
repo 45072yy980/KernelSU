@@ -19,29 +19,38 @@ import me.diksu.ultra.data.susfs.SusfsRule
 import me.diksu.ultra.data.susfs.SusfsStatus
 import me.diksu.ultra.data.susfs.diffFrom
 
-/** 页面要显示的全部东西。 */
+/**
+ * 页面要显示的全部东西。
+ *
+ * [applied] 与 [draft] 是两份：编辑只动草稿，点「应用」才下发。这是照 FinaSU 的模型做的 ——
+ * 一次改五个开关也只往内核写一次，而且随时能整体丢弃。
+ */
 data class SusfsUiState(
     val loading: Boolean = true,
     val busy: Boolean = false,
     val status: SusfsStatus = SusfsStatus(),
-    val config: SusfsConfig = SusfsConfig(),
+    /** 已经下发到内核的配置。 */
+    val applied: SusfsConfig = SusfsConfig(),
+    /** 正在编辑的草稿。 */
+    val draft: SusfsConfig = SusfsConfig(),
     val proc: SusfsProcSnapshot = SusfsProcSnapshot(),
-    /** 最近一次应用的结果；null 表示还没应用过。 */
     val report: SusfsApplyReport? = null,
-    /** 一行提示，成功或失败都用它。 */
     val message: String? = null,
-    /** 待确认的导入配置；非 null 时界面弹预览对话框。 */
     val pendingImport: SusfsConfig? = null,
     val pendingDiff: SusfsConfigDiff? = null,
-    /** 待确认的「恢复默认配置」。 */
     val pendingReset: Boolean = false,
-)
+) {
+    /** 有没有未应用的改动。 */
+    val dirty: Boolean
+        get() = draft.rules != applied.rules || draft.enabled != applied.enabled
+}
 
 /**
  * SuSFS 页面的状态与意图。
  *
- * 所有会改内核的动作都走同一条路：改配置 → 存盘 → 下发 → 用报告刷新界面。没有"点一下就
- * 直接调命令"的旁路，否则配置和内核会各说各话。
+ * 两条写入路径：
+ * - 草稿路径：普通编辑只改 [SusfsUiState.draft]，用户点应用才 [applyDraft]
+ * - 整份替换：导入 / 恢复默认走预览确认，结果同样落到草稿，再由用户应用
  */
 class SusfsViewModel : ViewModel() {
 
@@ -53,50 +62,94 @@ class SusfsViewModel : ViewModel() {
         refresh()
     }
 
-    /** 重新读状态、配置与 procfs。 */
+    /** 重新读状态与配置；草稿有未应用改动时保留，避免误丢用户的编辑。 */
     fun refresh() {
         viewModelScope.launch {
             _state.update { it.copy(loading = true) }
-            val (status, config, proc) = withContext(Dispatchers.IO) {
-                Triple(
-                    runCatching { SusfsCommands.loadStatus() }.getOrDefault(SusfsStatus()),
-                    runCatching { repository.load() }.getOrDefault(SusfsConfig()),
-                    runCatching { SusfsCommands.readProc() }.getOrDefault(SusfsProcSnapshot()),
-                )
+            val status = withContext(Dispatchers.IO) {
+                runCatching { SusfsCommands.loadStatus() }.getOrDefault(SusfsStatus())
+            }
+            val config = withContext(Dispatchers.IO) {
+                runCatching { repository.load() }.getOrDefault(SusfsConfig())
+            }
+            val proc = withContext(Dispatchers.IO) {
+                runCatching { SusfsCommands.readProc() }.getOrDefault(SusfsProcSnapshot())
             }
             _state.update {
-                it.copy(loading = false, status = status, config = config, proc = proc)
+                it.copy(
+                    loading = false,
+                    status = status,
+                    applied = config,
+                    draft = if (it.dirty) it.draft else config,
+                    proc = proc,
+                )
             }
         }
     }
 
-    /** 改开关：先落盘再下发，报告回填。 */
+    // ── 草稿编辑 ──────────────────────────────────────────────────────────────
+
     fun setSwitch(key: String, value: Boolean) {
-        val current = _state.value
-        val next = current.config.copy(enabled = current.config.enabled + (key to value))
-        commit(next, current.config)
+        _state.update { state ->
+            state.copy(draft = state.draft.copy(enabled = state.draft.enabled + (key to value)))
+        }
     }
 
     fun addRule(rule: SusfsRule) {
-        val current = _state.value
-        if (current.config.rules.any { it.key == rule.key }) {
-            _state.update { it.copy(message = "这条规则已经在列表里：${rule.displayForMessage()}") }
-            return
+        _state.update { state ->
+            if (state.draft.rules.any { it.key == rule.key }) {
+                state.copy(message = "这条规则已经在列表里")
+            } else {
+                state.copy(
+                    draft = state.draft.copy(rules = state.draft.rules + rule),
+                    message = null,
+                )
+            }
         }
-        commit(current.config.copy(rules = current.config.rules + rule), current.config)
     }
 
     fun removeRule(rule: SusfsRule) {
-        val current = _state.value
-        commit(current.config.copy(rules = current.config.rules - rule), current.config)
+        _state.update { state ->
+            state.copy(draft = state.draft.copy(rules = state.draft.rules - rule))
+        }
     }
 
-    /**
-     * 导入第一步：解析并算出差异，先给用户看，不落盘也不下发。
-     *
-     * 直接覆盖是危险的 —— 导入一份别人的配置会把你已有的规则全换掉，所以要有个能后悔的
-     * 中间态（对齐 FinaSU 的 preview）。
-     */
+    /** 丢弃未应用的改动，回到内核里那份。 */
+    fun discardDraft() {
+        _state.update { it.copy(draft = it.applied, message = null) }
+    }
+
+    /** 应用草稿：先 import 存，再 apply 下发。 */
+    fun applyDraft() {
+        val current = _state.value
+        if (current.busy) return
+        if (!current.dirty) {
+            _state.update { it.copy(message = "没有待应用的改动") }
+            return
+        }
+        viewModelScope.launch {
+            _state.update { it.copy(busy = true, message = null) }
+            val target = current.draft
+            repository.save(target)
+            val report = withContext(Dispatchers.IO) { repository.apply(target, current.applied) }
+            val status = withContext(Dispatchers.IO) {
+                runCatching { SusfsCommands.loadStatus() }.getOrDefault(current.status)
+            }
+            _state.update {
+                it.copy(
+                    busy = false,
+                    status = status,
+                    applied = target,
+                    report = report,
+                    message = report.summary(),
+                )
+            }
+        }
+    }
+
+    // ── 整份替换：导入 / 恢复 ─────────────────────────────────────────────────
+
+    /** 导入第一步：解析并算差异，弹预览，不落盘。 */
     fun importConfig(text: String) {
         val parsed = try {
             repository.preview(text)
@@ -104,26 +157,22 @@ class SusfsViewModel : ViewModel() {
             _state.update { it.copy(message = "导入失败：${e.message}") }
             return
         }
-        val diff = parsed.diffFrom(_state.value.config)
+        val diff = parsed.diffFrom(_state.value.draft)
         _state.update { it.copy(pendingImport = parsed, pendingDiff = diff, message = null) }
     }
 
-    /** 导入第二步：用户确认后按目标配置下发。 */
     fun confirmImport() {
         val target = _state.value.pendingImport ?: return
-        _state.update { it.copy(pendingImport = null, pendingDiff = null) }
-        commit(target, _state.value.config)
+        _state.update {
+            it.copy(pendingImport = null, pendingDiff = null, draft = target, message = null)
+        }
     }
 
     fun cancelImport() {
         _state.update { it.copy(pendingImport = null, pendingDiff = null) }
     }
 
-    /**
-     * 恢复：把 ksud 里记录的上次成功应用读回来，走同一条导入预览。
-     *
-     * 这是"改坏了怎么回去"的入口 —— 配置文件可以随便试，内核里有上一份能回来。
-     */
+    /** 恢复：把 ksud 里记录的配置读回来，走同一条预览。 */
     fun restoreFromKernel() {
         if (_state.value.busy) return
         viewModelScope.launch {
@@ -138,15 +187,9 @@ class SusfsViewModel : ViewModel() {
         }
     }
 
-    /**
-     * 恢复默认配置：先请用户确认。
-     *
-     * 默认 = 没有任何规则、三个开关全关 —— 也就是刚装好时的状态。下发一份空配置同时会把
-     * ksud 里记录的那份状态覆盖掉，所以「恢复上次应用」也回不到重置前了，确认框里写明。
-     */
+    /** 恢复默认：清空草稿里的规则与开关，用户点应用才生效。 */
     fun requestResetDefaults() {
-        if (_state.value.busy) return
-        val current = _state.value.config
+        val current = _state.value.draft
         if (current.rules.isEmpty() && current.enabled.values.none { it }) {
             reportMessage("当前已经是默认配置")
             return
@@ -155,51 +198,17 @@ class SusfsViewModel : ViewModel() {
     }
 
     fun confirmResetDefaults() {
-        val current = _state.value.config
-        _state.update { it.copy(pendingReset = false) }
-        commit(SusfsConfig(), current)
+        _state.update { it.copy(pendingReset = false, draft = SusfsConfig(), message = null) }
     }
 
     fun cancelResetDefaults() {
         _state.update { it.copy(pendingReset = false) }
     }
 
-    /** 导出当前配置（JSON 文本），由界面层决定写到哪。 */
-    fun exportConfig(): String = repository.export()
+    fun exportConfig(): String = _state.value.draft.toPrettyJson()
 
-    /** 界面层自己产生的提示（导入/导出结果等）。 */
+    /** 界面层自己产生的提示。 */
     fun reportMessage(text: String) {
         _state.update { it.copy(message = text) }
     }
-
-    private fun commit(next: SusfsConfig, previous: SusfsConfig) {
-        if (_state.value.busy) return
-        viewModelScope.launch {
-            _state.update { it.copy(busy = true, message = null) }
-            repository.save(next)
-            val report = withContext(Dispatchers.IO) { repository.apply(next, previous) }
-            // 应用后顺手刷新一次状态：能力列表、版本这些会随开关变化，不刷新会显示旧值。
-            val status = withContext(Dispatchers.IO) { SusfsCommands.loadStatus() }
-            _state.update {
-                it.copy(
-                    busy = false,
-                    status = status,
-                    config = next,
-                    report = report,
-                    message = report.summary(),
-                )
-            }
-        }
-    }
-}
-
-/** 消息里用的简短描述，避免把整段 JSON 塞进去。 */
-private fun SusfsRule.displayForMessage(): String = when (this) {
-    is SusfsRule.HiddenPath -> path
-    is SusfsRule.HiddenLoop -> path
-    is SusfsRule.SusMap -> path
-    is SusfsRule.Kstat -> path
-    is SusfsRule.Redirect -> "$target → $redirected"
-    is SusfsRule.Uname -> release
-    is SusfsRule.Cmdline -> sourcePath
 }

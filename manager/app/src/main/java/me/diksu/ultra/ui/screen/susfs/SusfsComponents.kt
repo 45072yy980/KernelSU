@@ -1,5 +1,6 @@
 package me.diksu.ultra.ui.screen.susfs
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -9,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
@@ -238,4 +240,35 @@ fun SusfsTextField(
             modifier = modifier,
         )
     }
+}
+
+/** 顶部提示条：未应用的改动、需要重启之类，右侧可带一个动作。 */
+@Composable
+fun SusfsNotice(text: String, actionText: String? = null, onAction: (() -> Unit)? = null) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 6.dp)
+            .background(primaryColor().copy(alpha = 0.12f), RoundedCornerShape(10.dp))
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            SusfsText(text = text, size = 13)
+        }
+        if (actionText != null && onAction != null) {
+            Row(modifier = Modifier.clickable(onClick = onAction).padding(start = 12.dp)) {
+                SusfsText(text = actionText, size = 13, color = primaryColor())
+            }
+        }
+    }
+}
+
+/** 忙碌条：应用/读取时给一条细进度，别让界面看起来卡死。 */
+@Composable
+fun SusfsBusyBar() {
+    androidx.compose.material3.LinearProgressIndicator(
+        modifier = Modifier.fillMaxWidth(),
+        color = primaryColor(),
+    )
 }

@@ -476,4 +476,6 @@
     <string name="susfs_reset_defaults">恢復預設設定</string>
     <string name="susfs_reset_defaults_summary">清掉全部規則與開關，回到剛安裝時的狀態</string>
     <string name="susfs_reset_defaults_confirm">這會清空所有規則與開關，並覆寫 ksud 裡保存的那份設定——「恢復上次套用」也找不回來。</string>
+    <string name="susfs_dirty">有未套用的變更</string>
+    <string name="susfs_apply">套用</string>
 </resources>
