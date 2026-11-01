@@ -296,13 +296,16 @@ private fun SettingsPage(state: SusfsUiState, vm: SusfsViewModel) {
 @Composable
 private fun PathsPage(state: SusfsUiState, vm: SusfsViewModel, onEdit: (EditorSpec) -> Unit) {
     val pathLabel = stringResource(R.string.susfs_field_path)
+    val pathTitle = stringResource(R.string.susfs_add_path)
+    val loopTitle = stringResource(R.string.susfs_add_path_loop)
+    val mapTitle = stringResource(R.string.susfs_add_map)
     RuleSection(
-        title = stringResource(R.string.susfs_add_path),
+        title = pathTitle,
         rules = state.config.rules.filterIsInstance<SusfsRule.HiddenPath>(),
         onAdd = {
             onEdit(
                 EditorSpec(
-                    title = stringResource(R.string.susfs_add_path),
+                    title = pathTitle,
                     fields = listOf(pathLabel),
                     hints = listOf("/system/app/Example"),
                 ) { values -> values.firstOrNull()?.trim()?.takeIf { it.isNotEmpty() }?.let { vm.addRule(SusfsRule.HiddenPath(it)) } },
@@ -311,12 +314,12 @@ private fun PathsPage(state: SusfsUiState, vm: SusfsViewModel, onEdit: (EditorSp
         onRemove = { vm.removeRule(it) },
     )
     RuleSection(
-        title = stringResource(R.string.susfs_add_path_loop),
+        title = loopTitle,
         rules = state.config.rules.filterIsInstance<SusfsRule.HiddenLoop>(),
         onAdd = {
             onEdit(
                 EditorSpec(
-                    title = stringResource(R.string.susfs_add_path_loop),
+                    title = loopTitle,
                     fields = listOf(pathLabel),
                     hints = listOf("/data/local/tmp/example"),
                 ) { values -> values.firstOrNull()?.trim()?.takeIf { it.isNotEmpty() }?.let { vm.addRule(SusfsRule.HiddenLoop(it)) } },
@@ -325,12 +328,12 @@ private fun PathsPage(state: SusfsUiState, vm: SusfsViewModel, onEdit: (EditorSp
         onRemove = { vm.removeRule(it) },
     )
     RuleSection(
-        title = stringResource(R.string.susfs_add_map),
+        title = mapTitle,
         rules = state.config.rules.filterIsInstance<SusfsRule.SusMap>(),
         onAdd = {
             onEdit(
                 EditorSpec(
-                    title = stringResource(R.string.susfs_add_map),
+                    title = mapTitle,
                     fields = listOf(pathLabel),
                     hints = listOf("/system/fonts"),
                 ) { values -> values.firstOrNull()?.trim()?.takeIf { it.isNotEmpty() }?.let { vm.addRule(SusfsRule.SusMap(it)) } },
@@ -349,16 +352,19 @@ private fun SpoofPage(state: SusfsUiState, vm: SusfsViewModel, onEdit: (EditorSp
     val versionLabel = stringResource(R.string.susfs_field_version)
     val fileLabel = stringResource(R.string.susfs_field_file)
     val pathLabel = stringResource(R.string.susfs_field_path)
+    val unameTitle = stringResource(R.string.susfs_set_uname)
+    val cmdlineTitle = stringResource(R.string.susfs_set_cmdline)
+    val kstatTitle = stringResource(R.string.susfs_add_kstat)
 
-    SusfsSectionTitle(stringResource(R.string.susfs_set_uname))
+    SusfsSectionTitle(unameTitle)
     SusfsCard {
         SusfsRow(
-            title = stringResource(R.string.susfs_set_uname),
+            title = unameTitle,
             summary = uname?.let { "${it.release}${if (it.version.isEmpty()) "" else " · ${it.version}"}" } ?: empty,
             onClick = {
                 onEdit(
                     EditorSpec(
-                        title = stringResource(R.string.susfs_set_uname),
+                        title = unameTitle,
                         fields = listOf(releaseLabel, versionLabel),
                         hints = listOf("6.6.0-abogki", "#1 SMP PREEMPT"),
                     ) { values ->
@@ -374,15 +380,15 @@ private fun SpoofPage(state: SusfsUiState, vm: SusfsViewModel, onEdit: (EditorSp
         )
     }
 
-    SusfsSectionTitle(stringResource(R.string.susfs_set_cmdline))
+    SusfsSectionTitle(cmdlineTitle)
     SusfsCard {
         SusfsRow(
-            title = stringResource(R.string.susfs_set_cmdline),
+            title = cmdlineTitle,
             summary = cmdline?.sourcePath ?: empty,
             onClick = {
                 onEdit(
                     EditorSpec(
-                        title = stringResource(R.string.susfs_set_cmdline),
+                        title = cmdlineTitle,
                         fields = listOf(fileLabel),
                         hints = listOf("/data/local/tmp/cmdline"),
                     ) { values ->
@@ -397,12 +403,12 @@ private fun SpoofPage(state: SusfsUiState, vm: SusfsViewModel, onEdit: (EditorSp
     }
 
     RuleSection(
-        title = stringResource(R.string.susfs_add_kstat),
+        title = kstatTitle,
         rules = state.config.rules.filterIsInstance<SusfsRule.Kstat>(),
         onAdd = {
             onEdit(
                 EditorSpec(
-                    title = stringResource(R.string.susfs_add_kstat),
+                    title = kstatTitle,
                     fields = listOf(pathLabel),
                     hints = listOf("/system/fonts/Roboto-Regular.ttf"),
                 ) { values -> values.firstOrNull()?.trim()?.takeIf { it.isNotEmpty() }?.let { vm.addRule(SusfsRule.Kstat(it)) } },
@@ -416,13 +422,14 @@ private fun SpoofPage(state: SusfsUiState, vm: SusfsViewModel, onEdit: (EditorSp
 private fun RedirectPage(state: SusfsUiState, vm: SusfsViewModel, onEdit: (EditorSpec) -> Unit) {
     val targetLabel = stringResource(R.string.susfs_field_target)
     val redirectedLabel = stringResource(R.string.susfs_field_redirected)
+    val redirectTitle = stringResource(R.string.susfs_add_redirect)
     RuleSection(
-        title = stringResource(R.string.susfs_add_redirect),
+        title = redirectTitle,
         rules = state.config.rules.filterIsInstance<SusfsRule.Redirect>(),
         onAdd = {
             onEdit(
                 EditorSpec(
-                    title = stringResource(R.string.susfs_add_redirect),
+                    title = redirectTitle,
                     fields = listOf(targetLabel, redirectedLabel),
                     hints = listOf("/system/example", "/data/local/tmp/example"),
                 ) { values ->

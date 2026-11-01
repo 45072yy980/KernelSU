@@ -225,7 +225,8 @@ mod tests {
 
     #[test]
     fn parses_manager_document() {
-        let text = r#"{
+        // 用 r##…## 定界：JSON 里本身就有 `"#`（`"version": "#1"`），单个 # 会提前结束原始字符串。
+        let text = r##"{
             "version": 1,
             "enabled": {"log": true},
             "rules": [
@@ -233,7 +234,7 @@ mod tests {
                 {"type": "redirect", "target": "/a", "redirected": "/b", "uidScheme": 2},
                 {"type": "uname", "release": "6.6.0", "version": "#1"}
             ]
-        }"#;
+        }"##;
         let doc: ConfigDoc = serde_json::from_str(text).unwrap();
         assert_eq!(doc.rules.len(), 3);
         assert_eq!(doc.rules[1].key(), "redirect:/a:/b:2");
