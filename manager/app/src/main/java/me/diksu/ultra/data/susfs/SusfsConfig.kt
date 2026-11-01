@@ -41,6 +41,9 @@ data class SusfsConfig(
         /** 配置格式版本：改结构时加一，并在 [parse] 里兼容旧版。 */
         const val CURRENT_VERSION = 1
 
+        /** 配置文件大小上限，与 ksud 侧的入参上限保持一致。 */
+        const val MAX_BYTES = 128 * 1024
+
         /** 认识的开关。不认识的键在导入时丢弃，避免把别人的配置原样塞进来。 */
         val KNOWN_SWITCHES = listOf("log", "avc_log_spoof", "hide_mounts")
 
@@ -49,6 +52,10 @@ data class SusfsConfig(
          * 不要静默吞掉：导入失败最常见的理由是选错了文件。
          */
         fun parse(text: String): SusfsConfig {
+            // stdin 传给 ksud 时是命令行参数，太大就撑爆上限（也是防御性上限）。
+            if (text.toByteArray().size > MAX_BYTES) {
+                throw SusfsConfigException("配置过大：上限 ${MAX_BYTES / 1024} KiB")
+            }
             val root = try {
                 JSONObject(text)
             } catch (e: Exception) {

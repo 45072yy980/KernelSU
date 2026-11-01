@@ -2,6 +2,7 @@ package me.diksu.ultra.ui.screen.susfs
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
@@ -307,7 +308,7 @@ private fun SettingsPage(state: SusfsUiState, vm: SusfsViewModel) {
     SusfsCard {
         SusfsFeatureCatalog.resolve(state.status.features).forEach { (key, enabled) ->
             SusfsRow(
-                title = key.removePrefix("CONFIG_KSU_SUSFS_"),
+                title = featureLabel(key),
                 trailing = {
                     SusfsPill(
                         text = stringResource(
@@ -528,6 +529,7 @@ private fun <T : SusfsRule> RuleSection(
             SusfsEmptyHint(stringResource(R.string.susfs_empty))
         } else {
             rules.forEach { rule ->
+                // 只有右侧的「删除」可点：整行可点会在滑动列表时误删规则。
                 SusfsRow(
                     title = rule.display,
                     trailing = {
@@ -535,10 +537,11 @@ private fun <T : SusfsRule> RuleSection(
                             text = stringResource(R.string.susfs_remove),
                             fontSize = 13.sp,
                             color = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.padding(start = 8.dp),
+                            modifier = Modifier
+                                .clickable { onRemove(rule) }
+                                .padding(start = 12.dp),
                         )
                     },
-                    onClick = { onRemove(rule) },
                 )
             }
         }
@@ -577,4 +580,19 @@ private fun SusfsEditorDialog(spec: EditorSpec, onDismiss: () -> Unit) {
             TextButton(onClick = onDismiss) { Text(stringResource(R.string.susfs_cancel)) }
         },
     )
+}
+
+/** 把 `CONFIG_KSU_SUSFS_*` 映射成可读名字；没收录的键回退到去掉前缀的原样。 */
+@Composable
+private fun featureLabel(key: String): String = when (key.removePrefix("CONFIG_KSU_SUSFS_")) {
+    "SUS_PATH" -> stringResource(R.string.sus_path_feature_label)
+    "SUS_MOUNT" -> stringResource(R.string.sus_mount_feature_label)
+    "SUS_KSTAT" -> stringResource(R.string.sus_kstat_feature_label)
+    "SUS_MAP" -> stringResource(R.string.sus_map_feature_label)
+    "SPOOF_UNAME" -> stringResource(R.string.spoof_uname_feature_label)
+    "SPOOF_CMDLINE_OR_BOOTCONFIG" -> stringResource(R.string.spoof_cmdline_feature_label)
+    "OPEN_REDIRECT" -> stringResource(R.string.open_redirect_feature_label)
+    "ENABLE_LOG" -> stringResource(R.string.enable_log_feature_label)
+    "HIDE_KSU_SUSFS_SYMBOLS" -> stringResource(R.string.hide_symbols_feature_label)
+    else -> key.removePrefix("CONFIG_KSU_SUSFS_")
 }
