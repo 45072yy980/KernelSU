@@ -1,17 +1,19 @@
 package me.diksu.ultra.ui.screen.backup
 
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Build
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Security
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -33,15 +35,21 @@ import me.diksu.ultra.data.backup.BackupRepository
 import me.diksu.ultra.ui.LocalUiMode
 import me.diksu.ultra.ui.UiMode
 import me.diksu.ultra.ui.component.dialog.rememberConfirmDialog
+import me.diksu.ultra.ui.component.material.SegmentedColumn
+import me.diksu.ultra.ui.component.material.SegmentedListItem
 import me.diksu.ultra.ui.component.material.TopBarBackButton
 import me.diksu.ultra.ui.navigation3.LocalNavigator
-import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.IconButton
+import top.yukonga.miuix.kmp.basic.BasicComponent
+import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.Icon as MiuixIcon
+import top.yukonga.miuix.kmp.basic.IconButton as MiuixIconButton
+import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.SmallTopAppBar
 import top.yukonga.miuix.kmp.basic.Text as MiuixText
-import top.yukonga.miuix.kmp.basic.TextButton as MiuixTextButton
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
+import top.yukonga.miuix.kmp.icon.extended.Delete
+import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme
 import top.yukonga.miuix.kmp.basic.Scaffold as MiuixScaffold
@@ -49,8 +57,8 @@ import top.yukonga.miuix.kmp.basic.Scaffold as MiuixScaffold
 /**
  * 备份与恢复：授权规则和模块各一份，都打成 zip 放在 App 私有目录（`Android/data/.../backups`）。
  *
- * 页面只负责三件事：说明备份的是什么（固定两类目录）、说明恢复后要重启、把失败原因原样显示。
- * 恢复不做任何"自动选最新"之类的猜测——从哪一份、什么时候恢复，都由用户按下去。
+ * 页面只负责三件事：说明备份的是什么、说明恢复后要重启、把失败原因原样显示。恢复不做任何
+ * 「自动选最新」之类的猜测——从哪一份、什么时候恢复，都由用户按下去。
  */
 @Composable
 fun BackupScreen() {
@@ -62,15 +70,10 @@ fun BackupScreen() {
     var pending by remember { mutableStateOf<Pair<BackupEntry, BackupAction>?>(null) }
 
     fun refresh() {
-        scope.launch {
-            entries = withContext(Dispatchers.IO) { repo.list() }
-        }
+        scope.launch { entries = withContext(Dispatchers.IO) { repo.list() } }
     }
 
-    /**
-     * 跑一个备份/恢复动作。返回值是完成后要显示的提示（null 表示不提示），异常转成一行原因，
-     * 不吞掉——用户需要知道是哪一步失败。
-     */
+    /** 跑一个备份/恢复动作：返回值为完成后显示的提示，异常转成一行原因，不吞掉。 */
     fun exec(action: suspend () -> String?) {
         if (busy) return
         scope.launch {
@@ -129,7 +132,6 @@ fun BackupScreen() {
     when (LocalUiMode.current) {
         UiMode.Miuix, UiMode.MiuixStock -> BackupScreenMiuix(
             entries = entries,
-            busy = busy,
             message = message,
             onCreate = onCreate,
             onRestore = requestRestore,
@@ -138,7 +140,6 @@ fun BackupScreen() {
 
         UiMode.Material -> BackupScreenMaterial(
             entries = entries,
-            busy = busy,
             message = message,
             onCreate = onCreate,
             onRestore = requestRestore,
@@ -152,7 +153,6 @@ private enum class BackupAction { Restore, Delete }
 @Composable
 private fun BackupScreenMiuix(
     entries: List<BackupEntry>,
-    busy: Boolean,
     message: String?,
     onCreate: (BackupKind) -> Unit,
     onRestore: (BackupEntry) -> Unit,
@@ -164,8 +164,8 @@ private fun BackupScreenMiuix(
             SmallTopAppBar(
                 title = stringResource(id = R.string.backup_title),
                 navigationIcon = {
-                    IconButton(onClick = { navigator.pop() }) {
-                        Icon(
+                    MiuixIconButton(onClick = { navigator.pop() }) {
+                        MiuixIcon(
                             imageVector = MiuixIcons.Back,
                             contentDescription = null,
                             tint = colorScheme.onBackground,
@@ -176,17 +176,41 @@ private fun BackupScreenMiuix(
         },
     ) { padding ->
         LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(horizontal = 12.dp),
         ) {
             item {
-                Row(modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) {
-                    MiuixTextButton(
-                        text = stringResource(R.string.backup_create_superuser),
+                SmallTitle(
+                    text = stringResource(R.string.backup_section_create),
+                    modifier = Modifier.padding(top = 12.dp),
+                )
+                Card(modifier = Modifier.padding(top = 12.dp).fillMaxWidth()) {
+                    ArrowPreference(
+                        title = stringResource(R.string.backup_create_superuser),
+                        summary = stringResource(R.string.backup_create_superuser_summary),
+                        startAction = {
+                            MiuixIcon(
+                                imageVector = Icons.Rounded.Security,
+                                contentDescription = null,
+                                modifier = Modifier.padding(end = 6.dp),
+                                tint = colorScheme.onBackground,
+                            )
+                        },
                         onClick = { onCreate(BackupKind.Superuser) },
                     )
-                    Spacer(Modifier.width(16.dp))
-                    MiuixTextButton(
-                        text = stringResource(R.string.backup_create_modules),
+                    ArrowPreference(
+                        title = stringResource(R.string.backup_create_modules),
+                        summary = stringResource(R.string.backup_create_modules_summary),
+                        startAction = {
+                            MiuixIcon(
+                                imageVector = Icons.Rounded.Build,
+                                contentDescription = null,
+                                modifier = Modifier.padding(end = 6.dp),
+                                tint = colorScheme.onBackground,
+                            )
+                        },
                         onClick = { onCreate(BackupKind.Modules) },
                     )
                 }
@@ -194,42 +218,55 @@ private fun BackupScreenMiuix(
                     text = stringResource(R.string.backup_reboot_note),
                     color = colorScheme.onSurfaceVariantSummary,
                     style = MiuixTheme.textStyles.footnote1,
+                    modifier = Modifier.padding(top = 8.dp, start = 4.dp),
                 )
                 message?.let {
-                    Spacer(Modifier.height(6.dp))
                     MiuixText(
                         text = it,
                         color = colorScheme.primary,
                         style = MiuixTheme.textStyles.footnote1,
+                        modifier = Modifier.padding(top = 6.dp, start = 4.dp),
                     )
                 }
-                Spacer(Modifier.height(8.dp))
+                SmallTitle(
+                    text = stringResource(R.string.backup_section_existing),
+                    modifier = Modifier.padding(top = 12.dp),
+                )
             }
-            items(entries, key = { it.file.absolutePath }) { entry ->
-                Column(modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp)) {
-                    MiuixText(
-                        text = "${kindLabel(entry.kind)} · ${entry.displayName}",
-                        color = colorScheme.onSurface,
-                        style = MiuixTheme.textStyles.body1,
-                    )
-                    MiuixText(
-                        text = "${formatSize(entry.sizeBytes)} · ${entry.appVersion}",
-                        color = colorScheme.onSurfaceVariantSummary,
-                        style = MiuixTheme.textStyles.footnote1,
-                    )
-                    Row(modifier = Modifier.padding(top = 4.dp)) {
-                        MiuixTextButton(
-                            text = stringResource(R.string.backup_restore),
-                            onClick = { onRestore(entry) },
+            if (entries.isEmpty()) {
+                item {
+                    Card(modifier = Modifier.padding(top = 12.dp).fillMaxWidth()) {
+                        MiuixText(
+                            text = stringResource(R.string.backup_empty),
+                            color = colorScheme.onSurfaceVariantSummary,
+                            style = MiuixTheme.textStyles.body1,
+                            modifier = Modifier.padding(16.dp),
                         )
-                        Spacer(Modifier.width(16.dp))
-                        MiuixTextButton(
-                            text = stringResource(R.string.backup_delete),
-                            onClick = { onDelete(entry) },
+                    }
+                }
+            } else {
+                items(entries, key = { it.file.absolutePath }) { entry ->
+                    Card(
+                        modifier = Modifier.padding(top = 12.dp).fillMaxWidth(),
+                        onClick = { onRestore(entry) },
+                    ) {
+                        BasicComponent(
+                            title = "${kindLabel(entry.kind)} · ${entry.displayName}",
+                            summary = "${formatSize(entry.sizeBytes)} · ${entry.appVersion}",
+                            endActions = {
+                                MiuixIconButton(onClick = { onDelete(entry) }) {
+                                    MiuixIcon(
+                                        imageVector = MiuixIcons.Delete,
+                                        contentDescription = stringResource(R.string.backup_delete),
+                                        tint = colorScheme.onSurfaceVariantSummary,
+                                    )
+                                }
+                            },
                         )
                     }
                 }
             }
+            item { Spacer(Modifier.height(24.dp)) }
         }
     }
 }
@@ -237,7 +274,6 @@ private fun BackupScreenMiuix(
 @Composable
 private fun BackupScreenMaterial(
     entries: List<BackupEntry>,
-    busy: Boolean,
     message: String?,
     onCreate: (BackupKind) -> Unit,
     onRestore: (BackupEntry) -> Unit,
@@ -253,55 +289,94 @@ private fun BackupScreenMaterial(
         },
     ) { padding ->
         LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(horizontal = 16.dp),
         ) {
             item {
-                Row(modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) {
-                    OutlinedButton(onClick = { onCreate(BackupKind.Superuser) }, enabled = !busy) {
-                        Text(stringResource(R.string.backup_create_superuser))
-                    }
-                    Spacer(Modifier.width(16.dp))
-                    OutlinedButton(onClick = { onCreate(BackupKind.Modules) }, enabled = !busy) {
-                        Text(stringResource(R.string.backup_create_modules))
-                    }
-                }
+                SegmentedColumn(
+                    modifier = Modifier.padding(top = 12.dp),
+                    title = stringResource(R.string.backup_section_create),
+                    content = buildList<@Composable () -> Unit> {
+                        add {
+                            SegmentedListItem(
+                                onClick = { onCreate(BackupKind.Superuser) },
+                                headlineContent = { Text(stringResource(R.string.backup_create_superuser)) },
+                                supportingContent = {
+                                    Text(stringResource(R.string.backup_create_superuser_summary))
+                                },
+                                leadingContent = { Icon(Icons.Rounded.Security, null) },
+                            )
+                        }
+                        add {
+                            SegmentedListItem(
+                                onClick = { onCreate(BackupKind.Modules) },
+                                headlineContent = { Text(stringResource(R.string.backup_create_modules)) },
+                                supportingContent = {
+                                    Text(stringResource(R.string.backup_create_modules_summary))
+                                },
+                                leadingContent = { Icon(Icons.Rounded.Build, null) },
+                            )
+                        }
+                    },
+                )
                 Text(
                     text = stringResource(R.string.backup_reboot_note),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(top = 8.dp, start = 4.dp),
                 )
                 message?.let {
-                    Spacer(Modifier.height(6.dp))
                     Text(
                         text = it,
                         color = MaterialTheme.colorScheme.primary,
                         style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(top = 6.dp, start = 4.dp),
                     )
                 }
-                Spacer(Modifier.height(8.dp))
             }
-            items(entries, key = { it.file.absolutePath }) { entry ->
-                Column(modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp)) {
+            if (entries.isEmpty()) {
+                item {
                     Text(
-                        text = "${kindLabel(entry.kind)} · ${entry.displayName}",
-                        style = MaterialTheme.typography.titleSmall,
-                    )
-                    Text(
-                        text = "${formatSize(entry.sizeBytes)} · ${entry.appVersion}",
+                        text = stringResource(R.string.backup_empty),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.bodySmall,
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(top = 16.dp),
                     )
-                    Row(modifier = Modifier.padding(top = 4.dp)) {
-                        OutlinedButton(onClick = { onRestore(entry) }, enabled = !busy) {
-                            Text(stringResource(R.string.backup_restore))
-                        }
-                        Spacer(Modifier.width(16.dp))
-                        OutlinedButton(onClick = { onDelete(entry) }, enabled = !busy) {
-                            Text(stringResource(R.string.backup_delete))
-                        }
-                    }
+                }
+            } else {
+                item {
+                    SegmentedColumn(
+                        modifier = Modifier.padding(top = 12.dp),
+                        title = stringResource(R.string.backup_section_existing),
+                        content = buildList<@Composable () -> Unit> {
+                            entries.forEach { entry ->
+                                add {
+                                    SegmentedListItem(
+                                        onClick = { onRestore(entry) },
+                                        headlineContent = {
+                                            Text("${kindLabel(entry.kind)} · ${entry.displayName}")
+                                        },
+                                        supportingContent = {
+                                            Text("${formatSize(entry.sizeBytes)} · ${entry.appVersion}")
+                                        },
+                                        trailingContent = {
+                                            IconButton(onClick = { onDelete(entry) }) {
+                                                Icon(
+                                                    Icons.Rounded.Delete,
+                                                    contentDescription = stringResource(R.string.backup_delete),
+                                                )
+                                            }
+                                        },
+                                    )
+                                }
+                            }
+                        },
+                    )
                 }
             }
+            item { Spacer(Modifier.height(24.dp)) }
         }
     }
 }

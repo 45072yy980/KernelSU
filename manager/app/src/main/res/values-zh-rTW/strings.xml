@@ -305,4 +305,9 @@
     <string name="backup_delete_confirm">要刪除這份備份嗎？</string>
     <string name="backup_reboot_note">還原後需要重新開機才會生效；備份檔案保存在應用程式自己的儲存空間。</string>
     <string name="backup_restored_reboot">已還原，重新開機後生效。</string>
+    <string name="backup_section_create">新增備份</string>
+    <string name="backup_section_existing">現有備份</string>
+    <string name="backup_create_superuser_summary">/data/adb/ksu 下的允許清單與應用程式規則</string>
+    <string name="backup_create_modules_summary">/data/adb/modules 下已安裝的全部模組</string>
+    <string name="backup_empty">還沒有備份。</string>
 </resources>

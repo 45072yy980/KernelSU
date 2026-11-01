@@ -663,4 +663,9 @@
     <string name="backup_delete_confirm">删除这份备份？</string>
     <string name="backup_reboot_note">恢复后需要重启才生效；备份文件保存在应用自己的存储里。</string>
     <string name="backup_restored_reboot">已恢复，重启后生效。</string>
+    <string name="backup_section_create">新建备份</string>
+    <string name="backup_section_existing">已有备份</string>
+    <string name="backup_create_superuser_summary">/data/adb/ksu 下的允许列表与应用规则</string>
+    <string name="backup_create_modules_summary">/data/adb/modules 下已安装的全部模块</string>
+    <string name="backup_empty">还没有备份。</string>
 </resources>

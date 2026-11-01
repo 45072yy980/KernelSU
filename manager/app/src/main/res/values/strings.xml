@@ -700,4 +700,9 @@
     <string name="backup_delete_confirm">Delete this backup?</string>
     <string name="backup_reboot_note">Restored data takes effect after a reboot. Backup files stay in this app\'s own storage.</string>
     <string name="backup_restored_reboot">Restored. Reboot to apply.</string>
+    <string name="backup_section_create">New backup</string>
+    <string name="backup_section_existing">Existing backups</string>
+    <string name="backup_create_superuser_summary">Allowlist and per-app rules under /data/adb/ksu</string>
+    <string name="backup_create_modules_summary">Every installed module under /data/adb/modules</string>
+    <string name="backup_empty">No backups yet.</string>
 </resources>
