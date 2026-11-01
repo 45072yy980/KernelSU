@@ -651,4 +651,16 @@
     <string name="version_details_mode_builtin">内置</string>
     <string name="version_details_unknown">未读取到</string>
     <string name="version_details_note">越狱模式下的内核模块是提权时注入的，只有重新注入才会变；ksud 用户态由 ksud install 替换，随时可以更新——两者本来就会对不上。</string>
+    <string name="backup_title">备份与恢复</string>
+    <string name="backup_summary">备份授权规则与已装模块，需要时恢复回来</string>
+    <string name="backup_create_superuser">备份授权规则</string>
+    <string name="backup_create_modules">备份模块</string>
+    <string name="backup_kind_superuser">授权规则</string>
+    <string name="backup_kind_modules">模块</string>
+    <string name="backup_restore">恢复</string>
+    <string name="backup_delete">删除</string>
+    <string name="backup_restore_confirm">恢复这份备份？</string>
+    <string name="backup_delete_confirm">删除这份备份？</string>
+    <string name="backup_reboot_note">恢复后需要重启才生效；备份文件保存在应用自己的存储里。</string>
+    <string name="backup_restored_reboot">已恢复，重启后生效。</string>
 </resources>

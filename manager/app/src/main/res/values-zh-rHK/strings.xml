@@ -410,4 +410,16 @@
     <string name="version_details_mode_builtin">內建</string>
     <string name="version_details_unknown">未讀取到</string>
     <string name="version_details_note">越獄模式下的內核模組是提權時注入的，只有重新注入才會變；ksud 使用者態由 ksud install 替換，隨時可以更新——兩者本來就會對不上。</string>
+    <string name="backup_title">備份與恢復</string>
+    <string name="backup_summary">備份授權規則與已裝模組，需要時恢復回來</string>
+    <string name="backup_create_superuser">備份授權規則</string>
+    <string name="backup_create_modules">備份模組</string>
+    <string name="backup_kind_superuser">授權規則</string>
+    <string name="backup_kind_modules">模組</string>
+    <string name="backup_restore">恢復</string>
+    <string name="backup_delete">刪除</string>
+    <string name="backup_restore_confirm">恢復這份備份？</string>
+    <string name="backup_delete_confirm">刪除這份備份？</string>
+    <string name="backup_reboot_note">恢復後需要重新開機才生效；備份檔案保存在應用程式自己的儲存空間裡。</string>
+    <string name="backup_restored_reboot">已恢復，重新開機後生效。</string>
 </resources>
