@@ -1,5 +1,7 @@
 name: ShellCheck
 
+# 触发范围只列项目自己的脚本：tools/ 下是本地开发工具（dsha-diksu-git 插件及其部署脚本），
+# 不是项目内容，改它们不该惊动项目 CI；将来在别处新增脚本目录记得补进来。
 on:
   push:
     branches:
@@ -7,14 +9,22 @@ on:
       - 'dev'
     paths:
       - '.github/workflows/shellcheck.yml'
-      - '**/*.sh'
+      - 'kernel/**/*.sh'
+      - 'userspace/**/*.sh'
+      - 'manager/**/*.sh'
+      - 'scripts/**/*.sh'
+      - '*.sh'
   pull_request:
     branches:
       - 'main'
       - 'dev'
     paths:
       - '.github/workflows/shellcheck.yml'
-      - '**/*.sh'
+      - 'kernel/**/*.sh'
+      - 'userspace/**/*.sh'
+      - 'manager/**/*.sh'
+      - 'scripts/**/*.sh'
+      - '*.sh'
 
 jobs:
   shellcheck:
@@ -28,4 +38,5 @@ jobs:
           ignore_names: gradlew
           # hma-oss-config.sh 是推到设备上执行的资产脚本，不是仓库构建脚本；
           # 它带着上游的几处风格问题（SC2012/SC2059/SC2126），扫描它只会一直红。
-          ignore_paths: ./userspace/ksud/src/installer.sh ./.github/scripts/setup-rust-build.sh ./manager/app/src/main/assets/hma-oss-config.sh
+          # tools/ 下的脚本同上：本地工具，按下发脚本对待，不计入项目检查。
+          ignore_paths: ./userspace/ksud/src/installer.sh ./.github/scripts/setup-rust-build.sh ./manager/app/src/main/assets/hma-oss-config.sh ./tools
