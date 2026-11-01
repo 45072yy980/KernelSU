@@ -721,4 +721,9 @@
     <string name="check_fix_failed">Failed</string>
     <string name="version_details_section">Versions</string>
     <string name="open_source_license_count">%1$d libraries</string>
+    <string name="susfs_section_status">Status</string>
+    <string name="susfs_section_switches">Switches</string>
+    <string name="susfs_section_advanced">Paths and spoofing</string>
+    <string name="susfs_section_rules">Rules</string>
+    <string name="susfs_section_debug">Debug and logs</string>
 </resources>

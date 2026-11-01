@@ -61,6 +61,7 @@ import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Icon as MiuixIcon
 import top.yukonga.miuix.kmp.basic.IconButton as MiuixIconButton
 import top.yukonga.miuix.kmp.basic.Scaffold as MiuixScaffold
+import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Text as MiuixText
 import top.yukonga.miuix.kmp.basic.TextField as MiuixTextField
 import top.yukonga.miuix.kmp.basic.TopAppBar as MiuixTopAppBar
@@ -216,18 +217,52 @@ private fun SusfsMiuix(
             modifier = Modifier.padding(horizontal = 12.dp),
             contentPadding = innerPadding,
         ) {
+            // 分组标题把「状态 / 开关 / 路径与伪装 / 规则 / 调试」分开：之前七张卡片平铺，
+            // 读者分不出哪些是常看的、哪些是改一次就不碰的。
+            item {
+                SmallTitle(
+                    text = stringResource(R.string.susfs_section_status),
+                    modifier = Modifier.padding(top = 12.dp),
+                )
+            }
             item { SusfsStatusCard(state, onRefresh) }
 
             if (state.status.loaded) {
+                item {
+                    SmallTitle(
+                        text = stringResource(R.string.susfs_section_switches),
+                        modifier = Modifier.padding(top = 12.dp),
+                    )
+                }
                 item { SusfsFeaturesCard(state) }
                 item { SusfsSwitchCard(state, viewModel) }
+
+                item {
+                    SmallTitle(
+                        text = stringResource(R.string.susfs_section_advanced),
+                        modifier = Modifier.padding(top = 12.dp),
+                    )
+                }
                 item { SusfsPathCard(onInput, viewModel) }
                 item { SusfsKstatCard(onInput, onStaticKstat, viewModel) }
                 item { SusfsRedirectCard(onInput, viewModel) }
                 item { SusfsUnameCard(state, onInput, viewModel) }
+
+                item {
+                    SmallTitle(
+                        text = stringResource(R.string.susfs_section_rules),
+                        modifier = Modifier.padding(top = 12.dp),
+                    )
+                }
                 item { SusfsRulesCard(state) }
             }
 
+            item {
+                SmallTitle(
+                    text = stringResource(R.string.susfs_section_debug),
+                    modifier = Modifier.padding(top = 12.dp),
+                )
+            }
             item { SusfsProcCard(state) }
             item { SusfsLogCard(state) }
         }

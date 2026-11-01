@@ -443,4 +443,9 @@
     <string name="check_fix_failed">處理失敗</string>
     <string name="version_details_section">版本資訊</string>
     <string name="open_source_license_count">共 %1$d 個庫</string>
+    <string name="susfs_section_status">狀態</string>
+    <string name="susfs_section_switches">開關</string>
+    <string name="susfs_section_advanced">路徑與偽裝</string>
+    <string name="susfs_section_rules">規則</string>
+    <string name="susfs_section_debug">除錯與日誌</string>
 </resources>
