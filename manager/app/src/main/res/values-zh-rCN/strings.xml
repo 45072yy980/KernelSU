@@ -710,4 +710,8 @@
     <string name="susfs_remove">删除</string>
     <string name="susfs_empty">暂无</string>
     <string name="susfs_import_diff">将新增 %1$d 条、移除 %2$d 条，另有 %3$d 个开关变化。</string>
+    <string name="susfs_restore_last">恢复上次应用</string>
+    <string name="susfs_restore_last_summary">把内核上次接受的配置读回来，先预览再决定</string>
+    <string name="susfs_clear_config">清空配置</string>
+    <string name="susfs_clear_config_summary">清掉全部规则与开关；内核里的规则要重启后才失效</string>
 </resources>

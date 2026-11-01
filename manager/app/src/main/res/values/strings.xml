@@ -747,4 +747,8 @@
     <string name="susfs_remove">Remove</string>
     <string name="susfs_empty">None yet</string>
     <string name="susfs_import_diff">Will add %1$d, remove %2$d, change %3$d switch(es).</string>
+    <string name="susfs_restore_last">Restore last applied</string>
+    <string name="susfs_restore_last_summary">Read back the configuration the kernel last accepted, preview it first</string>
+    <string name="susfs_clear_config">Clear configuration</string>
+    <string name="susfs_clear_config_summary">Drop every rule and switch; kernel rules stay until reboot</string>
 </resources>

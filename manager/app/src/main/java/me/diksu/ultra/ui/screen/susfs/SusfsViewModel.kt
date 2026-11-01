@@ -57,9 +57,9 @@ class SusfsViewModel : ViewModel() {
             _state.update { it.copy(loading = true) }
             val (status, config, proc) = withContext(Dispatchers.IO) {
                 Triple(
-                    SusfsCommands.loadStatus(),
-                    repository.load(),
-                    SusfsCommands.readProc(),
+                    runCatching { SusfsCommands.loadStatus() }.getOrDefault(SusfsStatus()),
+                    runCatching { repository.load() }.getOrDefault(SusfsConfig()),
+                    runCatching { SusfsCommands.readProc() }.getOrDefault(SusfsProcSnapshot()),
                 )
             }
             _state.update {
@@ -115,6 +115,36 @@ class SusfsViewModel : ViewModel() {
 
     fun cancelImport() {
         _state.update { it.copy(pendingImport = null, pendingDiff = null) }
+    }
+
+    /**
+     * 恢复：把 ksud 里记录的上次成功应用读回来，走同一条导入预览。
+     *
+     * 这是"改坏了怎么回去"的入口 —— 配置文件可以随便试，内核里有上一份能回来。
+     */
+    fun restoreFromKernel() {
+        if (_state.value.busy) return
+        viewModelScope.launch {
+            _state.update { it.copy(busy = true, message = null) }
+            val result = withContext(Dispatchers.IO) { SusfsCommands.exportConfig() }
+            _state.update { it.copy(busy = false) }
+            if (!result.ok) {
+                reportMessage("读取内核配置失败：${result.output.take(120)}")
+                return@launch
+            }
+            importConfig(result.output)
+        }
+    }
+
+    /** 清空：把配置置空并下发（内核里的规则要等重启才失效，报告里会标出来）。 */
+    fun clearConfig() {
+        if (_state.value.busy) return
+        val current = _state.value.config
+        if (current.rules.isEmpty() && current.enabled.isEmpty()) {
+            reportMessage("配置已经是空的")
+            return
+        }
+        commit(SusfsConfig(), current)
     }
 
     /** 导出当前配置（JSON 文本），由界面层决定写到哪。 */

@@ -135,3 +135,16 @@ susfs/
 | 导入直接覆盖 | 覆盖别人的配置无法后悔 | 先算 diff、弹预览、确认后才下发 |
 | 消息行被 fillMaxSize 挤出屏幕 | 提示看不见 | 内容区改 weight(1f)，消息固定底部 |
 | 页面无水平内边距 | 卡片贴边 | 页面层加 12dp |
+
+## 九、第二轮自查（2026-11-01 深夜）
+
+实机截图暴露的问题：整屏文字近黑、弹窗配色错乱 —— 根因是**在 miuix 皮肤下用了 Material3 的
+Text / AlertDialog / OutlinedTextField**：文字取到 Material 的 onSurface（浅色主题下是深色），
+背景却是 miuix 的深色卡片。
+
+修法：外观层全部按皮肤分支（SusfsText / SusfsSectionTitle / SusfsCard / SusfsRow /
+SusfsSwitchRow / SusfsTextField / AppAlertDialog），页面只调用这些函数。
+
+同时补上「恢复」：
+- 恢复上次应用：把 ksud 里记录的配置读回来，走导入预览再应用
+- 清空配置：置空并下发（内核规则仍要重启才失效，报告里标明）

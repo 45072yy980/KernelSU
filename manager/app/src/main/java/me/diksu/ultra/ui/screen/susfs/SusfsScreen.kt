@@ -4,6 +4,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -11,9 +12,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -42,6 +41,7 @@ import me.diksu.ultra.data.susfs.SusfsRepository
 import me.diksu.ultra.data.susfs.SusfsRule
 import me.diksu.ultra.data.susfs.display
 import me.diksu.ultra.ui.LocalUiMode
+import me.diksu.ultra.ui.component.dialog.AppAlertDialog
 import me.diksu.ultra.ui.component.material.TopBarBackButton
 import me.diksu.ultra.ui.isMiuixFamily
 import me.diksu.ultra.ui.navigation3.LocalNavigator
@@ -168,21 +168,15 @@ fun SusfsScreen() {
             pendingDiff.removed.size,
             pendingDiff.switchesChanged.size,
         )
-        AlertDialog(
+        AppAlertDialog(
+            title = stringResource(R.string.susfs_import),
             onDismissRequest = { vm.cancelImport() },
-            title = { Text(stringResource(R.string.susfs_import)) },
-            text = { Text(diffText) },
-            confirmButton = {
-                TextButton(onClick = { vm.confirmImport() }) {
-                    Text(stringResource(R.string.susfs_confirm))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { vm.cancelImport() }) {
-                    Text(stringResource(R.string.susfs_cancel))
-                }
-            },
-        )
+            confirmText = stringResource(R.string.susfs_confirm),
+            onConfirm = { vm.confirmImport() },
+            dismissText = stringResource(R.string.susfs_cancel),
+        ) {
+            SusfsText(text = diffText, size = 14)
+        }
     }
 }
 
@@ -207,12 +201,9 @@ private fun SusfsBody(
             Spacer(Modifier.height(24.dp))
         }
         state.message?.let { message ->
-            Text(
-                text = message,
-                fontSize = 13.sp,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
-            )
+            Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
+                SusfsText(text = message, size = 13)
+            }
         }
     }
 }
@@ -485,6 +476,17 @@ private fun ExtensionsPage(
     SusfsCard {
         SusfsRow(title = stringResource(R.string.susfs_import), onClick = onImport)
         SusfsRow(title = stringResource(R.string.susfs_export), onClick = onExport)
+        // 恢复：把 ksud 里上次成功应用的配置读回来，先走导入预览，确认后才覆盖当前配置。
+        SusfsRow(
+            title = stringResource(R.string.susfs_restore_last),
+            summary = stringResource(R.string.susfs_restore_last_summary),
+            onClick = { vm.restoreFromKernel() },
+        )
+        SusfsRow(
+            title = stringResource(R.string.susfs_clear_config),
+            summary = stringResource(R.string.susfs_clear_config_summary),
+            onClick = { vm.clearConfig() },
+        )
         SusfsRow(
             title = stringResource(R.string.susfs_rules_count, state.config.rules.size),
             summary = stringResource(R.string.susfs_config_hint),
@@ -533,13 +535,10 @@ private fun <T : SusfsRule> RuleSection(
                 SusfsRow(
                     title = rule.display,
                     trailing = {
-                        Text(
+                        SusfsTrailingAction(
                             text = stringResource(R.string.susfs_remove),
-                            fontSize = 13.sp,
-                            color = MaterialTheme.colorScheme.error,
-                            modifier = Modifier
-                                .clickable { onRemove(rule) }
-                                .padding(start = 12.dp),
+                            onClick = { onRemove(rule) },
+                            danger = true,
                         )
                     },
                 )
@@ -552,47 +551,27 @@ private fun <T : SusfsRule> RuleSection(
 @Composable
 private fun SusfsEditorDialog(spec: EditorSpec, onDismiss: () -> Unit) {
     var values by remember { mutableStateOf(spec.fields.map { "" }) }
-    AlertDialog(
+    AppAlertDialog(
+        title = spec.title,
         onDismissRequest = onDismiss,
-        title = { Text(spec.title) },
-        text = {
-            Column {
-                spec.fields.forEachIndexed { index, label ->
-                    OutlinedTextField(
-                        value = values[index],
-                        onValueChange = { input ->
-                            values = values.toMutableList().also { it[index] = input }
-                        },
-                        label = { Text(label) },
-                        singleLine = true,
-                        modifier = Modifier.padding(bottom = 8.dp),
-                    )
-                }
+        confirmText = stringResource(R.string.susfs_confirm),
+        onConfirm = {
+            if (values.any { it.isNotBlank() }) spec.onConfirm(values)
+            onDismiss()
+        },
+        dismissText = stringResource(R.string.susfs_cancel),
+    ) {
+        Column {
+            spec.fields.forEachIndexed { index, label ->
+                SusfsTextField(
+                    value = values[index],
+                    onValueChange = { input ->
+                        values = values.toMutableList().also { it[index] = input }
+                    },
+                    label = label,
+                    modifier = Modifier.padding(bottom = 8.dp),
+                )
             }
-        },
-        confirmButton = {
-            TextButton(onClick = {
-                if (values.any { it.isNotBlank() }) spec.onConfirm(values)
-                onDismiss()
-            }) { Text(stringResource(R.string.susfs_confirm)) }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.susfs_cancel)) }
-        },
-    )
-}
-
-/** 把 `CONFIG_KSU_SUSFS_*` 映射成可读名字；没收录的键回退到去掉前缀的原样。 */
-@Composable
-private fun featureLabel(key: String): String = when (key.removePrefix("CONFIG_KSU_SUSFS_")) {
-    "SUS_PATH" -> stringResource(R.string.sus_path_feature_label)
-    "SUS_MOUNT" -> stringResource(R.string.sus_mount_feature_label)
-    "SUS_KSTAT" -> stringResource(R.string.sus_kstat_feature_label)
-    "SUS_MAP" -> stringResource(R.string.sus_map_feature_label)
-    "SPOOF_UNAME" -> stringResource(R.string.spoof_uname_feature_label)
-    "SPOOF_CMDLINE_OR_BOOTCONFIG" -> stringResource(R.string.spoof_cmdline_feature_label)
-    "OPEN_REDIRECT" -> stringResource(R.string.open_redirect_feature_label)
-    "ENABLE_LOG" -> stringResource(R.string.enable_log_feature_label)
-    "HIDE_KSU_SUSFS_SYMBOLS" -> stringResource(R.string.hide_symbols_feature_label)
-    else -> key.removePrefix("CONFIG_KSU_SUSFS_")
+        }
+    }
 }
