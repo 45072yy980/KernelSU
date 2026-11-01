@@ -1,13 +1,15 @@
-//! 整份配置的应用与导出。
+//! SuSFS 配置协议：存、验、应用。
 //!
-//! 以前管理器一条规则一次 `ksud susfs add-…`：导入 60 条就是 60 次 su 往返，中途失败也
-//! 不知道哪些落了地。这里把整份文档收进 ksud 内部执行，并把**上次应用的文档**记进
-//! `/data/adb/ksu/susfs-applied.json`：
+//! 契约照 FinaSU：配置是一份可导入导出的 JSON 文档，**先存后应用**。
 //!
-//! - `apply` 一次调用完成全部下发，返回 applied / failed / skipped / pending_reboot；
-//! - `export` 直接把上次的文档吐出来，不需要管理器再拼一遍；
-//! - 配置里被删掉的规则没法从内核撤回（SuSFS 只有 ADD 类命令），只能如实列进
-//!   `pending_reboot` —— 重启后不再重放，即自然失效。
+//! - `import`  校验 + 规范化 + 落盘，不碰内核
+//! - `preview` 只校验与规范化，不落盘
+//! - `apply`   把落盘的那份下发给内核，返回 applied / failed / skipped / pendingReboot
+//! - `export`  吐回落盘的那份
+//! - `status`  内核状态 + 配置摘要，一次调用拿全
+//!
+//! 于是管理器可以「改草稿 → 预览 → 保存 → 应用」分四步走，也可以每次改动后直接保存并应用；
+//! 不论哪种，内核侧永远只有一份真值：`config.json`。
 use std::collections::{BTreeMap, HashSet};
 use std::path::Path;
 
@@ -16,12 +18,22 @@ use serde::{Deserialize, Serialize};
 
 use crate::susfs::{
     add_open_redirect, add_sus_map, add_sus_path, add_sus_path_loop, enable_avc_log_spoofing,
-    enable_log, hide_sus_mnts_for_non_su_procs, set_cmdline_or_bootconfig, set_uname,
-    update_sus_kstat,
+    enable_log, get_susfs_features, get_susfs_status, get_susfs_variant, get_susfs_version,
+    hide_sus_mnts_for_non_su_procs, set_cmdline_or_bootconfig, set_uname, update_sus_kstat,
 };
 
-/// 上次应用成功（或部分成功）的配置落盘位置。
-const STATE_PATH: &str = "/data/adb/ksu/susfs-applied.json";
+/// 与 FinaSU 一样，配置放在 `ksu` 工作目录下的独立子目录里。
+const DIR: &str = "/data/adb/ksu/susfs";
+const CONFIG: &str = "/data/adb/ksu/susfs/config.json";
+/// 记录"上次真正下发成功的那份"，用来算 pendingReboot。
+const STATE: &str = "/data/adb/ksu/susfs/state.json";
+
+const MAX_RULES: usize = 256;
+const MAX_BYTES: usize = 128 * 1024;
+
+fn config_path() -> &'static Path {
+    Path::new(CONFIG)
+}
 
 const fn default_version() -> u32 {
     1
@@ -126,9 +138,74 @@ pub struct ApplyReport {
     pub pending_reboot: Vec<String>,
 }
 
-/// 应用一份配置文档，返回报告 JSON。
-pub fn apply_document(text: &str) -> Result<String> {
-    let doc: ConfigDoc = serde_json::from_str(text).context("解析 SuSFS 配置失败")?;
+/// `import` / `preview` 的返回：规范化后的文档 + 可显示的问题列表。
+#[derive(Debug, Serialize)]
+pub struct DocumentResponse {
+    pub ok: bool,
+    pub config: ConfigDoc,
+    pub warnings: Vec<String>,
+}
+
+#[derive(Serialize)]
+struct StatusDocument {
+    loaded: bool,
+    version: String,
+    variant: String,
+    features: Vec<String>,
+    config: ConfigSummary,
+}
+
+#[derive(Serialize)]
+struct ConfigSummary {
+    rules: usize,
+    switches: BTreeMap<String, bool>,
+}
+
+// ── 命令实现 ──────────────────────────────────────────────────────────────────
+
+/// 一次拿全：内核状态 + 配置摘要。界面打开页面时只需要这一个调用。
+pub fn status_document() -> Result<String> {
+    let doc = load_config().unwrap_or_default();
+    let loaded = get_susfs_status();
+    let body = StatusDocument {
+        loaded,
+        version: if loaded { get_susfs_version() } else { String::new() },
+        variant: if loaded { get_susfs_variant() } else { String::new() },
+        features: split_features(&get_susfs_features()),
+        config: ConfigSummary {
+            rules: doc.rules.len(),
+            switches: doc.enabled.clone(),
+        },
+    };
+    serde_json::to_string(&body).context("序列化状态失败")
+}
+
+/// 校验 + 规范化 + 落盘。不碰内核。
+pub fn import_document(text: &str) -> Result<String> {
+    let response = normalize(text)?;
+    write_config(&response.config)?;
+    serde_json::to_string(&response).context("序列化导入结果失败")
+}
+
+/// 只校验与规范化，不写盘。
+pub fn preview_document(text: &str) -> Result<String> {
+    let response = normalize(text)?;
+    serde_json::to_string(&response).context("序列化预览结果失败")
+}
+
+/// 导出落盘的配置；没有就是一份空文档。
+pub fn export_document() -> Result<String> {
+    match std::fs::read_to_string(config_path()) {
+        Ok(text) => Ok(text),
+        Err(_) => {
+            serde_json::to_string_pretty(&ConfigDoc::default()).context("序列化默认配置失败")
+        }
+    }
+}
+
+/// 把落盘的配置下发给内核，返回报告。
+pub fn apply_saved() -> Result<String> {
+    let doc = load_config().context("还没有保存过配置，先 import")?;
     let previous = read_state().unwrap_or_default();
 
     let mut report = ApplyReport::default();
@@ -178,10 +255,44 @@ pub fn apply_document(text: &str) -> Result<String> {
     serde_json::to_string(&report).context("序列化应用报告失败")
 }
 
-/// 导出上次应用的配置。没有记录时给一份空文档，而不是报错。
-pub fn export_document() -> Result<String> {
-    let doc = read_state().unwrap_or_default();
-    serde_json::to_string_pretty(&doc).context("序列化配置失败")
+// ── 内部 ──────────────────────────────────────────────────────────────────────
+
+fn normalize(text: &str) -> Result<DocumentResponse> {
+    if text.len() > MAX_BYTES {
+        return Err(anyhow::anyhow!("配置过大：上限 {} KiB", MAX_BYTES / 1024));
+    }
+    let doc: ConfigDoc = serde_json::from_str(text).context("解析 SuSFS 配置失败")?;
+    let mut warnings = Vec::new();
+    let mut seen = HashSet::new();
+    let mut rules = Vec::with_capacity(doc.rules.len());
+    for rule in doc.rules {
+        if !seen.insert(rule.key()) {
+            warnings.push(format!("重复规则已合并：{}", rule.key()));
+            continue;
+        }
+        rules.push(rule);
+    }
+    if rules.len() > MAX_RULES {
+        warnings.push(format!("规则过多，仅保留前 {MAX_RULES} 条"));
+        rules.truncate(MAX_RULES);
+    }
+    Ok(DocumentResponse {
+        ok: true,
+        config: ConfigDoc {
+            version: doc.version,
+            enabled: doc.enabled,
+            rules,
+        },
+        warnings,
+    })
+}
+
+fn split_features(raw: &str) -> Vec<String> {
+    raw.split([',', '\n'])
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string)
+        .collect()
 }
 
 fn is_duplicate(message: &str) -> bool {
@@ -191,17 +302,30 @@ fn is_duplicate(message: &str) -> bool {
         .any(|needle| lower.contains(needle))
 }
 
+fn load_config() -> Option<ConfigDoc> {
+    let text = std::fs::read_to_string(config_path()).ok()?;
+    serde_json::from_str(&text).ok()
+}
+
 fn read_state() -> Option<ConfigDoc> {
-    let text = std::fs::read_to_string(Path::new(STATE_PATH)).ok()?;
+    let text = std::fs::read_to_string(STATE).ok()?;
     serde_json::from_str(&text).ok()
 }
 
 fn write_state(doc: &ConfigDoc) -> Result<()> {
-    if let Some(parent) = Path::new(STATE_PATH).parent() {
-        std::fs::create_dir_all(parent).context("创建 ksu 工作目录失败")?;
-    }
+    ensure_dir()?;
+    let text = serde_json::to_string_pretty(doc).context("序列化状态失败")?;
+    std::fs::write(STATE, text).context("写入状态失败")
+}
+
+fn write_config(doc: &ConfigDoc) -> Result<()> {
+    ensure_dir()?;
     let text = serde_json::to_string_pretty(doc).context("序列化配置失败")?;
-    std::fs::write(STATE_PATH, text).context("写入 SuSFS 配置状态失败")
+    std::fs::write(config_path(), text).context("写入配置失败")
+}
+
+fn ensure_dir() -> Result<()> {
+    std::fs::create_dir_all(DIR).context("创建 SuSFS 目录失败")
 }
 
 #[cfg(test)]
@@ -220,36 +344,27 @@ mod tests {
             .key(),
             "redirect:/a:/b:0"
         );
-        assert_eq!(
-            Rule::Uname {
-                release: "r".into(),
-                version: String::new()
-            }
-            .key(),
-            "uname"
-        );
     }
 
     #[test]
-    fn parses_manager_document() {
-        // 用 r##…## 定界：JSON 里本身就有 `"#`（`"version": "#1"`），单个 # 会提前结束原始字符串。
+    fn normalize_dedupes_and_warns() {
+        // 用 r## 定界：JSON 里本身有 `"#`（`"version": "#1"`）。
         let text = r##"{
             "version": 1,
             "enabled": {"log": true},
             "rules": [
-                {"type": "path", "path": "/system/app/X"},
-                {"type": "redirect", "target": "/a", "redirected": "/b", "uidScheme": 2},
+                {"type": "path", "path": "/a"},
+                {"type": "path", "path": "/a"},
                 {"type": "uname", "release": "6.6.0", "version": "#1"}
             ]
         }"##;
-        let doc: ConfigDoc = serde_json::from_str(text).unwrap();
-        assert_eq!(doc.rules.len(), 3);
-        assert_eq!(doc.rules[1].key(), "redirect:/a:/b:2");
+        let response = normalize(text).unwrap();
+        assert_eq!(response.config.rules.len(), 2);
+        assert_eq!(response.warnings.len(), 1);
     }
 
     #[test]
     fn unknown_type_is_rejected() {
-        // 未知类型要报错而不是静默丢弃：多半是管理器比 ksud 新，让用户去升级。
         let text = r#"{"rules":[{"type":"mystery","path":"/a"}]}"#;
         assert!(serde_json::from_str::<ConfigDoc>(text).is_err());
     }

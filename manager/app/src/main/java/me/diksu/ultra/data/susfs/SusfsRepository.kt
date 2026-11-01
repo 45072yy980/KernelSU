@@ -53,23 +53,15 @@ class SusfsRepository(private val context: Context = ksuApp) {
      * 因为内核不回读规则表，我们无法知道它当前有哪些。
      */
     suspend fun apply(target: SusfsConfig, previous: SusfsConfig? = null): SusfsApplyReport {
-        // 优先走 ksud 的一次性 apply：一次 su 往返、结构化报告。老 ksud 没有这个子命令，
-        // 拿到 null 就退回逐条模式，功能不受影响。
-        applySingleShot(target)?.let { return it }
+        // 对齐 FinaSU 的"先存后应用"：import 落盘（校验 + 规范化在 ksud 里做），apply 再下发。
+        // 老 ksud 没有这两个子命令时拿不到结构化报告，退回逐条模式。
+        runCatching { SusfsCommands.importJson(target.toJson().toString()) }
+        val applied = runCatching { SusfsCommands.applySaved() }.getOrNull()
+        if (applied != null && applied.ok) {
+            SusfsApplyReport.parse(applied.output)?.let { return it }
+        }
         return applyPerRule(target, previous)
     }
-
-    /**
-     * 把整份配置经 stdin 交给 `ksud susfs apply`。
-     *
-     * 不落临时文件：root 去读应用私有目录在 SELinux 下并不可靠，也不该留下可读的中间态。
-     * 失败或报告解析不了返回 null，交给逐条回退路径。
-     */
-    private suspend fun applySingleShot(target: SusfsConfig): SusfsApplyReport? = runCatching {
-        val result = SusfsCommands.applyConfigJson(target.toJson().toString())
-        if (!result.ok) return@runCatching null
-        SusfsApplyReport.parse(result.output)
-    }.getOrNull()
 
     private suspend fun applyPerRule(target: SusfsConfig, previous: SusfsConfig? = null): SusfsApplyReport {
         val applied = mutableListOf<String>()

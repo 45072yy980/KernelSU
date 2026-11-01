@@ -13,6 +13,15 @@ use crate::{
     utils,
 };
 
+/// 读整份 stdin。配置走 stdin 而不是临时文件：root 不必去读应用私有目录。
+#[cfg(target_os = "android")]
+fn read_stdin_json() -> Result<String> {
+    use std::io::Read;
+    let mut buffer = String::new();
+    std::io::stdin().read_to_string(&mut buffer)?;
+    Ok(buffer)
+}
+
 /// KernelSU userspace cli
 #[derive(Parser, Debug)]
 #[command(author, version = defs::FULL_VERSION, about, long_about = None)]
@@ -562,14 +571,19 @@ enum Susfs {
     /// Print the SuSFS build variant reported by the kernel
     Variant,
 
-    /// Apply a whole configuration document (JSON on stdin, or --file)
-    Apply {
-        /// Path to the JSON document; omit to read from stdin
-        #[arg(long)]
-        file: Option<std::path::PathBuf>,
-    },
+    /// Query kernel state and the saved configuration in one JSON document
+    Status,
 
-    /// Print the configuration this device last applied
+    /// Validate JSON from stdin and save it; does not apply
+    Import,
+
+    /// Validate and normalize JSON from stdin without saving it
+    Preview,
+
+    /// Apply the saved configuration and print the result report
+    Apply,
+
+    /// Print the saved configuration
     Export,
 
     /// Add a path to the SuSFS hidden-path list
@@ -973,17 +987,22 @@ pub fn run() -> Result<()> {
                 println!("{}", crate::susfs::get_susfs_variant());
                 Ok(())
             }
-            Susfs::Apply { file } => {
-                let text = if let Some(path) = file {
-                    std::fs::read_to_string(&path)
-                        .with_context(|| format!("读取配置失败：{}", path.display()))?
-                } else {
-                    use std::io::Read;
-                    let mut buffer = String::new();
-                    std::io::stdin().read_to_string(&mut buffer)?;
-                    buffer
-                };
-                println!("{}", crate::susfs::apply_document(&text)?);
+            Susfs::Status => {
+                println!("{}", crate::susfs::status_document()?);
+                Ok(())
+            }
+            Susfs::Import => {
+                let text = read_stdin_json()?;
+                println!("{}", crate::susfs::import_document(&text)?);
+                Ok(())
+            }
+            Susfs::Preview => {
+                let text = read_stdin_json()?;
+                println!("{}", crate::susfs::preview_document(&text)?);
+                Ok(())
+            }
+            Susfs::Apply => {
+                println!("{}", crate::susfs::apply_saved()?);
                 Ok(())
             }
             Susfs::Export => {

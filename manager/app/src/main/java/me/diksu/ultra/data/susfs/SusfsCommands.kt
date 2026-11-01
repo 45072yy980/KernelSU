@@ -78,9 +78,21 @@ object SusfsCommands {
         return Result(result.isSuccess, text.ifEmpty { err.joinToString("\n").trim() })
     }
 
-    /** 整份配置一次性下发，配置经 stdin 传入（ksud 端 `susfs apply` 读 stdin）。 */
-    suspend fun applyConfigJson(json: String): Result =
-        withContext(Dispatchers.IO) { ksudTimed("apply", json) }
+    // ── 配置协议（对齐 FinaSU：先 import 存，再 apply 下发） ─────────────────
+    /** 内核状态 + 配置摘要，一次调用。 */
+    suspend fun statusJson(): Result = withContext(Dispatchers.IO) { ksudTimed("status") }
+
+    /** 校验并保存配置（不碰内核）。 */
+    suspend fun importJson(json: String): Result = withContext(Dispatchers.IO) { ksudTimed("import", json) }
+
+    /** 只校验与规范化，不落盘。 */
+    suspend fun previewJson(json: String): Result = withContext(Dispatchers.IO) { ksudTimed("preview", json) }
+
+    /** 把已保存的配置下发给内核。 */
+    suspend fun applySaved(): Result = withContext(Dispatchers.IO) { ksudTimed("apply") }
+
+    /** 读回已保存的配置。 */
+    suspend fun exportJson(): Result = withContext(Dispatchers.IO) { ksudTimed("export") }
 
     /**
      * 读运行状态。
@@ -135,17 +147,6 @@ object SusfsCommands {
         run("add-open-redirect ${q(target)} ${q(redirected)} $uidScheme")
     suspend fun setUname(release: String, version: String) = run("set-uname ${q(release)} ${q(version)}")
     suspend fun setCmdline(sourcePath: String) = run("set-cmdline ${q(sourcePath)}")
-
-    /**
-     * 整份配置一次下发（ksud 1.1+ 的 `susfs apply`）。
-     *
-     * 比逐条下发少 N−1 次 su 往返，并且拿回的是结构化报告；老内核/老 ksud 没有这个子命令时
-     * 调用方会收到失败并退回逐条模式。
-     */
-    suspend fun applyConfigFile(path: String) = run("apply --file ${q(path)}")
-
-    /** 读回上次应用的配置。 */
-    suspend fun exportConfig() = run("export")
 
     /**
      * 用调用方给的 13 个字段伪造 stat，而不是重新 stat(2)。

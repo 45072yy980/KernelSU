@@ -128,7 +128,7 @@ class SusfsViewModel : ViewModel() {
         if (_state.value.busy) return
         viewModelScope.launch {
             _state.update { it.copy(busy = true, message = null) }
-            val result = withContext(Dispatchers.IO) { SusfsCommands.exportConfig() }
+            val result = withContext(Dispatchers.IO) { SusfsCommands.exportJson() }
             _state.update { it.copy(busy = false) }
             if (!result.ok) {
                 reportMessage("读取内核配置失败：${result.output.take(120)}")
