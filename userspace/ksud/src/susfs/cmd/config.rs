@@ -143,7 +143,9 @@ pub fn apply_document(text: &str) -> Result<String> {
         match result {
             Ok(()) => report.applied.push(format!("switch:{key}")),
             Err(error) => {
-                report.failed.insert(format!("switch:{key}"), error.to_string());
+                report
+                    .failed
+                    .insert(format!("switch:{key}"), error.to_string());
             }
         }
     }
@@ -218,7 +220,14 @@ mod tests {
             .key(),
             "redirect:/a:/b:0"
         );
-        assert_eq!(Rule::Uname { release: "r".into(), version: String::new() }.key(), "uname");
+        assert_eq!(
+            Rule::Uname {
+                release: "r".into(),
+                version: String::new()
+            }
+            .key(),
+            "uname"
+        );
     }
 
     #[test]
