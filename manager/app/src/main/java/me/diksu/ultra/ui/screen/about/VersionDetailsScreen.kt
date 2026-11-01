@@ -9,8 +9,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
@@ -31,11 +31,15 @@ import me.diksu.ultra.R
 import me.diksu.ultra.ksuApp
 import me.diksu.ultra.ui.LocalUiMode
 import me.diksu.ultra.ui.UiMode
+import me.diksu.ultra.ui.component.material.SegmentedColumn
+import me.diksu.ultra.ui.component.material.SegmentedListItem
 import me.diksu.ultra.ui.component.material.TopBarBackButton
 import me.diksu.ultra.ui.navigation3.LocalNavigator
 import me.diksu.ultra.ui.screen.home.getManagerVersion
 import me.diksu.ultra.ui.util.KsudProbe
 import me.diksu.ultra.ui.util.probeInstalledKsudVersion
+import top.yukonga.miuix.kmp.basic.BasicComponent
+import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.SmallTitle
@@ -210,67 +214,54 @@ private fun VersionDetailsScreenMiuix(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(horizontal = 16.dp),
+                .padding(horizontal = 12.dp),
         ) {
-            items(count = rows.size) { index ->
-                val (label, value) = rows[index]
-                Column(modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp)) {
-                    MiuixText(
-                        text = label,
-                        color = colorScheme.onSurface,
-                        style = MiuixTheme.textStyles.body1,
-                    )
-                    MiuixText(
-                        text = value,
-                        color = colorScheme.onSurfaceVariantSummary,
-                        style = MiuixTheme.textStyles.footnote1,
-                    )
+            item {
+                SmallTitle(
+                    text = stringResource(R.string.version_details_section),
+                    modifier = Modifier.padding(top = 12.dp),
+                )
+                Card(modifier = Modifier.padding(top = 12.dp).fillMaxWidth()) {
+                    rows.forEach { (label, value) ->
+                        BasicComponent(title = label, summary = value)
+                    }
                 }
             }
 
             item {
                 SmallTitle(
                     text = stringResource(R.string.check_section_title),
-                    modifier = Modifier.padding(top = 8.dp),
+                    modifier = Modifier.padding(top = 12.dp),
                 )
+                Card(modifier = Modifier.padding(top = 12.dp).fillMaxWidth()) {
+                    checks.forEach { row ->
+                        BasicComponent(
+                            title = checkTitle(row.kind),
+                            summary = "${statusLabel(row.status)} · ${row.detail}",
+                            endActions = {
+                                row.fix?.let { fix ->
+                                    MiuixTextButton(
+                                        text = fixLabel(fix),
+                                        onClick = { if (!busy) onFix(fix) },
+                                    )
+                                }
+                            },
+                        )
+                    }
+                }
                 message?.let {
                     MiuixText(
                         text = it,
                         color = colorScheme.primary,
                         style = MiuixTheme.textStyles.footnote1,
+                        modifier = Modifier.padding(top = 8.dp, start = 4.dp),
                     )
                 }
-            }
-            items(checks, key = { it.kind.name }) { row ->
-                Column(modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp)) {
-                    MiuixText(
-                        text = checkTitle(row.kind),
-                        color = colorScheme.onSurface,
-                        style = MiuixTheme.textStyles.body1,
-                    )
-                    MiuixText(
-                        text = "${statusLabel(row.status)} · ${row.detail}",
-                        color = if (row.status == CheckStatus.Ok) {
-                            colorScheme.primary
-                        } else {
-                            colorScheme.onSurfaceVariantSummary
-                        },
-                        style = MiuixTheme.textStyles.footnote1,
-                    )
-                    row.fix?.let { fix ->
-                        MiuixTextButton(
-                            text = fixLabel(fix),
-                            onClick = { if (!busy) onFix(fix) },
-                        )
-                    }
-                }
-            }
-            item {
-                Spacer(Modifier.height(8.dp))
                 MiuixText(
                     text = stringResource(R.string.version_details_note),
                     color = colorScheme.onSurfaceVariantSummary,
                     style = MiuixTheme.textStyles.footnote1,
+                    modifier = Modifier.padding(top = 8.dp, start = 4.dp),
                 )
                 Spacer(Modifier.height(24.dp))
             }
@@ -302,61 +293,65 @@ private fun VersionDetailsScreenMaterial(
                 .padding(innerPadding)
                 .padding(horizontal = 16.dp),
         ) {
-            items(count = rows.size) { index ->
-                val (label, value) = rows[index]
-                Column(modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp)) {
-                    Text(text = label, style = MaterialTheme.typography.titleSmall)
-                    Text(
-                        text = value,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.bodySmall,
-                        fontSize = 13.sp,
-                    )
-                }
+            item {
+                SegmentedColumn(
+                    modifier = Modifier.padding(top = 12.dp),
+                    title = stringResource(R.string.version_details_section),
+                    content = buildList<@Composable () -> Unit> {
+                        rows.forEach { (label, value) ->
+                            add {
+                                SegmentedListItem(
+                                    headlineContent = { Text(label) },
+                                    supportingContent = {
+                                        Text(text = value, fontSize = 13.sp)
+                                    },
+                                )
+                            }
+                        }
+                    },
+                )
             }
 
             item {
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    text = stringResource(R.string.check_section_title),
-                    style = MaterialTheme.typography.titleSmall,
+                SegmentedColumn(
+                    modifier = Modifier.padding(top = 12.dp),
+                    title = stringResource(R.string.check_section_title),
+                    content = buildList<@Composable () -> Unit> {
+                        checks.forEach { row ->
+                            add {
+                                SegmentedListItem(
+                                    headlineContent = { Text(checkTitle(row.kind)) },
+                                    supportingContent = {
+                                        Text(
+                                            text = "${statusLabel(row.status)} · ${row.detail}",
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    },
+                                    trailingContent = {
+                                        row.fix?.let { fix ->
+                                            TextButton(onClick = { if (!busy) onFix(fix) }) {
+                                                Text(fixLabel(fix))
+                                            }
+                                        }
+                                    },
+                                )
+                            }
+                        }
+                    },
                 )
                 message?.let {
                     Text(
                         text = it,
                         color = MaterialTheme.colorScheme.primary,
                         style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(top = 8.dp, start = 4.dp),
                     )
                 }
-            }
-            items(checks, key = { it.kind.name }) { row ->
-                Column(modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp)) {
-                    Text(
-                        text = checkTitle(row.kind),
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                    Text(
-                        text = "${statusLabel(row.status)} · ${row.detail}",
-                        color = if (row.status == CheckStatus.Ok) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                    row.fix?.let { fix ->
-                        OutlinedButton(onClick = { if (!busy) onFix(fix) }) {
-                            Text(fixLabel(fix))
-                        }
-                    }
-                }
-            }
-            item {
                 Text(
                     text = stringResource(R.string.version_details_note),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(top = 8.dp, bottom = 24.dp),
+                    modifier = Modifier.padding(top = 8.dp, start = 4.dp, bottom = 24.dp),
                 )
             }
         }
