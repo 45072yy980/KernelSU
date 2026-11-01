@@ -72,9 +72,9 @@ class BackupRepository {
     /** 打一份新备份；失败抛 [BackupException]，调用方负责把原因显示出来。 */
     fun create(kind: BackupKind): BackupEntry {
         val dir = directory()
-        val payload = File(ksuApp.cacheDir, "diksu-backup-payload.tar").apply { delete() }
-        // payload 由 root 创建，属主是 root：下一次先以 root 删掉残留，打完再把属主改回 App，
-        // 否则 App 既删不掉旧文件、也写不进同名文件（实测报 EACCES）。
+        val payload = File(ksuApp.cacheDir, "diksu-backup-payload.tar")
+        // root 建的文件属主是 root：先由 root 删掉残留，打完再把属主改回本应用，
+        // 否则 App 读不回自己的临时文件（实测 EACCES），也删不掉旧的那份。
         val uid = Process.myUid()
         val tarCmd = buildString {
             append("rm -f ").append(shellQuote(payload.absolutePath)).append(" && ")
@@ -88,36 +88,49 @@ class BackupRepository {
         val out = ArrayList<String>()
         val err = ArrayList<String>()
         val result = getRootShell().newJob().add(tarCmd).to(out, err).exec()
+
+        var tmp: File? = null
         try {
             if (!result.isSuccess) {
                 throw BackupException("打包失败：${firstReason(out, err, result.code)}")
             }
-            if (!payload.exists() || payload.length() == 0L) {
+            val payloadBytes = payload.length()
+            if (!payload.exists() || payloadBytes == 0L) {
                 throw BackupException("打包结果为空：${kind.base} 下没有可备份的内容")
             }
+
             val createdAt = System.currentTimeMillis()
             val stamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date(createdAt))
-            val out = File(dir, "${kind.id}-$stamp.zip")
-            ZipOutputStream(out.outputStream().buffered()).use { zip ->
+            val target = File(dir, "${kind.id}-$stamp.zip")
+            // 先写临时文件，成功才改名：中途失败不能把「有清单、payload 是空」的坏包留在列表里。
+            val staging = File(dir, "${kind.id}-$stamp.zip.tmp")
+            tmp = staging
+            ZipOutputStream(staging.outputStream().buffered()).use { zip ->
                 zip.putNextEntry(ZipEntry(MANIFEST))
-                zip.write(manifestOf(kind, createdAt, payload.length()).toString(2).toByteArray())
+                zip.write(manifestOf(kind, createdAt, payloadBytes).toString(2).toByteArray())
                 zip.closeEntry()
                 zip.putNextEntry(ZipEntry(PAYLOAD))
-                payload.inputStream().buffered().use { it.copyTo(zip) }
+                val copied = try {
+                    payload.inputStream().buffered().use { stream -> stream.copyTo(zip) }
+                } catch (e: Exception) {
+                    throw BackupException("读回临时打包文件失败（${payload.length()} 字节）：${e.message ?: e::class.java.simpleName}")
+                }
                 zip.closeEntry()
+                if (copied != payloadBytes) {
+                    throw BackupException("写入备份时长度对不上：应为 $payloadBytes 字节，实际 $copied")
+                }
             }
-            return BackupEntry(out, kind, createdAt, out.length(), BuildConfig.VERSION_NAME)
+            if (!staging.renameTo(target)) {
+                throw BackupException("备份文件改名失败：${target.name}")
+            }
+            tmp = null
+            return BackupEntry(target, kind, createdAt, target.length(), BuildConfig.VERSION_NAME)
         } finally {
+            tmp?.delete()
             payload.delete()
         }
     }
 
-    /**
-     * 把一份备份解回原处。
-     *
-     * 先解到缓存再 tar -x 回 /data/adb，最后 restorecon —— 少了这一步，模块文件会带着 cache
-     * 的 SELinux 上下文落在目标目录里，重启后要么加载不了，要么被守卫判成异常。
-     */
     fun restore(entry: BackupEntry) {
         val payload = File(ksuApp.cacheDir, "diksu-restore-payload.tar").apply { delete() }
         try {
@@ -151,6 +164,9 @@ class BackupRepository {
 
     private fun readEntry(file: File): BackupEntry? = runCatching {
         ZipFile(file).use { zip ->
+            // 旧版本失败时可能留下「有清单、payload 为空」的包：不列出来，免得用户以为能恢复。
+            val payloadEntry = zip.getEntry(PAYLOAD)
+            if (payloadEntry == null || payloadEntry.size <= 0L) return null
             val ze = zip.getEntry(MANIFEST) ?: return null
             val json = zip.getInputStream(ze).bufferedReader().readText().let(::JSONObject)
             val kind = BackupKind.entries.firstOrNull { it.id == json.optString("kind") } ?: return null
