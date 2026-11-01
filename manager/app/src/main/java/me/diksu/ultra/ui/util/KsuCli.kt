@@ -48,7 +48,18 @@ private val KSUD_CANDIDATES = listOf(
 )
 
 /** 一次探测的结果：读到就带版本，读不到就带能照着查的原因（路径 + 退出码/stderr）。 */
-data class KsudProbe(val version: String?, val detail: String)
+data class KsudProbe(
+    val version: String?,
+    /** 成功时是来源路径，失败时是每条路径的失败原因。 */
+    val detail: String,
+    /**
+     * 其它候选路径读到的版本（`路径 → 版本`）。
+     *
+     * `/data/adb/ksu/bin/ksud` 只是 `link_ksud_to_bin()` 当初建的软链，可能指向很久以前那份；
+     * 两处日期不同是正常现象，但把两个版本都摆出来才看得出哪份是旧的。
+     */
+    val others: List<String> = emptyList(),
+)
 
 internal fun getKsuDaemonPath(): String {
     return ksuApp.applicationInfo.nativeLibraryDir + File.separator + "libksud.so"
@@ -171,22 +182,37 @@ fun getInstalledKsudVersion(): String? = probeInstalledKsudVersion().version
  */
 fun probeInstalledKsudVersion(): KsudProbe {
     val shell = getRootShell()
-    val notes = mutableListOf<String>()
+    val failures = mutableListOf<String>()
+    val found = mutableListOf<Pair<String, String>>()
     for (path in KSUD_CANDIDATES) {
-        val result = runCatching { shell.newJob().add("$path --version").exec() }.getOrNull()
+        // 必须挂 .to(...)，否则 libsu 不收集输出：命令退出码 0，out/err 却是空的。
+        val out = ArrayList<String>()
+        val err = ArrayList<String>()
+        val result = runCatching {
+            shell.newJob().add("$path --version").to(out, err).exec()
+        }.getOrNull()
         if (result == null) {
-            notes += "$path: 无法执行"
+            failures += "$path: 无法执行"
             continue
         }
-        val line = result.out.firstOrNull { it.isNotBlank() }?.trim()
-        if (result.isSuccess && line != null) {
-            val version = line.substringBefore(" (").trim()
-            if (version.isNotEmpty()) return KsudProbe(version, path)
+        // 有的构建把版本打到 stderr，两处都认。
+        val line = (out.firstOrNull { it.isNotBlank() }
+            ?: err.firstOrNull { it.isNotBlank() })?.trim()
+        val version = line?.substringBefore(" (")?.trim()
+        if (result.isSuccess && !version.isNullOrEmpty()) {
+            found += path to version
+            continue
         }
-        val err = result.err.firstOrNull { it.isNotBlank() }?.trim() ?: "exit ${result.code}"
-        notes += "$path: $err"
+        val reason = err.firstOrNull { it.isNotBlank() }?.trim() ?: "exit ${result.code}，无输出"
+        failures += "$path: $reason"
     }
-    return KsudProbe(null, notes.joinToString("；"))
+    if (found.isEmpty()) return KsudProbe(null, failures.joinToString("；"))
+    val (path, version) = found.first()
+    // 软链指向同一份时两处版本相同，没必要重复列一遍。
+    val others = found.drop(1)
+        .filter { (_, v) -> v != version }
+        .map { (p, v) -> "$p → $v" }
+    return KsudProbe(version, path, others)
 }
 
 fun listModules(): String {

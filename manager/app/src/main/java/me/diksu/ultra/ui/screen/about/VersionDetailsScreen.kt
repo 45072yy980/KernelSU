@@ -53,8 +53,10 @@ data class VersionDetails(
     val manager: String = "",
     val kernel: String? = null,
     val ksud: String? = null,
-    /** 读不到 ksud 时的原因（试过哪些路径、各自失败在哪），读到了就是来源路径。 */
+    /** 读到了就是来源路径；读不到就是各条路径的失败原因。 */
     val ksudDetail: String? = null,
+    /** 另一处候选路径读到的版本（`路径 → 版本`），两处不是同一份时用它对照。 */
+    val ksudOthers: List<String> = emptyList(),
     val mode: String = "",
 )
 
@@ -89,7 +91,8 @@ private fun readVersionDetails(): VersionDetails {
             null
         },
         ksud = probe.version,
-        ksudDetail = if (probe.version == null) probe.detail else null,
+        ksudDetail = probe.detail,
+        ksudOthers = probe.others,
         mode = mode,
     )
 }
@@ -113,9 +116,11 @@ private fun versionRows(details: VersionDetails): List<Pair<String, String>> {
     return listOf(
         stringResource(R.string.version_details_manager) to details.manager,
         stringResource(R.string.version_details_kernel) to (details.kernel ?: unknown),
-        stringResource(R.string.version_details_ksud) to (
-                details.ksud ?: details.ksudDetail?.take(160)?.let { "$unknown（$it）" } ?: unknown
-                ),
+        stringResource(R.string.version_details_ksud) to buildString {
+            append(details.ksud ?: details.ksudDetail?.take(160)?.let { "$unknown（$it）" } ?: unknown)
+            // 两处 ksud 不是同一份时，把另一处也列出来，省得以为读到了错的那份。
+            details.ksudOthers.forEach { append("\n").append(it) }
+        },
         stringResource(R.string.version_details_mode) to modeLabel(details.mode),
     )
 }
