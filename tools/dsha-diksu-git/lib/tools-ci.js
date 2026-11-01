@@ -296,9 +296,19 @@ export function registerCiTools({ register, config, credentials, ctx }) {
       const slug = await repoSlug(config)
       if (runId === 0) {
         const sha = safeRevision(givenSha, 'sha')
-        const runs = await api(config, token, 'GET', `/repos/${slug}/actions/runs?head_sha=${encodeURIComponent(sha)}&per_page=10`, undefined, { signal: exec.signal })
-        const list = runs.workflow_runs ?? []
-        if (list.length === 0) throw new Error(`找不到 sha=${sha} 的 workflow run（是不是还没 push？）`)
+        // GitHub 的 head_sha 过滤只认完整 40 位 sha：传短 sha 一律返回 0 条，
+        // 于是「刚 push 完却报找不到 run」。先补全，补不全再退回最近若干条本地匹配。
+        const full = await gitLine(config, ['rev-parse', '--verify', '--quiet', `${sha}^{commit}`])
+        let list = []
+        if (/^[0-9a-f]{40}$/i.test(full)) {
+          const runs = await api(config, token, 'GET', `/repos/${slug}/actions/runs?head_sha=${encodeURIComponent(full)}&per_page=10`, undefined, { signal: exec.signal })
+          list = runs.workflow_runs ?? []
+        }
+        if (list.length === 0) {
+          const recent = await api(config, token, 'GET', `/repos/${slug}/actions/runs?per_page=50`, undefined, { signal: exec.signal })
+          list = (recent.workflow_runs ?? []).filter((run) => String(run.head_sha).startsWith(sha))
+        }
+        if (list.length === 0) throw new Error(`找不到 sha=${sha} 的 workflow run（是不是还没 push？本地没有这个提交时先 git fetch）`)
         runId = list[0].id
       }
       const timeoutMs = Math.max(30, Math.min(7200, Math.trunc(args.timeoutSeconds ?? 1800))) * 1000
