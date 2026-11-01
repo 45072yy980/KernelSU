@@ -62,6 +62,38 @@ data class SusfsApplyReport(
 
     val isSuccess: Boolean get() = failed.isEmpty()
 
+    companion object {
+        /**
+         * 解析 ksud 返回的报告 JSON。
+         *
+         * 命令的 stdout 可能混着其它日志，所以从最后一行往前找第一个能解析的对象；解析不了
+         * 返回 null，调用方据此回退到逐条模式。
+         */
+        fun parse(text: String): SusfsApplyReport? {
+            val candidate = text.lineSequence()
+                .map { it.trim() }
+                .filter { it.startsWith("{") && it.endsWith("}") }
+                .lastOrNull() ?: return null
+            return runCatching {
+                val json = org.json.JSONObject(candidate)
+                fun list(key: String): List<String> {
+                    val array = json.optJSONArray(key) ?: return emptyList()
+                    return (0 until array.length()).map { array.getString(it) }
+                }
+                fun map(key: String): Map<String, String> {
+                    val obj = json.optJSONObject(key) ?: return emptyMap()
+                    return obj.keys().asSequence().associateWith { obj.optString(it) }
+                }
+                SusfsApplyReport(
+                    applied = list("applied"),
+                    failed = map("failed"),
+                    skipped = map("skipped"),
+                    pendingReboot = list("pendingReboot"),
+                )
+            }.getOrNull()
+        }
+    }
+
     /** 一行汇总，界面直接显示。 */
     fun summary(): String = buildString {
         append("成功 ${applied.size}")

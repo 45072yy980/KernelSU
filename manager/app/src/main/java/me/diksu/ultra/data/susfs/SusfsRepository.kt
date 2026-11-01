@@ -1,6 +1,7 @@
 package me.diksu.ultra.data.susfs
 
 import android.content.Context
+import java.io.File
 import android.util.Log
 import me.diksu.ultra.ksuApp
 
@@ -53,6 +54,26 @@ class SusfsRepository(private val context: Context = ksuApp) {
      * 因为内核不回读规则表，我们无法知道它当前有哪些。
      */
     suspend fun apply(target: SusfsConfig, previous: SusfsConfig? = null): SusfsApplyReport {
+        // 优先走 ksud 的一次性 apply：一次 su 往返、结构化报告。老 ksud 没有这个子命令，
+        // 拿到 null 就退回逐条模式，功能不受影响。
+        applySingleShot(target)?.let { return it }
+        return applyPerRule(target, previous)
+    }
+
+    /** 把配置写到临时文件交给 `ksud susfs apply`；失败或报告解析不了就返回 null 交给回退路径。 */
+    private suspend fun applySingleShot(target: SusfsConfig): SusfsApplyReport? = runCatching {
+        val file = File(context.cacheDir, "susfs-apply.json")
+        file.writeText(target.toJson().toString())
+        try {
+            val result = SusfsCommands.applyConfigFile(file.absolutePath)
+            if (!result.ok) return@runCatching null
+            SusfsApplyReport.parse(result.output)
+        } finally {
+            file.delete()
+        }
+    }.getOrNull()
+
+    private suspend fun applyPerRule(target: SusfsConfig, previous: SusfsConfig? = null): SusfsApplyReport {
         val applied = mutableListOf<String>()
         val failed = mutableMapOf<String, String>()
         val skipped = mutableMapOf<String, String>()

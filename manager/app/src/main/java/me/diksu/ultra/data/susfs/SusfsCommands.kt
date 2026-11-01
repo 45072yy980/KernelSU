@@ -111,6 +111,17 @@ object SusfsCommands {
     suspend fun setCmdline(sourcePath: String) = run("set-cmdline ${q(sourcePath)}")
 
     /**
+     * 整份配置一次下发（ksud 1.1+ 的 `susfs apply`）。
+     *
+     * 比逐条下发少 N−1 次 su 往返，并且拿回的是结构化报告；老内核/老 ksud 没有这个子命令时
+     * 调用方会收到失败并退回逐条模式。
+     */
+    suspend fun applyConfigFile(path: String) = run("apply --file ${q(path)}")
+
+    /** 读回上次应用的配置。 */
+    suspend fun exportConfig() = run("export")
+
+    /**
      * 用调用方给的 13 个字段伪造 stat，而不是重新 stat(2)。
      *
      * 内核原样采用这些值，所以这是给它一份"文件本身永远产生不出来"的 stat 的唯一途径；
