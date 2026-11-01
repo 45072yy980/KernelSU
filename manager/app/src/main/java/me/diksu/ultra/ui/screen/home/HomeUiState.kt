@@ -69,9 +69,7 @@ data class HomeUiState(
         get() {
             if (!isManager) return false
             // 只有两边都读得出构建标识才判断：读不到就当作一致，别拿不确定的状态去催用户更新。
-            val installed = buildIdOf(ksudVersion) ?: return false
-            val expected = buildIdOf(currentManagerVersionName) ?: return false
-            return installed != expected
+            return !sameBuild(ksudVersion, currentManagerVersionName)
         }
 
     val showLkmUpdate: Boolean
@@ -128,4 +126,18 @@ data class HomeActions(
 internal fun buildIdOf(version: String?): String? {
     val token = version?.trim()?.substringAfterLast('-')?.removePrefix("g") ?: return null
     return token.takeIf { it.length >= 7 && it.all { c -> c.isDigit() || c in 'a'..'f' } }
+}
+
+/**
+ * 两个版本串是不是同一次构建。
+ *
+ * 管理器取的是 `git rev-parse --short HEAD`，ksud 取的是 `git describe --always`，两者算出的
+ * 缩写长度**不保证一样**（实机上是 9 位对 8 位），所以按整串比会把同一次构建判成不同 —— 改成
+ * 取公共长度做前缀比较。任一侧读不出来都算一致：不确定就不打扰用户。
+ */
+internal fun sameBuild(installed: String?, expected: String?): Boolean {
+    val a = buildIdOf(installed) ?: return true
+    val b = buildIdOf(expected) ?: return true
+    val n = minOf(a.length, b.length)
+    return n >= 7 && a.regionMatches(0, b, 0, n)
 }

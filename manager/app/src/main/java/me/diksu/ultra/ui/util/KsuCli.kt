@@ -198,7 +198,9 @@ fun probeInstalledKsudVersion(): KsudProbe {
         // 有的构建把版本打到 stderr，两处都认。
         val line = (out.firstOrNull { it.isNotBlank() }
             ?: err.firstOrNull { it.isNotBlank() })?.trim()
-        val version = line?.substringBefore(" (")?.trim()
+        // clap 的输出是「ksud 4.1.0-ultra-71-g9f0e8871 (uapi: 6)」：去掉 uapi 后缀和程序名。
+        val noSuffix = line?.substringBefore(" (")?.trim().orEmpty()
+        val version = noSuffix.substringAfter(' ', noSuffix).trim().ifEmpty { null }
         if (result.isSuccess && !version.isNullOrEmpty()) {
             found += path to version
             continue
