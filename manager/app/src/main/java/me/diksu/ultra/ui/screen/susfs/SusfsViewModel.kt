@@ -33,6 +33,8 @@ data class SusfsUiState(
     /** 待确认的导入配置；非 null 时界面弹预览对话框。 */
     val pendingImport: SusfsConfig? = null,
     val pendingDiff: SusfsConfigDiff? = null,
+    /** 待确认的「恢复默认配置」。 */
+    val pendingReset: Boolean = false,
 )
 
 /**
@@ -136,15 +138,30 @@ class SusfsViewModel : ViewModel() {
         }
     }
 
-    /** 清空：把配置置空并下发（内核里的规则要等重启才失效，报告里会标出来）。 */
-    fun clearConfig() {
+    /**
+     * 恢复默认配置：先请用户确认。
+     *
+     * 默认 = 没有任何规则、三个开关全关 —— 也就是刚装好时的状态。下发一份空配置同时会把
+     * ksud 里记录的那份状态覆盖掉，所以「恢复上次应用」也回不到重置前了，确认框里写明。
+     */
+    fun requestResetDefaults() {
         if (_state.value.busy) return
         val current = _state.value.config
-        if (current.rules.isEmpty() && current.enabled.isEmpty()) {
-            reportMessage("配置已经是空的")
+        if (current.rules.isEmpty() && current.enabled.values.none { it }) {
+            reportMessage("当前已经是默认配置")
             return
         }
+        _state.update { it.copy(pendingReset = true) }
+    }
+
+    fun confirmResetDefaults() {
+        val current = _state.value.config
+        _state.update { it.copy(pendingReset = false) }
         commit(SusfsConfig(), current)
+    }
+
+    fun cancelResetDefaults() {
+        _state.update { it.copy(pendingReset = false) }
     }
 
     /** 导出当前配置（JSON 文本），由界面层决定写到哪。 */

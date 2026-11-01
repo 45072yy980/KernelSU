@@ -751,4 +751,7 @@
     <string name="susfs_restore_last_summary">Read back the configuration the kernel last accepted, preview it first</string>
     <string name="susfs_clear_config">Clear configuration</string>
     <string name="susfs_clear_config_summary">Drop every rule and switch; kernel rules stay until reboot</string>
+    <string name="susfs_reset_defaults">Restore defaults</string>
+    <string name="susfs_reset_defaults_summary">Drop every rule and switch — the state right after install</string>
+    <string name="susfs_reset_defaults_confirm">This clears all rules and switches, and overwrites the saved copy inside ksud. "Restore last applied" will not bring it back.</string>
 </resources>

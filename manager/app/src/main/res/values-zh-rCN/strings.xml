@@ -714,4 +714,7 @@
     <string name="susfs_restore_last_summary">把内核上次接受的配置读回来，先预览再决定</string>
     <string name="susfs_clear_config">清空配置</string>
     <string name="susfs_clear_config_summary">清掉全部规则与开关；内核里的规则要重启后才失效</string>
+    <string name="susfs_reset_defaults">恢复默认配置</string>
+    <string name="susfs_reset_defaults_summary">清掉全部规则与开关，回到刚安装时的状态</string>
+    <string name="susfs_reset_defaults_confirm">这会清空所有规则与开关，并覆盖 ksud 里保存的那份配置——「恢复上次应用」也找不回来。</string>
 </resources>

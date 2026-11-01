@@ -158,6 +158,19 @@ fun SusfsScreen() {
 
     editor?.let { spec -> SusfsEditorDialog(spec = spec, onDismiss = { editor = null }) }
 
+    // 恢复默认：破坏性操作，先确认。
+    if (state.pendingReset) {
+        AppAlertDialog(
+            title = stringResource(R.string.susfs_reset_defaults),
+            onDismissRequest = { vm.cancelResetDefaults() },
+            confirmText = stringResource(R.string.susfs_confirm),
+            onConfirm = { vm.confirmResetDefaults() },
+            dismissText = stringResource(R.string.susfs_cancel),
+        ) {
+            SusfsText(text = stringResource(R.string.susfs_reset_defaults_confirm), size = 14)
+        }
+    }
+
     // 导入预览：先看会变什么，再决定要不要覆盖。
     val pendingImport = state.pendingImport
     val pendingDiff = state.pendingDiff
@@ -483,9 +496,9 @@ private fun ExtensionsPage(
             onClick = { vm.restoreFromKernel() },
         )
         SusfsRow(
-            title = stringResource(R.string.susfs_clear_config),
-            summary = stringResource(R.string.susfs_clear_config_summary),
-            onClick = { vm.clearConfig() },
+            title = stringResource(R.string.susfs_reset_defaults),
+            summary = stringResource(R.string.susfs_reset_defaults_summary),
+            onClick = { vm.requestResetDefaults() },
         )
         SusfsRow(
             title = stringResource(R.string.susfs_rules_count, state.config.rules.size),

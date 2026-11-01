@@ -473,4 +473,7 @@
     <string name="susfs_restore_last_summary">讀回核心上次接受的設定，先預覽再決定</string>
     <string name="susfs_clear_config">清空設定</string>
     <string name="susfs_clear_config_summary">清掉全部規則與開關；核心裡的規則要重新開機後才失效</string>
+    <string name="susfs_reset_defaults">恢復預設設定</string>
+    <string name="susfs_reset_defaults_summary">清掉全部規則與開關，回到剛安裝時的狀態</string>
+    <string name="susfs_reset_defaults_confirm">這會清空所有規則與開關，並覆寫 ksud 裡保存的那份設定——「恢復上次套用」也找不回來。</string>
 </resources>
