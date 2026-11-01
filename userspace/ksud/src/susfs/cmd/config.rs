@@ -169,12 +169,20 @@ pub fn status_document() -> Result<String> {
     let loaded = get_susfs_status();
     let body = StatusDocument {
         loaded,
-        version: if loaded { get_susfs_version() } else { String::new() },
-        variant: if loaded { get_susfs_variant() } else { String::new() },
+        version: if loaded {
+            get_susfs_version()
+        } else {
+            String::new()
+        },
+        variant: if loaded {
+            get_susfs_variant()
+        } else {
+            String::new()
+        },
         features: split_features(&get_susfs_features()),
         config: ConfigSummary {
             rules: doc.rules.len(),
-            switches: doc.enabled.clone(),
+            switches: doc.enabled,
         },
     };
     serde_json::to_string(&body).context("序列化状态失败")
@@ -195,12 +203,10 @@ pub fn preview_document(text: &str) -> Result<String> {
 
 /// 导出落盘的配置；没有就是一份空文档。
 pub fn export_document() -> Result<String> {
-    match std::fs::read_to_string(config_path()) {
-        Ok(text) => Ok(text),
-        Err(_) => {
-            serde_json::to_string_pretty(&ConfigDoc::default()).context("序列化默认配置失败")
-        }
-    }
+    std::fs::read_to_string(config_path()).map_or_else(
+        |_| serde_json::to_string_pretty(&ConfigDoc::default()).context("序列化默认配置失败"),
+        Ok,
+    )
 }
 
 /// 把落盘的配置下发给内核，返回报告。
