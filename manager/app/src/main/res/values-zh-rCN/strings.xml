@@ -689,4 +689,5 @@
     <string name="susfs_section_advanced">路径与伪装</string>
     <string name="susfs_section_rules">规则</string>
     <string name="susfs_section_debug">调试与日志</string>
+    <string name="susfs_config_count">内核提供 %1$d 项能力</string>
 </resources>

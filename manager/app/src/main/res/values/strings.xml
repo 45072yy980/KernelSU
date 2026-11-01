@@ -726,4 +726,5 @@
     <string name="susfs_section_advanced">Paths and spoofing</string>
     <string name="susfs_section_rules">Rules</string>
     <string name="susfs_section_debug">Debug and logs</string>
+    <string name="susfs_config_count">%1$d kernel capabilities</string>
 </resources>

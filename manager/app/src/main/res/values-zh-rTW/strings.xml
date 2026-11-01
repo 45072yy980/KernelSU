@@ -331,4 +331,5 @@
     <string name="susfs_section_advanced">路徑與偽裝</string>
     <string name="susfs_section_rules">規則</string>
     <string name="susfs_section_debug">除錯與日誌</string>
+    <string name="susfs_config_count">核心提供 %1$d 項能力</string>
 </resources>

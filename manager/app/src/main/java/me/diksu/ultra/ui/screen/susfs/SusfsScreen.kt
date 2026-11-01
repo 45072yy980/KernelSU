@@ -222,7 +222,7 @@ private fun SusfsMiuix(
             item {
                 SmallTitle(
                     text = stringResource(R.string.susfs_section_status),
-                    modifier = Modifier.padding(top = 12.dp),
+                    modifier = Modifier.padding(top = 20.dp),
                 )
             }
             item { SusfsStatusCard(state, onRefresh) }
@@ -231,7 +231,7 @@ private fun SusfsMiuix(
                 item {
                     SmallTitle(
                         text = stringResource(R.string.susfs_section_switches),
-                        modifier = Modifier.padding(top = 12.dp),
+                        modifier = Modifier.padding(top = 20.dp),
                     )
                 }
                 item { SusfsFeaturesCard(state) }
@@ -240,7 +240,7 @@ private fun SusfsMiuix(
                 item {
                     SmallTitle(
                         text = stringResource(R.string.susfs_section_advanced),
-                        modifier = Modifier.padding(top = 12.dp),
+                        modifier = Modifier.padding(top = 20.dp),
                     )
                 }
                 item { SusfsPathCard(onInput, viewModel) }
@@ -248,19 +248,28 @@ private fun SusfsMiuix(
                 item { SusfsRedirectCard(onInput, viewModel) }
                 item { SusfsUnameCard(state, onInput, viewModel) }
 
-                item {
-                    SmallTitle(
-                        text = stringResource(R.string.susfs_section_rules),
-                        modifier = Modifier.padding(top = 12.dp),
-                    )
+                val hasRules = remember(state.lastOutput) {
+                    SusfsRepository.susPaths.isNotEmpty() ||
+                        SusfsRepository.susPathLoops.isNotEmpty() ||
+                        SusfsRepository.susMaps.isNotEmpty() ||
+                        SusfsRepository.susKstatPaths.isNotEmpty() ||
+                        SusfsRepository.susRedirects.isNotEmpty()
                 }
-                item { SusfsRulesCard(state) }
+                if (hasRules) {
+                    item {
+                        SmallTitle(
+                            text = stringResource(R.string.susfs_section_rules),
+                            modifier = Modifier.padding(top = 20.dp),
+                        )
+                    }
+                    item { SusfsRulesCard(state) }
+                }
             }
 
             item {
                 SmallTitle(
                     text = stringResource(R.string.susfs_section_debug),
-                    modifier = Modifier.padding(top = 12.dp),
+                    modifier = Modifier.padding(top = 20.dp),
                 )
             }
             item { SusfsProcCard(state) }
@@ -295,9 +304,11 @@ private fun SusfsStatusCard(state: SusfsUiState, onRefresh: () -> Unit) {
                 color = colorScheme.onSurfaceVariantSummary,
                 modifier = Modifier.padding(top = 6.dp),
             )
+            // 这一串 CONFIG_KSU_SUSFS_* 是编译期能力表，逐项状态在「功能启用状态」卡里已经
+            // 列过了；在这里整段铺开会把状态卡变成一堵墙，所以只留一句计数。
             if (state.status.features.isNotEmpty()) {
                 MiuixText(
-                    text = state.status.features.joinToString("  "),
+                    text = stringResource(R.string.susfs_config_count, state.status.features.size),
                     style = MiuixTheme.textStyles.footnote1,
                     color = colorScheme.onSurfaceVariantSummary,
                     modifier = Modifier.padding(top = 6.dp),
