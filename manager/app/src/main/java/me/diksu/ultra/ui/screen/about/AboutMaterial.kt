@@ -128,12 +128,20 @@ fun AboutScreenMaterial(
                 // the provenance above.
                 SegmentedColumn(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                    content = listOf {
-                        SegmentedListItem(
-                            onClick = actions.onOpenLicences,
-                            headlineContent = { Text(stringResource(id = R.string.about_open_source_license)) }
-                        )
-                    }
+                    content = listOf(
+                        {
+                            SegmentedListItem(
+                                onClick = actions.onOpenVersionDetails,
+                                headlineContent = { Text(stringResource(id = R.string.about_version_details)) }
+                            )
+                        },
+                        {
+                            SegmentedListItem(
+                                onClick = actions.onOpenLicences,
+                                headlineContent = { Text(stringResource(id = R.string.about_open_source_license)) }
+                            )
+                        }
+                    )
                 )
                 Spacer(
                     Modifier.height(

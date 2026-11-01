@@ -18,4 +18,6 @@ data class AboutScreenActions(
     val onOpenLink: (String) -> Unit,
     /** Opens the generated list of third-party libraries and their licences. */
     val onOpenLicences: () -> Unit = {},
+    /** Opens the page listing manager / kernel module / ksud versions side by side. */
+    val onOpenVersionDetails: () -> Unit = {},
 )

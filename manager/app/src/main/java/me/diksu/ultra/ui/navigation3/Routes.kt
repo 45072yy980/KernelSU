@@ -47,6 +47,11 @@ sealed interface Route : NavKey, Parcelable {
     @Serializable
     data object About : Route
 
+    /** 管理器 / 内核模块 / ksud 三份版本并列，解释越狱模式下它们为什么对不上。 */
+    @Parcelize
+    @Serializable
+    data object VersionDetails : Route
+
     /** The third-party library list the AboutLibraries plugin generates at build time. */
     @Parcelize
     @Serializable

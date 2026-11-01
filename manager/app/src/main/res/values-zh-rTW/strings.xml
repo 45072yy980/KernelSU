@@ -284,4 +284,13 @@
     <string name="settings_section_privacy">隱私</string>
     <string name="settings_section_about">關於</string>
     <string name="settings_section_danger">危險操作</string>
+    <string name="about_version_details">版本詳情</string>
+    <string name="version_details_title">版本詳情</string>
+    <string name="version_details_manager">管理器</string>
+    <string name="version_details_kernel">核心模組</string>
+    <string name="version_details_ksud">ksud（使用者態）</string>
+    <string name="version_details_mode">執行模式</string>
+    <string name="version_details_mode_builtin">內建</string>
+    <string name="version_details_unknown">未讀取到</string>
+    <string name="version_details_note">越獄模式下的核心模組是提權時注入的，只有重新注入才會變；ksud 使用者態由 ksud install 替換，隨時可以更新——兩者本來就會對不上。</string>
 </resources>

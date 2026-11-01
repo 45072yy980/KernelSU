@@ -679,4 +679,13 @@
     <string name="nav_gate_not_loaded_reason">The manager has not been claimed by the kernel yet, so Superuser and Modules are unavailable. Finish installation or escalation on the Home page.</string>
     <string name="nav_gate_not_loaded_action">Fix on Home</string>
     <string name="nav_gate_dismiss">Got it</string>
+    <string name="about_version_details">Version details</string>
+    <string name="version_details_title">Version details</string>
+    <string name="version_details_manager">Manager</string>
+    <string name="version_details_kernel">Kernel module</string>
+    <string name="version_details_ksud">ksud (userspace)</string>
+    <string name="version_details_mode">Mode</string>
+    <string name="version_details_mode_builtin">Built-in</string>
+    <string name="version_details_unknown">Not available</string>
+    <string name="version_details_note">In jailbreak mode the kernel module is injected when the exploit runs, so this number only changes after re-injecting. The ksud userspace binary is replaced by ksud install and can be updated at any time - the two are supposed to differ in between.</string>
 </resources>

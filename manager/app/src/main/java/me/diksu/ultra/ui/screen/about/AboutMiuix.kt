@@ -472,6 +472,33 @@ private fun AboutContent(
                             }
                         }
                     }
+                    // Where the three versions (manager / kernel module / ksud) sit next to
+                    // each other, so a mismatch in jailbreak mode has somewhere to be read.
+                    Card(
+                        modifier = Modifier
+                            .padding(horizontal = 12.dp)
+                            .padding(top = 12.dp)
+                            .then(
+                                if (enableBlur) {
+                                    Modifier.textureBlur(
+                                        backdrop = backdrop,
+                                        shape = RoundedCornerShape(16.dp),
+                                        blurRadius = 60f,
+                                        colors = BlurColors(blendColors = blendColors),
+                                        enabled = true,
+                                    )
+                                } else Modifier
+                            ),
+                        colors = CardDefaults.defaultColors(
+                            if (enableBlur) Color.Transparent else colorScheme.surfaceContainer,
+                            Color.Transparent,
+                        ),
+                    ) {
+                        ArrowPreference(
+                            title = stringResource(id = R.string.about_version_details),
+                            onClick = actions.onOpenVersionDetails,
+                        )
+                    }
                     // The generated licence list. Its own card for the same reason as the
                     // provenance above: it is not a place to go, it is a thing to read.
                     Card(

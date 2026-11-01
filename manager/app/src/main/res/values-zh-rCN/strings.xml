@@ -642,4 +642,13 @@
     <string name="nav_gate_not_loaded_reason">管理器还没有被内核认领，超级用户与模块管理暂不可用。请到首页完成安装或提权。</string>
     <string name="nav_gate_not_loaded_action">前往首页处理</string>
     <string name="nav_gate_dismiss">知道了</string>
+    <string name="about_version_details">版本详情</string>
+    <string name="version_details_title">版本详情</string>
+    <string name="version_details_manager">管理器</string>
+    <string name="version_details_kernel">内核模块</string>
+    <string name="version_details_ksud">ksud（用户态）</string>
+    <string name="version_details_mode">运行模式</string>
+    <string name="version_details_mode_builtin">内置</string>
+    <string name="version_details_unknown">未读取到</string>
+    <string name="version_details_note">越狱模式下的内核模块是提权时注入的，只有重新注入才会变；ksud 用户态由 ksud install 替换，随时可以更新——两者本来就会对不上。</string>
 </resources>

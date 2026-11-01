@@ -80,6 +80,7 @@ import me.diksu.ultra.ui.navigation3.Route
 import me.diksu.ultra.ui.navigation3.rememberNavigator
 import me.diksu.ultra.ui.screen.about.AboutScreen
 import me.diksu.ultra.ui.screen.about.OpenSourceLicenseScreen
+import me.diksu.ultra.ui.screen.about.VersionDetailsScreen
 import me.diksu.ultra.ui.screen.appprofile.AppProfileScreen
 import me.diksu.ultra.ui.screen.colorpalette.ColorPaletteScreen
 import me.diksu.ultra.ui.screen.executemoduleaction.ExecuteModuleActionScreen
@@ -333,6 +334,9 @@ open class MainActivity : ComponentActivity() {
                             }) {
                             entry<Route.Main>(swipeDismiss = swipeDismiss) { mainScreenEntry() }
                             entry<Route.About>(swipeDismiss = swipeDismiss) { AboutScreen() }
+                            entry<Route.VersionDetails>(swipeDismiss = swipeDismiss) {
+                                VersionDetailsScreen()
+                            }
                             entry<Route.OpenSourceLicense>(swipeDismiss = swipeDismiss) {
                                 OpenSourceLicenseScreen()
                             }

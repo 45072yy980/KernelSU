@@ -48,6 +48,7 @@ fun AboutScreen() {
         onBack = dropUnlessResumed { navigator.pop() },
         onOpenLink = uriHandler::openUri,
         onOpenLicences = dropUnlessResumed { navigator.push(Route.OpenSourceLicense) },
+        onOpenVersionDetails = dropUnlessResumed { navigator.push(Route.VersionDetails) },
     )
 
     when (LocalUiMode.current) {
