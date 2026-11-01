@@ -76,6 +76,7 @@ fun OtherFeaturesScreen() {
     val onBack = dropUnlessResumed { navigator.pop() }
     val onOpenKeymint = dropUnlessResumed { navigator.push(Route.Keymint) }
     val onOpenShizuku = dropUnlessResumed { navigator.push(Route.Shizuku) }
+    val onOpenBackup = dropUnlessResumed { navigator.push(Route.Backup) }
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -232,6 +233,7 @@ fun OtherFeaturesScreen() {
             calculatorInstalled = calcInstalled,
             onCalculatorChange = onCalculatorChange,
             onOpenShizuku = onOpenShizuku,
+            onOpenBackup = onOpenBackup,
             onReloadModules = onReloadModules,
             onSoftReboot = onSoftReboot,
             onSoftRebootHidden = onSoftRebootHidden,
@@ -249,6 +251,7 @@ fun OtherFeaturesScreen() {
             calculatorInstalled = calcInstalled,
             onCalculatorChange = onCalculatorChange,
             onOpenShizuku = onOpenShizuku,
+            onOpenBackup = onOpenBackup,
             onReloadModules = onReloadModules,
             onSoftReboot = onSoftReboot,
             onSoftRebootHidden = onSoftRebootHidden,
@@ -344,6 +347,7 @@ private fun OtherFeaturesMaterial(
     calculatorInstalled: Boolean,
     onCalculatorChange: (Boolean) -> Unit,
     onOpenShizuku: () -> Unit = {},
+    onOpenBackup: () -> Unit = {},
     onReloadModules: () -> Unit = {},
     onSoftReboot: () -> Unit = {},
     onSoftRebootHidden: () -> Unit = {},
@@ -465,6 +469,14 @@ private fun OtherFeaturesMaterial(
                     }
                     add {
                         SegmentedListItem(
+                            onClick = onOpenBackup,
+                            headlineContent = { Text(stringResource(R.string.backup_title)) },
+                            supportingContent = { Text(stringResource(R.string.backup_summary)) },
+                            leadingContent = { Icon(Icons.Filled.Security, null) },
+                        )
+                    }
+                    add {
+                        SegmentedListItem(
                             onClick = onReloadModules,
                             headlineContent = { Text(stringResource(R.string.maintenance_reload_modules)) },
                             supportingContent = {
@@ -511,6 +523,7 @@ private fun OtherFeaturesMiuix(
     calculatorInstalled: Boolean,
     onCalculatorChange: (Boolean) -> Unit,
     onOpenShizuku: () -> Unit = {},
+    onOpenBackup: () -> Unit = {},
     onReloadModules: () -> Unit = {},
     onSoftReboot: () -> Unit = {},
     onSoftRebootHidden: () -> Unit = {},
@@ -646,6 +659,11 @@ private fun OtherFeaturesMiuix(
                             )
                         },
                         onClick = onOpenShizuku,
+                    )
+                    ArrowPreference(
+                        title = stringResource(R.string.backup_title),
+                        summary = stringResource(R.string.backup_summary),
+                        onClick = onOpenBackup,
                     )
                     ArrowPreference(
                         title = stringResource(R.string.maintenance_reload_modules),

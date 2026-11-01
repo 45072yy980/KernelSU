@@ -52,6 +52,11 @@ sealed interface Route : NavKey, Parcelable {
     @Serializable
     data object VersionDetails : Route
 
+    /** 授权规则与模块的本地备份。 */
+    @Parcelize
+    @Serializable
+    data object Backup : Route
+
     /** The third-party library list the AboutLibraries plugin generates at build time. */
     @Parcelize
     @Serializable

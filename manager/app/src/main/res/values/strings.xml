@@ -688,4 +688,16 @@
     <string name="version_details_mode_builtin">Built-in</string>
     <string name="version_details_unknown">Not available</string>
     <string name="version_details_note">In jailbreak mode the kernel module is injected when the exploit runs, so this number only changes after re-injecting. The ksud userspace binary is replaced by ksud install and can be updated at any time - the two are supposed to differ in between.</string>
+    <string name="backup_title">Backup &amp; restore</string>
+    <string name="backup_summary">Back up root rules and installed modules, restore them when needed.</string>
+    <string name="backup_create_superuser">Back up root rules</string>
+    <string name="backup_create_modules">Back up modules</string>
+    <string name="backup_kind_superuser">Root rules</string>
+    <string name="backup_kind_modules">Modules</string>
+    <string name="backup_restore">Restore</string>
+    <string name="backup_delete">Delete</string>
+    <string name="backup_restore_confirm">Restore this backup?</string>
+    <string name="backup_delete_confirm">Delete this backup?</string>
+    <string name="backup_reboot_note">Restored data takes effect after a reboot. Backup files stay in this app\'s own storage.</string>
+    <string name="backup_restored_reboot">Restored. Reboot to apply.</string>
 </resources>
