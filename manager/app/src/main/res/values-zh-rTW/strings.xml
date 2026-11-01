@@ -310,4 +310,18 @@
     <string name="backup_create_superuser_summary">/data/adb/ksu 下的允許清單與應用程式規則</string>
     <string name="backup_create_modules_summary">/data/adb/modules 下已安裝的全部模組</string>
     <string name="backup_empty">還沒有備份。</string>
+    <string name="check_section_title">檢查</string>
+    <string name="check_status_ok">正常</string>
+    <string name="check_status_warn">需處理</string>
+    <string name="check_status_unknown">無法判斷</string>
+    <string name="check_kernel">核心模組</string>
+    <string name="check_ksud">ksud 使用者態</string>
+    <string name="check_link">bin 符號連結</string>
+    <string name="check_uapi">UAPI 版本</string>
+    <string name="check_guard">分區守衛</string>
+    <string name="check_susfs">SuSFS</string>
+    <string name="check_fix_reinstall_ksud">重裝 ksud</string>
+    <string name="check_fix_rebuild_link">重建符號連結</string>
+    <string name="check_fix_ok">已處理</string>
+    <string name="check_fix_failed">處理失敗</string>
 </resources>

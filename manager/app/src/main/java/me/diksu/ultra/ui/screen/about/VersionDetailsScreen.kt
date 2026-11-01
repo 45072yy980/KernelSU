@@ -2,22 +2,29 @@ package me.diksu.ultra.ui.screen.about
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.diksu.ultra.Natives
 import me.diksu.ultra.R
@@ -31,8 +38,10 @@ import me.diksu.ultra.ui.util.KsudProbe
 import me.diksu.ultra.ui.util.probeInstalledKsudVersion
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
+import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.SmallTopAppBar
 import top.yukonga.miuix.kmp.basic.Text as MiuixText
+import top.yukonga.miuix.kmp.basic.TextButton as MiuixTextButton
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -40,13 +49,13 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme
 import top.yukonga.miuix.kmp.basic.Scaffold as MiuixScaffold
 
 /**
- * Where the three versions are listed side by side: the manager APK, the kernel module that is
- * actually loaded, and the ksud userspace binary on disk.
+ * 三份版本 + 越狱运行自检。
  *
- * The home status card shows the kernel module's version only, and in jailbreak mode that number
- * cannot follow the manager: the module is injected when the exploit runs, while `ksud install`
- * only replaces the userspace binary. Putting all three here is what makes "updated ksud but the
- * number did not change" read as a deliberate difference rather than a stuck value.
+ * 版本区回答"谁是谁"：管理器 APK、真正驻留内核的模块、磁盘上的 ksud。首页状态卡片只显示内核
+ * 模块版本，而越狱模式下那个数字不会跟着管理器变——摆在一起，"更新了却没变"才读得出是设计如此。
+ *
+ * 自检区回答"哪一项能修"：能修的（重装 ksud、重建软链）给按钮，修不了的（内核模块要重新注入）
+ * 只如实报告，不假装。
  */
 @Immutable
 data class VersionDetails(
@@ -62,16 +71,39 @@ data class VersionDetails(
 
 @Composable
 fun VersionDetailsScreen() {
-    val details by produceState(initialValue = VersionDetails(), Unit) {
+    var refreshKey by remember { mutableStateOf(0) }
+    val details by produceState(initialValue = VersionDetails(), refreshKey) {
         value = withContext(Dispatchers.IO) { readVersionDetails() }
     }
+    val checks by produceState(initialValue = emptyList<CheckRow>(), refreshKey) {
+        value = runSelfCheck()
+    }
+    var busy by remember { mutableStateOf(false) }
+    var message by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+    val fixOk = stringResource(R.string.check_fix_ok)
+    val fixFailed = stringResource(R.string.check_fix_failed)
+    val onFix: (CheckFix) -> Unit = { fix ->
+        if (!busy) {
+            scope.launch {
+                busy = true
+                val ok = runCatching { runCheckFix(fix) }.getOrDefault(false)
+                message = if (ok) fixOk else fixFailed
+                busy = false
+                refreshKey++
+            }
+        }
+    }
+
     when (LocalUiMode.current) {
-        UiMode.Miuix, UiMode.MiuixStock -> VersionDetailsScreenMiuix(details)
-        UiMode.Material -> VersionDetailsScreenMaterial(details)
+        UiMode.Miuix, UiMode.MiuixStock ->
+            VersionDetailsScreenMiuix(details, checks, message, busy, onFix)
+
+        UiMode.Material -> VersionDetailsScreenMaterial(details, checks, message, busy, onFix)
     }
 }
 
-/** Read-only snapshot; every call may touch root (ksud on disk), so it runs off the main thread. */
+/** 只读快照；每次调用都可能走 root（磁盘上的 ksud），所以放在 IO 线程。 */
 private fun readVersionDetails(): VersionDetails {
     val managerInfo = getManagerVersion(ksuApp)
     val probe = runCatching { probeInstalledKsudVersion() }
@@ -126,7 +158,36 @@ private fun versionRows(details: VersionDetails): List<Pair<String, String>> {
 }
 
 @Composable
-private fun VersionDetailsScreenMiuix(details: VersionDetails) {
+private fun checkTitle(kind: CheckKind): String = when (kind) {
+    CheckKind.Kernel -> stringResource(R.string.check_kernel)
+    CheckKind.Ksud -> stringResource(R.string.check_ksud)
+    CheckKind.Link -> stringResource(R.string.check_link)
+    CheckKind.Uapi -> stringResource(R.string.check_uapi)
+    CheckKind.Guard -> stringResource(R.string.check_guard)
+    CheckKind.Susfs -> stringResource(R.string.check_susfs)
+}
+
+@Composable
+private fun statusLabel(status: CheckStatus): String = when (status) {
+    CheckStatus.Ok -> stringResource(R.string.check_status_ok)
+    CheckStatus.Warn -> stringResource(R.string.check_status_warn)
+    CheckStatus.Unknown -> stringResource(R.string.check_status_unknown)
+}
+
+@Composable
+private fun fixLabel(fix: CheckFix): String = when (fix) {
+    CheckFix.ReinstallKsud -> stringResource(R.string.check_fix_reinstall_ksud)
+    CheckFix.RebuildLink -> stringResource(R.string.check_fix_rebuild_link)
+}
+
+@Composable
+private fun VersionDetailsScreenMiuix(
+    details: VersionDetails,
+    checks: List<CheckRow>,
+    message: String?,
+    busy: Boolean,
+    onFix: (CheckFix) -> Unit,
+) {
     val navigator = LocalNavigator.current
     val rows = versionRows(details)
     MiuixScaffold(
@@ -166,8 +227,46 @@ private fun VersionDetailsScreenMiuix(details: VersionDetails) {
                     )
                 }
             }
+
             item {
-                Spacer(Modifier.height(12.dp))
+                SmallTitle(
+                    text = stringResource(R.string.check_section_title),
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+                message?.let {
+                    MiuixText(
+                        text = it,
+                        color = colorScheme.primary,
+                        style = MiuixTheme.textStyles.footnote1,
+                    )
+                }
+            }
+            items(checks, key = { it.kind.name }) { row ->
+                Column(modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp)) {
+                    MiuixText(
+                        text = checkTitle(row.kind),
+                        color = colorScheme.onSurface,
+                        style = MiuixTheme.textStyles.body1,
+                    )
+                    MiuixText(
+                        text = "${statusLabel(row.status)} · ${row.detail}",
+                        color = if (row.status == CheckStatus.Ok) {
+                            colorScheme.primary
+                        } else {
+                            colorScheme.onSurfaceVariantSummary
+                        },
+                        style = MiuixTheme.textStyles.footnote1,
+                    )
+                    row.fix?.let { fix ->
+                        MiuixTextButton(
+                            text = fixLabel(fix),
+                            onClick = { if (!busy) onFix(fix) },
+                        )
+                    }
+                }
+            }
+            item {
+                Spacer(Modifier.height(8.dp))
                 MiuixText(
                     text = stringResource(R.string.version_details_note),
                     color = colorScheme.onSurfaceVariantSummary,
@@ -180,7 +279,13 @@ private fun VersionDetailsScreenMiuix(details: VersionDetails) {
 }
 
 @Composable
-private fun VersionDetailsScreenMaterial(details: VersionDetails) {
+private fun VersionDetailsScreenMaterial(
+    details: VersionDetails,
+    checks: List<CheckRow>,
+    message: String?,
+    busy: Boolean,
+    onFix: (CheckFix) -> Unit,
+) {
     val navigator = LocalNavigator.current
     val rows = versionRows(details)
     androidx.compose.material3.Scaffold(
@@ -209,12 +314,49 @@ private fun VersionDetailsScreenMaterial(details: VersionDetails) {
                     )
                 }
             }
+
+            item {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = stringResource(R.string.check_section_title),
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                message?.let {
+                    Text(
+                        text = it,
+                        color = MaterialTheme.colorScheme.primary,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+            items(checks, key = { it.kind.name }) { row ->
+                Column(modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp)) {
+                    Text(
+                        text = checkTitle(row.kind),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Text(
+                        text = "${statusLabel(row.status)} · ${row.detail}",
+                        color = if (row.status == CheckStatus.Ok) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    row.fix?.let { fix ->
+                        OutlinedButton(onClick = { if (!busy) onFix(fix) }) {
+                            Text(fixLabel(fix))
+                        }
+                    }
+                }
+            }
             item {
                 Text(
                     text = stringResource(R.string.version_details_note),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(top = 12.dp, bottom = 24.dp),
+                    modifier = Modifier.padding(top = 8.dp, bottom = 24.dp),
                 )
             }
         }

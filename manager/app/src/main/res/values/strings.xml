@@ -705,4 +705,18 @@
     <string name="backup_create_superuser_summary">Allowlist and per-app rules under /data/adb/ksu</string>
     <string name="backup_create_modules_summary">Every installed module under /data/adb/modules</string>
     <string name="backup_empty">No backups yet.</string>
+    <string name="check_section_title">Checks</string>
+    <string name="check_status_ok">OK</string>
+    <string name="check_status_warn">Needs attention</string>
+    <string name="check_status_unknown">Unknown</string>
+    <string name="check_kernel">Kernel module</string>
+    <string name="check_ksud">ksud (userspace)</string>
+    <string name="check_link">bin symlink</string>
+    <string name="check_uapi">UAPI version</string>
+    <string name="check_guard">Partition guard</string>
+    <string name="check_susfs">SuSFS</string>
+    <string name="check_fix_reinstall_ksud">Reinstall ksud</string>
+    <string name="check_fix_rebuild_link">Rebuild symlink</string>
+    <string name="check_fix_ok">Done</string>
+    <string name="check_fix_failed">Failed</string>
 </resources>
