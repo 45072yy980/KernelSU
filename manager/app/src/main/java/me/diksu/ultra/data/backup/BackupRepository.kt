@@ -1,5 +1,6 @@
 package me.diksu.ultra.data.backup
 
+import android.os.Process
 import me.diksu.ultra.BuildConfig
 import me.diksu.ultra.ksuApp
 import me.diksu.ultra.ui.util.getRootShell
@@ -72,15 +73,24 @@ class BackupRepository {
     fun create(kind: BackupKind): BackupEntry {
         val dir = directory()
         val payload = File(ksuApp.cacheDir, "diksu-backup-payload.tar").apply { delete() }
+        // payload 由 root 创建，属主是 root：下一次先以 root 删掉残留，打完再把属主改回 App，
+        // 否则 App 既删不掉旧文件、也写不进同名文件（实测报 EACCES）。
+        val uid = Process.myUid()
         val tarCmd = buildString {
+            append("rm -f ").append(shellQuote(payload.absolutePath)).append(" && ")
             append("tar -cf ").append(shellQuote(payload.absolutePath))
             append(" -C ").append(shellQuote(kind.base))
             kind.paths.forEach { append(' ').append(shellQuote(it)) }
+            append(" && chown ").append(uid).append(':').append(uid).append(' ')
+            .append(shellQuote(payload.absolutePath))
+            append(" && chmod 600 ").append(shellQuote(payload.absolutePath))
         }
-        val result = getRootShell().newJob().add(tarCmd).exec()
+        val out = ArrayList<String>()
+        val err = ArrayList<String>()
+        val result = getRootShell().newJob().add(tarCmd).to(out, err).exec()
         try {
             if (!result.isSuccess) {
-                throw BackupException("打包失败（tar 退出码 ${result.code}）")
+                throw BackupException("打包失败：${firstReason(out, err, result.code)}")
             }
             if (!payload.exists() || payload.length() == 0L) {
                 throw BackupException("打包结果为空：${kind.base} 下没有可备份的内容")
@@ -122,9 +132,11 @@ class BackupRepository {
                 append(" -C ").append(shellQuote(entry.kind.base))
                 append(" && restorecon -R ").append(shellQuote(entry.kind.base))
             }
-            val result = getRootShell().newJob().add(cmd).exec()
+            val out = ArrayList<String>()
+            val err = ArrayList<String>()
+            val result = getRootShell().newJob().add(cmd).to(out, err).exec()
             if (!result.isSuccess) {
-                throw BackupException("解包失败（tar 退出码 ${result.code}）")
+                throw BackupException("解包失败：${firstReason(out, err, result.code)}")
             }
         } finally {
             payload.delete()
@@ -160,6 +172,10 @@ class BackupRepository {
         put("appVersion", BuildConfig.VERSION_NAME)
         put("appVersionCode", BuildConfig.VERSION_CODE)
     }
+
+    /** 把 tar 的第一条抱怨原样带回界面：只报退出码，用户没法判断是权限、路径还是别的问题。 */
+    private fun firstReason(out: List<String>, err: List<String>, code: Int): String =
+        (err + out).firstOrNull { it.isNotBlank() }?.trim() ?: "退出码 $code"
 
     /** 路径里有空格也不该被 shell 拆开。 */
     private fun shellQuote(path: String): String = "'" + path.replace("'", "'\\''") + "'"
