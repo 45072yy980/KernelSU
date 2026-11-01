@@ -2,6 +2,11 @@ package me.diksu.ultra.ui.screen.susfs
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -120,8 +125,16 @@ fun SusfsScreen() {
             SusfsTabBar(tabs = tabs, selected = pager.currentPage, onSelect = { index ->
                 scope.launch { pager.animateScrollToPage(index) }
             })
-            if (state.busy) SusfsBusyBar()
-            if (state.dirty) {
+            AnimatedVisibility(
+                visible = state.busy,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut(),
+            ) { SusfsBusyBar() }
+            AnimatedVisibility(
+                visible = state.dirty,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut(),
+            ) {
                 SusfsNotice(
                     text = stringResource(R.string.susfs_dirty),
                     actionText = stringResource(R.string.susfs_apply),

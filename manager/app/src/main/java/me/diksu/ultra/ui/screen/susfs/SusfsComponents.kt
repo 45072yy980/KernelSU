@@ -1,5 +1,6 @@
 package me.diksu.ultra.ui.screen.susfs
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -193,16 +194,17 @@ fun SusfsTabBar(tabs: List<String>, selected: Int, onSelect: (Int) -> Unit) {
     ) {
         tabs.forEachIndexed { index, label ->
             val active = index == selected
+            // 选中色做过渡，滑动翻页时页签跟着变化不会突兀。
+            val color by animateColorAsState(
+                targetValue = if (active) primaryColor() else mutedColor(),
+                label = "susfs-tab-color",
+            )
             Row(
                 modifier = Modifier
                     .clickable { onSelect(index) }
                     .padding(horizontal = 12.dp, vertical = 6.dp),
             ) {
-                SusfsText(
-                    text = label,
-                    size = 14,
-                    color = if (active) primaryColor() else mutedColor(),
-                )
+                SusfsText(text = label, size = 14, color = color)
             }
         }
     }
