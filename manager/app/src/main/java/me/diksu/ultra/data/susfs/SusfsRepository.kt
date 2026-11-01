@@ -1,7 +1,6 @@
 package me.diksu.ultra.data.susfs
 
 import android.content.Context
-import java.io.File
 import android.util.Log
 import me.diksu.ultra.ksuApp
 
@@ -60,17 +59,16 @@ class SusfsRepository(private val context: Context = ksuApp) {
         return applyPerRule(target, previous)
     }
 
-    /** 把配置写到临时文件交给 `ksud susfs apply`；失败或报告解析不了就返回 null 交给回退路径。 */
+    /**
+     * 把整份配置经 stdin 交给 `ksud susfs apply`。
+     *
+     * 不落临时文件：root 去读应用私有目录在 SELinux 下并不可靠，也不该留下可读的中间态。
+     * 失败或报告解析不了返回 null，交给逐条回退路径。
+     */
     private suspend fun applySingleShot(target: SusfsConfig): SusfsApplyReport? = runCatching {
-        val file = File(context.cacheDir, "susfs-apply.json")
-        file.writeText(target.toJson().toString())
-        try {
-            val result = SusfsCommands.applyConfigFile(file.absolutePath)
-            if (!result.ok) return@runCatching null
-            SusfsApplyReport.parse(result.output)
-        } finally {
-            file.delete()
-        }
+        val result = SusfsCommands.applyConfigJson(target.toJson().toString())
+        if (!result.ok) return@runCatching null
+        SusfsApplyReport.parse(result.output)
     }.getOrNull()
 
     private suspend fun applyPerRule(target: SusfsConfig, previous: SusfsConfig? = null): SusfsApplyReport {

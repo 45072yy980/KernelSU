@@ -156,6 +156,33 @@ fun SusfsScreen() {
     }
 
     editor?.let { spec -> SusfsEditorDialog(spec = spec, onDismiss = { editor = null }) }
+
+    // 导入预览：先看会变什么，再决定要不要覆盖。
+    val pendingImport = state.pendingImport
+    val pendingDiff = state.pendingDiff
+    if (pendingImport != null && pendingDiff != null) {
+        val diffText = stringResource(
+            R.string.susfs_import_diff,
+            pendingDiff.added.size,
+            pendingDiff.removed.size,
+            pendingDiff.switchesChanged.size,
+        )
+        AlertDialog(
+            onDismissRequest = { vm.cancelImport() },
+            title = { Text(stringResource(R.string.susfs_import)) },
+            text = { Text(diffText) },
+            confirmButton = {
+                TextButton(onClick = { vm.confirmImport() }) {
+                    Text(stringResource(R.string.susfs_confirm))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { vm.cancelImport() }) {
+                    Text(stringResource(R.string.susfs_cancel))
+                }
+            },
+        )
+    }
 }
 
 @Composable
@@ -171,8 +198,9 @@ private fun SusfsBody(
         SusfsTabBar(tabs = tabs, selected = selected, onSelect = onSelect)
         Column(
             modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState()),
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 12.dp),
         ) {
             content(selected)
             Spacer(Modifier.height(24.dp))

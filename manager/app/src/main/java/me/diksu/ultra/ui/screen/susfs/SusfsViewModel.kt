@@ -11,11 +11,13 @@ import kotlinx.coroutines.withContext
 import me.diksu.ultra.data.susfs.SusfsApplyReport
 import me.diksu.ultra.data.susfs.SusfsCommands
 import me.diksu.ultra.data.susfs.SusfsConfig
+import me.diksu.ultra.data.susfs.SusfsConfigDiff
 import me.diksu.ultra.data.susfs.SusfsConfigException
 import me.diksu.ultra.data.susfs.SusfsProcSnapshot
 import me.diksu.ultra.data.susfs.SusfsRepository
 import me.diksu.ultra.data.susfs.SusfsRule
 import me.diksu.ultra.data.susfs.SusfsStatus
+import me.diksu.ultra.data.susfs.diffFrom
 
 /** 页面要显示的全部东西。 */
 data class SusfsUiState(
@@ -28,6 +30,9 @@ data class SusfsUiState(
     val report: SusfsApplyReport? = null,
     /** 一行提示，成功或失败都用它。 */
     val message: String? = null,
+    /** 待确认的导入配置；非 null 时界面弹预览对话框。 */
+    val pendingImport: SusfsConfig? = null,
+    val pendingDiff: SusfsConfigDiff? = null,
 )
 
 /**
@@ -84,7 +89,12 @@ class SusfsViewModel : ViewModel() {
         commit(current.config.copy(rules = current.config.rules - rule), current.config)
     }
 
-    /** 导入：解析 → 存盘 → 按新配置下发。解析失败只提示，不改现状。 */
+    /**
+     * 导入第一步：解析并算出差异，先给用户看，不落盘也不下发。
+     *
+     * 直接覆盖是危险的 —— 导入一份别人的配置会把你已有的规则全换掉，所以要有个能后悔的
+     * 中间态（对齐 FinaSU 的 preview）。
+     */
     fun importConfig(text: String) {
         val parsed = try {
             repository.preview(text)
@@ -92,7 +102,19 @@ class SusfsViewModel : ViewModel() {
             _state.update { it.copy(message = "导入失败：${e.message}") }
             return
         }
-        commit(parsed, _state.value.config)
+        val diff = parsed.diffFrom(_state.value.config)
+        _state.update { it.copy(pendingImport = parsed, pendingDiff = diff, message = null) }
+    }
+
+    /** 导入第二步：用户确认后按目标配置下发。 */
+    fun confirmImport() {
+        val target = _state.value.pendingImport ?: return
+        _state.update { it.copy(pendingImport = null, pendingDiff = null) }
+        commit(target, _state.value.config)
+    }
+
+    fun cancelImport() {
+        _state.update { it.copy(pendingImport = null, pendingDiff = null) }
     }
 
     /** 导出当前配置（JSON 文本），由界面层决定写到哪。 */
@@ -109,9 +131,12 @@ class SusfsViewModel : ViewModel() {
             _state.update { it.copy(busy = true, message = null) }
             repository.save(next)
             val report = withContext(Dispatchers.IO) { repository.apply(next, previous) }
+            // 应用后顺手刷新一次状态：能力列表、版本这些会随开关变化，不刷新会显示旧值。
+            val status = withContext(Dispatchers.IO) { SusfsCommands.loadStatus() }
             _state.update {
                 it.copy(
                     busy = false,
+                    status = status,
                     config = next,
                     report = report,
                     message = report.summary(),

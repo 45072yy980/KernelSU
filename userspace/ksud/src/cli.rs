@@ -562,9 +562,10 @@ enum Susfs {
     /// Print the SuSFS build variant reported by the kernel
     Variant,
 
-    /// Apply a whole configuration document (JSON file, or stdin when omitted)
+    /// Apply a whole configuration document (JSON on stdin, or --file)
     Apply {
         /// Path to the JSON document; omit to read from stdin
+        #[arg(long)]
         file: Option<std::path::PathBuf>,
     },
 

@@ -57,6 +57,32 @@ object SusfsCommands {
     suspend fun run(args: String): Result = withContext(Dispatchers.IO) { ksud(args) }
 
     /**
+     * 带超时、可喂 stdin 的执行器。
+     *
+     * 配置走 stdin 而不是临时文件：SELinux 下让 root 去读应用私有目录不可靠，而且临时文件
+     * 还要自己收拾。超时用 enqueue+futures，避免一条卡住的命令把共享 shell 占死。
+     */
+    private fun ksudTimed(args: String, input: String? = null, timeoutSeconds: Long = 30): Result {
+        val shell = getRootShell()
+        val invocation = "${getKsuDaemonPath()} susfs $args"
+        val command = if (input == null) invocation else "printf '%s' ${q(input)} | $invocation"
+        val out = mutableListOf<String>()
+        val err = mutableListOf<String>()
+        val future = shell.newJob().add(command).to(out, err).enqueue()
+        val result = runCatching { future.get(timeoutSeconds, java.util.concurrent.TimeUnit.SECONDS) }
+            .getOrElse {
+                future.cancel(false)
+                return Result(false, "命令超时（${timeoutSeconds}s）")
+            }
+        val text = out.joinToString("\n").trim()
+        return Result(result.isSuccess, text.ifEmpty { err.joinToString("\n").trim() })
+    }
+
+    /** 整份配置一次性下发，配置经 stdin 传入（ksud 端 `susfs apply` 读 stdin）。 */
+    suspend fun applyConfigJson(json: String): Result =
+        withContext(Dispatchers.IO) { ksudTimed("apply", json) }
+
+    /**
      * 读运行状态。
      *
      * `ksud susfs version` 第一行是加载状态、第二行是版本号，所以是解析而不是字符串比较；

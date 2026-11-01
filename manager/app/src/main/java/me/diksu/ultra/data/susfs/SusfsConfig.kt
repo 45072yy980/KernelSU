@@ -20,7 +20,13 @@ data class SusfsConfig(
 
     fun toJson(): JSONObject = JSONObject().apply {
         put("version", version)
-        put("enabled", JSONObject(enabled.filterKeys { it in KNOWN_SWITCHES } as Map<*, *>))
+        // 三个开关始终写出：关掉也要显式下发，否则内核会保持上一次的开启状态。
+        put(
+            "enabled",
+            JSONObject().apply {
+                KNOWN_SWITCHES.forEach { key -> put(key, enabled[key] ?: false) }
+            },
+        )
         put(
             "rules",
             JSONArray().also { array ->

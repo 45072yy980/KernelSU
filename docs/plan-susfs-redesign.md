@@ -73,3 +73,65 @@ data class SusfsConfig(
 
 - 不改 `userspace/ksud` 的 susfs 命令（见第二节）；
 - 不做"删除规则立即生效"——内核没有这个接口，只在文案里说清。
+
+---
+
+## 七、全面重构（2026-11-01 追加）
+
+用户决定整套重写，不再在旧代码上打补丁。现状 2600 行，依赖干净（只被
+`ui/screen/susfs` 两个文件引用），可以整体替换。
+
+### 目标结构
+
+```
+data/susfs/
+  SusfsStatus.kt        状态模型（loaded / version / variant / features / writable）
+  SusfsStatusParser.kt  解析 ksud 输出（纯函数，可单测）
+  SusfsRule.kt          规则模型（sealed：Path / Loop / Map / Kstat / Redirect / Uname / Cmdline）
+  SusfsConfig.kt        一份配置 = 开关 + 规则；JSON 序列化、校验、diff
+  SusfsApplyReport.kt   applied / failed / skipped / pendingReboot
+  SusfsErrorKind.kt     错误分类 → 人话
+  SusfsCommands.kt      薄封装：只负责调 ksud，不做判断
+  SusfsRepository.kt    持久化（整份配置存 JSON）+ 导入导出 + apply
+ui/screen/susfs/
+  SusfsScreen.kt        六页签骨架 + pager + 页面级状态
+  SusfsOverviewTab.kt   概览（版本/能力计数/规则计数/待重启）
+  SusfsSettingsTab.kt   开关与功能启用状态
+  SusfsPathsTab.kt      隐藏路径 / 循环路径 / map
+  SusfsSpoofTab.kt      kstat（跟踪/更新/完整克隆/手动）、伪 uname、伪 cmdline
+  SusfsRedirectTab.kt   open redirect
+  SusfsExtensionsTab.kt 进程状态、上一条命令、导入导出入口
+  SusfsEditors.kt       共用组件（规则行、输入弹窗、状态徽标），miuix + material 两套
+susfs/
+  SusfsViewModel.kt     意图 + 状态（沿用现有类名，避免改路由）
+  SusfsBootReceiver.kt  开机重放（改成读整份配置）
+```
+
+### 迁移顺序（每步都能单独编译）
+
+1. 新 `data/susfs` 模型 + 校验 + 单测（不接 UI，旧代码不受影响）
+2. 新命令封装与 apply 引擎 + 报告
+3. 新仓储读写整份配置；开机重放切到新仓储
+4. 新 6 页签 UI，逐页搬逻辑
+5. 删掉旧 `susfs/SusfsModels.kt`、`SusfsRepository.kt`、`SusfsCommands.kt` 与旧屏
+6. 旧规则的迁移（首次启动把散存规则读进新配置）
+
+### 硬约束
+
+- 不动 `userspace/ksud` 的 susfs 命令；
+- 内核没有删除接口，"删除"只影响下次开机，文案必须说清。
+
+## 八、对齐 FinaSU 的修正（2026-11-01 晚）
+
+自查发现的问题，均已修：
+
+| 问题 | 后果 | 修法 |
+|---|---|---|
+| Rust `Apply.file` 写成了位置参数 | Kotlin 传 `--file` 必然失败，一直在走逐条回退 | 加 `#[arg(long)]` |
+| 配置靠临时文件交给 root | SELinux 下 root 读应用私有目录不可靠 | 改走 stdin（`printf '%s' '<json>' \| ksud susfs apply`），对齐 FinaSU |
+| 没有超时 | 一条卡住的命令会占死共享 shell | enqueue + futures，30s 超时 |
+| 开关只写"真"的键 | 关掉开关后内核仍保持开 | 三个开关始终写出，显式下发 |
+| 应用后不刷新状态 | 能力列表显示旧值 | 应用完立刻重新读状态 |
+| 导入直接覆盖 | 覆盖别人的配置无法后悔 | 先算 diff、弹预览、确认后才下发 |
+| 消息行被 fillMaxSize 挤出屏幕 | 提示看不见 | 内容区改 weight(1f)，消息固定底部 |
+| 页面无水平内边距 | 卡片贴边 | 页面层加 12dp |
