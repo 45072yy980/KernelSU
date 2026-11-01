@@ -1,8 +1,10 @@
 package me.diksu.ultra.ui
 
 import android.annotation.SuppressLint
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.provider.Settings
 import android.os.SystemClock
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
@@ -179,7 +181,12 @@ open class MainActivity : ComponentActivity() {
     private val intentChannel = Channel<Intent>(capacity = Channel.BUFFERED)
     private var contentReady = false
     private var splashStartedAt = 0L
-    private val splashAnimationDurationMs = 500L
+    /**
+     * 启动屏停留时长。系统关了动画（开发者选项把动画时长设为 0）时立刻放行，
+     * 否则用户会觉得"点了图标要愣一下"。
+     */
+    private val splashAnimationDurationMs: Long
+        get() = if (systemAnimationsEnabled(this)) 500L else 0L
 
 
     @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
@@ -454,9 +461,11 @@ fun MainScreen(
     val enableFloatingBottomBarBlur = LocalEnableFloatingBottomBarBlur.current
     val useNavigationRail = useNavigationRail(enableFloatingBottomBar)
     val pagerState = rememberPagerState(initialPage = initialPage, pageCount = { MainPagerConfig.PAGE_COUNT })
+    val context = LocalContext.current
+    val animationsEnabled = remember(context) { systemAnimationsEnabled(context) }
     val mainPagerState = rememberMainPagerState(
         pagerState = pagerState,
-        animatePageChanges = !useNavigationRail,
+        animatePageChanges = !useNavigationRail && animationsEnabled,
     )
     val isFullFeatured = Natives.isFullFeatured()
     val pagerMode = PagerInterceptionMode.entries.getOrElse(pagerInterceptionMode) {
@@ -951,4 +960,18 @@ private fun MainScreenBackHandler(
             mainState.animateToPage(0)
         }
     )
+}
+
+/**
+ * 系统是否允许动画：开发者选项把「动画时长」设为 0（或直接关闭动画）时返回 false。
+ *
+ * 系统级开关应该被尊重——别的应用都瞬切，只有我们还滑一下，会显得卡。
+ */
+private fun systemAnimationsEnabled(context: Context): Boolean {
+    val scale = Settings.Global.getFloat(
+        context.contentResolver,
+        Settings.Global.ANIMATOR_DURATION_SCALE,
+        1f,
+    )
+    return scale > 0f
 }
