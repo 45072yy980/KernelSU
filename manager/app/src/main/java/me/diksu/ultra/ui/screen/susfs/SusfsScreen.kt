@@ -575,3 +575,18 @@ private fun SusfsEditorDialog(spec: EditorSpec, onDismiss: () -> Unit) {
         }
     }
 }
+
+/** 把 `CONFIG_KSU_SUSFS_*` 映射成可读名字；没收录的键回退到去掉前缀的原样。 */
+@Composable
+private fun featureLabel(key: String): String = when (key.removePrefix("CONFIG_KSU_SUSFS_")) {
+    "SUS_PATH" -> stringResource(R.string.sus_path_feature_label)
+    "SUS_MOUNT" -> stringResource(R.string.sus_mount_feature_label)
+    "SUS_KSTAT" -> stringResource(R.string.sus_kstat_feature_label)
+    "SUS_MAP" -> stringResource(R.string.sus_map_feature_label)
+    "SPOOF_UNAME" -> stringResource(R.string.spoof_uname_feature_label)
+    "SPOOF_CMDLINE_OR_BOOTCONFIG" -> stringResource(R.string.spoof_cmdline_feature_label)
+    "OPEN_REDIRECT" -> stringResource(R.string.open_redirect_feature_label)
+    "ENABLE_LOG" -> stringResource(R.string.enable_log_feature_label)
+    "HIDE_KSU_SUSFS_SYMBOLS" -> stringResource(R.string.hide_symbols_feature_label)
+    else -> key.removePrefix("CONFIG_KSU_SUSFS_")
+}
