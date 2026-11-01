@@ -562,6 +562,15 @@ enum Susfs {
     /// Print the SuSFS build variant reported by the kernel
     Variant,
 
+    /// Apply a whole configuration document (JSON file, or stdin when omitted)
+    Apply {
+        /// Path to the JSON document; omit to read from stdin
+        file: Option<std::path::PathBuf>,
+    },
+
+    /// Print the configuration this device last applied
+    Export,
+
     /// Add a path to the SuSFS hidden-path list
     AddSusPath {
         /// Absolute path to hide
@@ -961,6 +970,24 @@ pub fn run() -> Result<()> {
             }
             Susfs::Variant => {
                 println!("{}", crate::susfs::get_susfs_variant());
+                Ok(())
+            }
+            Susfs::Apply { file } => {
+                let text = match file {
+                    Some(path) => std::fs::read_to_string(&path)
+                        .with_context(|| format!("读取配置失败：{}", path.display()))?,
+                    None => {
+                        use std::io::Read;
+                        let mut buffer = String::new();
+                        std::io::stdin().read_to_string(&mut buffer)?;
+                        buffer
+                    }
+                };
+                println!("{}", crate::susfs::apply_document(&text)?);
+                Ok(())
+            }
+            Susfs::Export => {
+                println!("{}", crate::susfs::export_document()?);
                 Ok(())
             }
             Susfs::AddSusPath { path } => crate::susfs::add_sus_path(&path),

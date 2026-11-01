@@ -7,205 +7,77 @@ import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import me.diksu.ultra.data.susfs.SusfsCommands
+import me.diksu.ultra.data.susfs.SusfsRepository
 
 /**
- * Re-applies the user's SuSFS settings and rule lists after boot.
+ * 开机后把保存的 SuSFS 配置重新下发。
  *
- * The kernel module keeps nothing across reboots — every toggle, uname
- * spoof, hidden path, sus-map, kstat rule, and open-redirect is held in RAM
- * only. This receiver waits for `sys.boot_completed` (the same property the
- * module's service.sh polls) and then replays everything saved in
- * [SusfsRepository] back to the kernel via ksud.
+ * 内核模块不跨重启保留任何东西：开关、伪 uname、隐藏路径、map、kstat、重定向都只在内存里，
+ * 所以每次开机都要按配置重放一遍。
  *
- * ## Application order (three-phase)
+ * 重放由 [SusfsRepository.replayAfterBoot] 负责（配置 → 逐条下发 → 汇总报告），这里只管
+ * 三件事：等 `sys.boot_completed`、失败重试计数、出错别让进程崩掉。
  *
- * 1. **Toggles + uname** — global switches first, so path hooks that depend
- *    on them see the right state from the start.
- * 2. **Path-like rules** — hidden paths (plain + loop), sus-maps, kstat
- *    paths, open-redirects. Each group is replayed in full before the next
- *    begins, matching the order FolkPatch uses for its pathhide/netisolate.
- * 3. **Retry accounting** — every rule is replayed independently inside a
- *    try/catch so one stale path cannot abort the rest. Failures are counted;
- *    if any rule failed, [SusfsRepository.bootRetryCount] is incremented and
- *    the next boot waits longer before retrying. After [MAX_BOOT_RETRIES]
- *    consecutive failures the counter is reset and replay is abandoned so a
- *    permanently-broken rule cannot loop forever.
- *
- * 注意：内置 Shizuku 的开机自启**不在这里**。它曾经挂在本接收器末尾，
- * 但本接收器在 SUSFS 未加载 / 重试超限时会提前 return，把自启一起跳过，
- * 于是表现为"开机自启时灵时不灵"。现在由
- * [me.diksu.ultra.shizuku.ShizukuBootReceiver] 独立负责。
+ * 注意：内置 Shizuku 的自启**不在这里**（见 [me.diksu.ultra.shizuku.ShizukuBootReceiver]）。
+ * 它曾经挂在本接收器末尾，SUSFS 未加载时会被一起跳过，表现为"开机自启时灵时不灵"。
  */
 class SusfsBootReceiver : BroadcastReceiver() {
-
-    companion object {
-        private const val TAG = "SusfsBootReceiver"
-
-        /** Extra wait (seconds) when a previous boot replay failed. */
-        private const val RETRY_EXTRA_WAIT_SECONDS = 30
-    }
 
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != Intent.ACTION_BOOT_COMPLETED) return
         val pending = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
+            val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             try {
-                // If a previous replay failed, give the system extra time to
-                // settle before trying again. Early-boot ksud can be flaky.
-                val priorFailures = SusfsRepository.bootRetryCount
-                if (priorFailures > 0) {
-                    Log.w(TAG, "Prior boot replay failed ($priorFailures time(s)); waiting extra ${RETRY_EXTRA_WAIT_SECONDS}s")
-                    if (priorFailures >= SusfsRepository.MAX_BOOT_RETRIES) {
-                        Log.e(TAG, "Reached MAX_BOOT_RETRIES (${SusfsRepository.MAX_BOOT_RETRIES}); resetting counter and abandoning replay")
-                        SusfsRepository.bootRetryCount = 0
-                        return@launch
-                    }
-                    Thread.sleep(RETRY_EXTRA_WAIT_SECONDS * 1000L)
+                val prior = prefs.getInt(KEY_RETRY, 0)
+                if (prior >= MAX_RETRIES) {
+                    Log.e(TAG, "连续 $MAX_RETRIES 次重放失败，重置计数并放弃本次")
+                    prefs.edit().putInt(KEY_RETRY, 0).apply()
+                    return@launch
+                }
+                if (prior > 0) {
+                    Log.w(TAG, "上次重放失败（$prior 次），多等一会儿再试")
+                    Thread.sleep(EXTRA_WAIT_MS)
                 }
 
                 waitForBootCompleted()
 
-                // Bail out silently if neither built-in SUSFS nor the LKM
-                // answered the supercall — there is nothing to replay into.
+                // 没有实现响应超级调用，就没有可重放的对象。
                 if (!SusfsCommands.loadStatus().loaded) {
-                    Log.i(TAG, "SUSFS not loaded; skipping replay")
+                    Log.i(TAG, "SuSFS 未加载，跳过重放")
                     return@launch
                 }
 
-                // Phase 1: toggles + uname
-                val toggleFailures = replayToggles()
-
-                // Phase 2: path-like rules (each group independently)
-                val pathFailures = replayPaths()
-                val mapFailures = replayMaps()
-                val kstatFailures = replayKstats()
-                val redirectFailures = replayRedirects()
-
-                val totalFailures = toggleFailures + pathFailures + mapFailures +
-                    kstatFailures + redirectFailures
-
-                // Phase 3: retry accounting
-                if (totalFailures == 0) {
-                    if (priorFailures > 0) {
-                        Log.i(TAG, "Replay succeeded after $priorFailures prior failure(s); resetting retry counter")
-                    }
-                    SusfsRepository.bootRetryCount = 0
-                } else {
-                    val newCount = priorFailures + 1
-                    SusfsRepository.bootRetryCount = newCount
-                    Log.w(
-                        TAG,
-                        "Replay finished with $totalFailures failure(s) " +
-                            "(toggles=$toggleFailures, paths=$pathFailures, " +
-                            "maps=$mapFailures, kstats=$kstatFailures, " +
-                            "redirects=$redirectFailures); retry count=$newCount"
-                    )
+                val report = SusfsRepository(context).replayAfterBoot()
+                prefs.edit().putInt(KEY_RETRY, if (report.isSuccess) 0 else prior + 1).apply()
+                Log.i(TAG, "重放完成：${report.summary()}")
+                report.failed.entries.take(5).forEach { (key, reason) ->
+                    Log.w(TAG, "  失败 $key：$reason")
                 }
             } catch (t: Throwable) {
-                Log.e(TAG, "Boot replay crashed", t)
+                Log.e(TAG, "开机重放崩溃", t)
             } finally {
                 pending.finish()
             }
         }
     }
 
-    // ── toggles + uname ───────────────────────────────────────────────────────
-    /** @return number of commands that failed. */
-    private suspend fun replayToggles(): Int {
-        var failures = 0
-        if (SusfsRepository.logEnabled) {
-            runCatching { SusfsCommands.setLogEnabled(true) }
-                .onFailure { failures++; Log.w(TAG, "setLogEnabled failed", it) }
-        }
-        if (SusfsRepository.avcLogSpoofing) {
-            runCatching { SusfsCommands.setAvcLogSpoofing(true) }
-                .onFailure { failures++; Log.w(TAG, "setAvcLogSpoofing failed", it) }
-        }
-        if (SusfsRepository.hideSusMntsForNonSuProcs) {
-            runCatching { SusfsCommands.setHideSusMntsForNonSuProcs(true) }
-                .onFailure { failures++; Log.w(TAG, "setHideSusMnts failed", it) }
-        }
-        val release = SusfsRepository.unameRelease
-        val version = SusfsRepository.unameVersion
-        if (release.isNotEmpty() || version.isNotEmpty()) {
-            runCatching { SusfsCommands.setUname(release, version) }
-                .onFailure { failures++; Log.w(TAG, "setUname failed", it) }
-        }
-        return failures
-    }
-
-    // ── hidden paths (plain + loop) ───────────────────────────────────────────
-    /** @return number of paths that failed to add. */
-    private suspend fun replayPaths(): Int {
-        var failures = 0
-        for (path in SusfsRepository.susPaths) {
-            runCatching { SusfsCommands.addSusPath(path) }
-                .onFailure { failures++; Log.w(TAG, "addSusPath failed: $path", it) }
-        }
-        for (path in SusfsRepository.susPathLoops) {
-            runCatching { SusfsCommands.addSusPathLoop(path) }
-                .onFailure { failures++; Log.w(TAG, "addSusPathLoop failed: $path", it) }
-        }
-        return failures
-    }
-
-    // ── sus-map rules ─────────────────────────────────────────────────────────
-    /** @return number of maps that failed to add. */
-    private suspend fun replayMaps(): Int {
-        var failures = 0
-        for (path in SusfsRepository.susMaps) {
-            runCatching { SusfsCommands.addSusMap(path) }
-                .onFailure { failures++; Log.w(TAG, "addSusMap failed: $path", it) }
-        }
-        return failures
-    }
-
-    // ── kstat spoofing ─────────────────────────────────────────────────────────
-    /**
-     * Replay kstat rules by calling `update-sus-kstat` on each saved path.
-     *
-     * `add-sus-kstat` (the "begin tracking" step) is intentionally not
-     * replayed: it only makes sense immediately before a bind mount, which
-     * has already happened by the time boot completes. `update-sus-kstat`
-     * re-stats the (now bind-mounted) file and installs the spoof, which is
-     * the idempotent operation we want after boot.
-     *
-     * @return number of kstat paths that failed to update.
-     */
-    private suspend fun replayKstats(): Int {
-        var failures = 0
-        for (path in SusfsRepository.susKstatPaths) {
-            runCatching { SusfsCommands.updateSusKstat(path) }
-                .onFailure { failures++; Log.w(TAG, "updateSusKstat failed: $path", it) }
-        }
-        return failures
-    }
-
-    // ── open-redirect rules ────────────────────────────────────────────────────
-    /** @return number of redirects that failed to add. */
-    private suspend fun replayRedirects(): Int {
-        var failures = 0
-        for (packed in SusfsRepository.susRedirects) {
-            val (target, redirected, uidScheme) = SusfsRepository.unpackRedirect(packed)
-            if (target.isEmpty() || redirected.isEmpty()) {
-                Log.w(TAG, "Skipping malformed redirect entry: $packed")
-                failures++
-                continue
-            }
-            runCatching { SusfsCommands.addOpenRedirect(target, redirected, uidScheme) }
-                .onFailure { failures++; Log.w(TAG, "addOpenRedirect failed: $target -> $redirected", it) }
-        }
-        return failures
-    }
-
-    // ── boot wait ──────────────────────────────────────────────────────────────
     private fun waitForBootCompleted() {
         repeat(180) {
-            val completed = Runtime.getRuntime()
+            val done = Runtime.getRuntime()
                 .exec(arrayOf("getprop", "sys.boot_completed"))
                 .inputStream.bufferedReader().readText().trim()
-            if (completed == "1") return
+            if (done == "1") return
             Thread.sleep(1000)
         }
+    }
+
+    private companion object {
+        private const val TAG = "SusfsBootReceiver"
+        private const val PREFS = "susfs_boot"
+        private const val KEY_RETRY = "retry_count"
+        private const val MAX_RETRIES = 3
+        private const val EXTRA_WAIT_MS = 30_000L
     }
 }

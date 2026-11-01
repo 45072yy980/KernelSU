@@ -727,4 +727,23 @@
     <string name="susfs_section_rules">Rules</string>
     <string name="susfs_section_debug">Debug and logs</string>
     <string name="susfs_config_count">%1$d kernel capabilities</string>
+    <string name="susfs_tab_overview">Overview</string>
+    <string name="susfs_tab_settings">Settings</string>
+    <string name="susfs_tab_paths">Paths</string>
+    <string name="susfs_tab_spoof">Spoofing</string>
+    <string name="susfs_tab_redirect">Redirects</string>
+    <string name="susfs_tab_extensions">Extensions</string>
+    <string name="susfs_capabilities_title">Kernel capabilities</string>
+    <string name="susfs_capabilities_count">%1$d kernel capabilities</string>
+    <string name="susfs_rules_count">%1$d rules</string>
+    <string name="susfs_report_title">Last apply result</string>
+    <string name="susfs_pending_reboot">%1$d rule(s) expire on reboot</string>
+    <string name="susfs_pending_reboot_hint">The kernel has no remove call, so these simply stop being replayed after a reboot.</string>
+    <string name="susfs_import">Import config</string>
+    <string name="susfs_export">Export config</string>
+    <string name="susfs_config_title">Configuration</string>
+    <string name="susfs_config_hint">One JSON document you can back up or share.</string>
+    <string name="susfs_add">Add</string>
+    <string name="susfs_remove">Remove</string>
+    <string name="susfs_empty">None yet</string>
 </resources>

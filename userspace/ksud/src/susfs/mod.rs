@@ -20,6 +20,7 @@
 pub mod abi;
 pub mod cmd;
 pub mod util;
+pub use cmd::config::*;
 pub use cmd::kstat::*;
 pub use cmd::paths::*;
 pub use cmd::spoof::*;

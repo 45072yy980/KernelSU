@@ -690,4 +690,23 @@
     <string name="susfs_section_rules">规则</string>
     <string name="susfs_section_debug">调试与日志</string>
     <string name="susfs_config_count">内核提供 %1$d 项能力</string>
+    <string name="susfs_tab_overview">概览</string>
+    <string name="susfs_tab_settings">设置</string>
+    <string name="susfs_tab_paths">路径</string>
+    <string name="susfs_tab_spoof">伪装</string>
+    <string name="susfs_tab_redirect">重定向</string>
+    <string name="susfs_tab_extensions">扩展</string>
+    <string name="susfs_capabilities_title">内核能力</string>
+    <string name="susfs_capabilities_count">内核提供 %1$d 项能力</string>
+    <string name="susfs_rules_count">%1$d 条规则</string>
+    <string name="susfs_report_title">上次应用结果</string>
+    <string name="susfs_pending_reboot">%1$d 条规则重启后失效</string>
+    <string name="susfs_pending_reboot_hint">内核没有删除接口，这些规则只是重启后不再重放。</string>
+    <string name="susfs_import">导入配置</string>
+    <string name="susfs_export">导出配置</string>
+    <string name="susfs_config_title">配置</string>
+    <string name="susfs_config_hint">一份 JSON，可以备份或分享。</string>
+    <string name="susfs_add">添加</string>
+    <string name="susfs_remove">删除</string>
+    <string name="susfs_empty">暂无</string>
 </resources>

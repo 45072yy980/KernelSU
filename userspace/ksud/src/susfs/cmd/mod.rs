@@ -7,6 +7,7 @@
 //! - [`spoof`]  — kernel-level spoofing setters
 //! - [`paths`]  — `sus_path` / `sus_map` / `open_redirect` operations
 //! - [`kstat`]  — `sus_kstat` operations
+pub mod config;
 pub mod kstat;
 pub mod paths;
 pub mod spoof;

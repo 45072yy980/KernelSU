@@ -449,4 +449,23 @@
     <string name="susfs_section_rules">規則</string>
     <string name="susfs_section_debug">除錯與日誌</string>
     <string name="susfs_config_count">內核提供 %1$d 項能力</string>
+    <string name="susfs_tab_overview">總覽</string>
+    <string name="susfs_tab_settings">設定</string>
+    <string name="susfs_tab_paths">路徑</string>
+    <string name="susfs_tab_spoof">偽裝</string>
+    <string name="susfs_tab_redirect">重新導向</string>
+    <string name="susfs_tab_extensions">擴充</string>
+    <string name="susfs_capabilities_title">核心能力</string>
+    <string name="susfs_capabilities_count">核心提供 %1$d 項能力</string>
+    <string name="susfs_rules_count">%1$d 條規則</string>
+    <string name="susfs_report_title">上次套用結果</string>
+    <string name="susfs_pending_reboot">%1$d 條規則重新開機後失效</string>
+    <string name="susfs_pending_reboot_hint">核心沒有刪除介面，這些規則只是重新開機後不再重放。</string>
+    <string name="susfs_import">匯入設定</string>
+    <string name="susfs_export">匯出設定</string>
+    <string name="susfs_config_title">設定</string>
+    <string name="susfs_config_hint">一份 JSON，可以備份或分享。</string>
+    <string name="susfs_add">新增</string>
+    <string name="susfs_remove">刪除</string>
+    <string name="susfs_empty">暫無</string>
 </resources>

@@ -1,1085 +1,545 @@
 package me.diksu.ultra.ui.screen.susfs
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Security
-import androidx.compose.material.icons.filled.SwapHoriz
-import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.compose.dropUnlessResumed
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import me.diksu.ultra.R
-import me.diksu.ultra.susfs.SusfsRepository
-import me.diksu.ultra.susfs.SusfsUiState
-import me.diksu.ultra.susfs.SusfsViewModel
+import me.diksu.ultra.data.susfs.SusfsFeatureCatalog
+import me.diksu.ultra.data.susfs.SusfsRepository
+import me.diksu.ultra.data.susfs.SusfsRule
+import me.diksu.ultra.data.susfs.display
 import me.diksu.ultra.ui.LocalUiMode
-import me.diksu.ultra.ui.component.dialog.AppAlertDialog
-import me.diksu.ultra.ui.UiMode
+import me.diksu.ultra.ui.component.material.TopBarBackButton
 import me.diksu.ultra.ui.isMiuixFamily
-import me.diksu.ultra.ui.component.material.SegmentedColumn
-import me.diksu.ultra.ui.component.material.SegmentedListItem
 import me.diksu.ultra.ui.navigation3.LocalNavigator
-import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Icon as MiuixIcon
 import top.yukonga.miuix.kmp.basic.IconButton as MiuixIconButton
+import top.yukonga.miuix.kmp.basic.SmallTopAppBar
 import top.yukonga.miuix.kmp.basic.Scaffold as MiuixScaffold
-import top.yukonga.miuix.kmp.basic.SmallTitle
-import top.yukonga.miuix.kmp.basic.Text as MiuixText
-import top.yukonga.miuix.kmp.basic.TextField as MiuixTextField
-import top.yukonga.miuix.kmp.basic.TopAppBar as MiuixTopAppBar
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
-import top.yukonga.miuix.kmp.preference.ArrowPreference
-import top.yukonga.miuix.kmp.preference.SwitchPreference
-import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme
 
+/** 一次输入对话框要的字段。 */
+private data class EditorSpec(
+    val title: String,
+    val fields: List<String>,
+    val hints: List<String> = emptyList(),
+    val onConfirm: (List<String>) -> Unit,
+)
+
 /**
- * The SuSFS panel.
+ * SuSFS 面板：六个页签，一份配置。
  *
- * One screen for every skin: the body is built from the shared segmented
- * components and the miuix preferences, which render under all three modes.
- * Material builds get a short note instead of a second implementation —
- * the Material skin is on its way out, and a second copy of this screen
- * would only bit-rot.
- *
- * The screen is a thin shell over [SusfsViewModel]: it renders what the
- * kernel reports and forwards taps, and owns nothing but the small input
- * dialogs.
+ * 与旧实现相比，逻辑只写一份（皮肤差异收在 [SusfsComponents]）；所有改动先落配置、再统一
+ * 下发，结果按"成功 / 失败 / 跳过 / 待重启"四类呈现。
  */
 @Composable
 fun SusfsScreen() {
+    val vm: SusfsViewModel = viewModel()
+    val state by vm.state.collectAsStateWithLifecycle()
     val navigator = LocalNavigator.current
-    val onBack = dropUnlessResumed { navigator.pop() }
-    val viewModel = viewModel<SusfsViewModel>()
-    val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    var tab by rememberSaveable { mutableIntStateOf(0) }
+    var editor by remember { mutableStateOf<EditorSpec?>(null) }
 
-    LaunchedEffect(Unit) { viewModel.refresh() }
+    val title = stringResource(R.string.settings_susfs)
+    val tabs = listOf(
+        stringResource(R.string.susfs_tab_overview),
+        stringResource(R.string.susfs_tab_settings),
+        stringResource(R.string.susfs_tab_paths),
+        stringResource(R.string.susfs_tab_spoof),
+        stringResource(R.string.susfs_tab_redirect),
+        stringResource(R.string.susfs_tab_extensions),
+    )
 
-    var pending by remember { mutableStateOf<SusfsInput?>(null) }
-    var pendingStatic by remember { mutableStateOf(false) }
-
-    when (LocalUiMode.current) {
-        UiMode.Miuix, UiMode.MiuixStock -> SusfsMiuix(
-            state = state,
-            onBack = onBack,
-            onRefresh = viewModel::refresh,
-            onInput = { pending = it },
-            onStaticKstat = { pendingStatic = true },
-            viewModel = viewModel,
-        )
-
-        UiMode.Material -> SusfsMaterial(
-            state = state,
-            onBack = onBack,
-            onRefresh = viewModel::refresh,
-            onInput = { pending = it },
-            onStaticKstat = { pendingStatic = true },
-            viewModel = viewModel,
-        )
+    // 导入 / 导出走系统文件选择器，不自己拼路径。
+    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            scope.launch {
+                val text = withContext(Dispatchers.IO) {
+                    runCatching {
+                        context.contentResolver.openInputStream(uri)?.use { it.readBytes().decodeToString() }
+                    }.getOrNull()
+                }
+                if (text == null) vm.reportMessage("读取文件失败") else vm.importConfig(text)
+            }
+        }
+    }
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json"),
+    ) { uri ->
+        if (uri != null) {
+            val text = vm.exportConfig()
+            scope.launch {
+                withContext(Dispatchers.IO) {
+                    runCatching { context.contentResolver.openOutputStream(uri)?.use { it.write(text.toByteArray()) } }
+                }
+                vm.reportMessage("已导出配置")
+            }
+        }
     }
 
-    val input = pending
-    if (input != null) {
-        SusfsInputDialog(
-            input = input,
-            onDismiss = { pending = null },
-            onConfirm = { a, b, uid ->
-                pending = null
-                input.onConfirm(a, b, uid)
+    val onBack: () -> Unit = { navigator.pop() }
+    val body: @Composable (PaddingValues) -> Unit = { padding ->
+        SusfsBody(padding, tabs, tab, { tab = it }, state) { page ->
+            SusfsPage(
+                page = page,
+                state = state,
+                vm = vm,
+                onEdit = { editor = it },
+                onImport = { importLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) },
+                onExport = { exportLauncher.launch("susfs-config.json") },
+            )
+        }
+    }
+
+    if (LocalUiMode.current.isMiuixFamily) {
+        MiuixScaffold(
+            topBar = {
+                SmallTopAppBar(
+                    title = title,
+                    navigationIcon = {
+                        MiuixIconButton(onClick = onBack) {
+                            MiuixIcon(
+                                imageVector = MiuixIcons.Back,
+                                contentDescription = null,
+                                tint = colorScheme.onBackground,
+                            )
+                        }
+                    },
+                )
             },
+        ) { padding -> body(padding) }
+    } else {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text(title) },
+                    navigationIcon = { TopBarBackButton(onClick = onBack) },
+                )
+            },
+        ) { padding -> body(padding) }
+    }
+
+    editor?.let { spec -> SusfsEditorDialog(spec = spec, onDismiss = { editor = null }) }
+}
+
+@Composable
+private fun SusfsBody(
+    padding: PaddingValues,
+    tabs: List<String>,
+    selected: Int,
+    onSelect: (Int) -> Unit,
+    state: SusfsUiState,
+    content: @Composable (Int) -> Unit,
+) {
+    Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+        SusfsTabBar(tabs = tabs, selected = selected, onSelect = onSelect)
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState()),
+        ) {
+            content(selected)
+            Spacer(Modifier.height(24.dp))
+        }
+        state.message?.let { message ->
+            Text(
+                text = message,
+                fontSize = 13.sp,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun SusfsPage(
+    page: Int,
+    state: SusfsUiState,
+    vm: SusfsViewModel,
+    onEdit: (EditorSpec) -> Unit,
+    onImport: () -> Unit,
+    onExport: () -> Unit,
+) {
+    when (page) {
+        0 -> OverviewPage(state, vm)
+        1 -> SettingsPage(state, vm)
+        2 -> PathsPage(state, vm, onEdit)
+        3 -> SpoofPage(state, vm, onEdit)
+        4 -> RedirectPage(state, vm, onEdit)
+        else -> ExtensionsPage(state, vm, onImport, onExport)
+    }
+}
+
+// ── 各页 ──────────────────────────────────────────────────────────────────────
+
+@Composable
+private fun OverviewPage(state: SusfsUiState, vm: SusfsViewModel) {
+    SusfsSectionTitle(stringResource(R.string.susfs_status_title))
+    SusfsCard {
+        val status = state.status
+        SusfsRow(
+            title = if (status.loaded) {
+                stringResource(R.string.susfs_status_loaded, status.version, status.variant)
+            } else {
+                stringResource(R.string.susfs_status_unloaded)
+            },
+            summary = stringResource(R.string.susfs_capabilities_count, status.features.size),
+        )
+        SusfsRow(
+            title = stringResource(R.string.susfs_rules_count, state.config.rules.size),
+            summary = state.config.rules
+                .groupingBy { it::class.simpleName ?: "?" }
+                .eachCount()
+                .entries
+                .joinToString(" · ") { "${it.key} ${it.value}" },
+        )
+        SusfsRow(title = stringResource(R.string.susfs_refresh), onClick = { vm.refresh() })
+    }
+
+    val report = state.report
+    if (report != null) {
+        SusfsSectionTitle(stringResource(R.string.susfs_report_title))
+        SusfsCard {
+            SusfsRow(title = report.summary())
+            report.failed.entries.take(5).forEach { (key, reason) ->
+                SusfsRow(title = key, summary = reason)
+            }
+            if (report.pendingReboot.isNotEmpty()) {
+                SusfsRow(
+                    title = stringResource(R.string.susfs_pending_reboot, report.pendingReboot.size),
+                    summary = stringResource(R.string.susfs_pending_reboot_hint),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SettingsPage(state: SusfsUiState, vm: SusfsViewModel) {
+    SusfsSectionTitle(stringResource(R.string.susfs_features_title))
+    SusfsCard {
+        SusfsSwitchRow(
+            title = stringResource(R.string.susfs_log),
+            summary = stringResource(R.string.susfs_log_summary),
+            checked = state.config.enabled[SusfsRepository.SWITCH_LOG] == true,
+            onCheckedChange = { vm.setSwitch(SusfsRepository.SWITCH_LOG, it) },
+        )
+        SusfsSwitchRow(
+            title = stringResource(R.string.susfs_avc),
+            summary = stringResource(R.string.susfs_avc_summary),
+            checked = state.config.enabled[SusfsRepository.SWITCH_AVC] == true,
+            onCheckedChange = { vm.setSwitch(SusfsRepository.SWITCH_AVC, it) },
+        )
+        SusfsSwitchRow(
+            title = stringResource(R.string.susfs_hide_mnts),
+            summary = stringResource(R.string.susfs_hide_mnts_summary),
+            checked = state.config.enabled[SusfsRepository.SWITCH_HIDE_MOUNTS] == true,
+            onCheckedChange = { vm.setSwitch(SusfsRepository.SWITCH_HIDE_MOUNTS, it) },
         )
     }
 
-    if (pendingStatic) {
-        SusfsStaticKstatDialog(
-            onDismiss = { pendingStatic = false },
-            onConfirm = { args ->
-                pendingStatic = false
-                viewModel.addSusKstatStatically(
-                    path = args.path,
-                    ino = args.ino,
-                    dev = args.dev,
-                    nlink = args.nlink,
-                    size = args.size,
-                    atimeSec = args.atimeSec,
-                    atimeNsec = args.atimeNsec,
-                    mtimeSec = args.mtimeSec,
-                    mtimeNsec = args.mtimeNsec,
-                    ctimeSec = args.ctimeSec,
-                    ctimeNsec = args.ctimeNsec,
-                    blocks = args.blocks,
-                    blksize = args.blksize,
+    SusfsSectionTitle(stringResource(R.string.susfs_capabilities_title))
+    SusfsCard {
+        SusfsFeatureCatalog.resolve(state.status.features).forEach { (key, enabled) ->
+            SusfsRow(
+                title = key.removePrefix("CONFIG_KSU_SUSFS_"),
+                trailing = {
+                    SusfsPill(
+                        text = stringResource(
+                            if (enabled) R.string.susfs_feature_enabled else R.string.susfs_feature_disabled,
+                        ),
+                        highlighted = enabled,
+                    )
+                },
+            )
+        }
+    }
+}
+
+@Composable
+private fun PathsPage(state: SusfsUiState, vm: SusfsViewModel, onEdit: (EditorSpec) -> Unit) {
+    val pathLabel = stringResource(R.string.susfs_field_path)
+    RuleSection(
+        title = stringResource(R.string.susfs_add_path),
+        rules = state.config.rules.filterIsInstance<SusfsRule.HiddenPath>(),
+        onAdd = {
+            onEdit(
+                EditorSpec(
+                    title = stringResource(R.string.susfs_add_path),
+                    fields = listOf(pathLabel),
+                    hints = listOf("/system/app/Example"),
+                ) { values -> values.firstOrNull()?.trim()?.takeIf { it.isNotEmpty() }?.let { vm.addRule(SusfsRule.HiddenPath(it)) } },
+            )
+        },
+        onRemove = { vm.removeRule(it) },
+    )
+    RuleSection(
+        title = stringResource(R.string.susfs_add_path_loop),
+        rules = state.config.rules.filterIsInstance<SusfsRule.HiddenLoop>(),
+        onAdd = {
+            onEdit(
+                EditorSpec(
+                    title = stringResource(R.string.susfs_add_path_loop),
+                    fields = listOf(pathLabel),
+                    hints = listOf("/data/local/tmp/example"),
+                ) { values -> values.firstOrNull()?.trim()?.takeIf { it.isNotEmpty() }?.let { vm.addRule(SusfsRule.HiddenLoop(it)) } },
+            )
+        },
+        onRemove = { vm.removeRule(it) },
+    )
+    RuleSection(
+        title = stringResource(R.string.susfs_add_map),
+        rules = state.config.rules.filterIsInstance<SusfsRule.SusMap>(),
+        onAdd = {
+            onEdit(
+                EditorSpec(
+                    title = stringResource(R.string.susfs_add_map),
+                    fields = listOf(pathLabel),
+                    hints = listOf("/system/fonts"),
+                ) { values -> values.firstOrNull()?.trim()?.takeIf { it.isNotEmpty() }?.let { vm.addRule(SusfsRule.SusMap(it)) } },
+            )
+        },
+        onRemove = { vm.removeRule(it) },
+    )
+}
+
+@Composable
+private fun SpoofPage(state: SusfsUiState, vm: SusfsViewModel, onEdit: (EditorSpec) -> Unit) {
+    val uname = state.config.rules.filterIsInstance<SusfsRule.Uname>().firstOrNull()
+    val cmdline = state.config.rules.filterIsInstance<SusfsRule.Cmdline>().firstOrNull()
+    val empty = stringResource(R.string.susfs_empty)
+    val releaseLabel = stringResource(R.string.susfs_field_release)
+    val versionLabel = stringResource(R.string.susfs_field_version)
+    val fileLabel = stringResource(R.string.susfs_field_file)
+    val pathLabel = stringResource(R.string.susfs_field_path)
+
+    SusfsSectionTitle(stringResource(R.string.susfs_set_uname))
+    SusfsCard {
+        SusfsRow(
+            title = stringResource(R.string.susfs_set_uname),
+            summary = uname?.let { "${it.release}${if (it.version.isEmpty()) "" else " · ${it.version}"}" } ?: empty,
+            onClick = {
+                onEdit(
+                    EditorSpec(
+                        title = stringResource(R.string.susfs_set_uname),
+                        fields = listOf(releaseLabel, versionLabel),
+                        hints = listOf("6.6.0-abogki", "#1 SMP PREEMPT"),
+                    ) { values ->
+                        val release = values.getOrNull(0).orEmpty().trim()
+                        val version = values.getOrNull(1).orEmpty().trim()
+                        if (release.isNotEmpty() || version.isNotEmpty()) {
+                            uname?.let { vm.removeRule(it) }
+                            vm.addRule(SusfsRule.Uname(release, version))
+                        }
+                    },
                 )
             },
         )
     }
-}
 
-/**
- * A pending two-field prompt, with optional uid_scheme selector.
- *
- * [fieldA]/[fieldB] are the visible labels; the single-field prompts leave
- * [fieldB] null and the dialog hides that line. [showUidScheme] adds a
- * uid_scheme picker (0 = all processes, 1 = non-root only, 2 = custom).
- */
-internal data class SusfsInput(
-    val title: String,
-    val fieldA: String,
-    val fieldB: String? = null,
-    val valueA: String = "",
-    val valueB: String = "",
-    val showUidScheme: Boolean = false,
-    val onConfirm: (String, String, Int) -> Unit,
-)
-
-/** Collected values from the static-kstat dialog. */
-private data class SusfsStaticKstatArgs(
-    val path: String,
-    val ino: Long,
-    val dev: Long,
-    val nlink: Long,
-    val size: Long,
-    val atimeSec: Long,
-    val atimeNsec: Long,
-    val mtimeSec: Long,
-    val mtimeNsec: Long,
-    val ctimeSec: Long,
-    val ctimeNsec: Long,
-    val blocks: Long,
-    val blksize: Long,
-)
-
-@Composable
-private fun SusfsMiuix(
-    state: SusfsUiState,
-    onBack: () -> Unit,
-    onRefresh: () -> Unit,
-    onInput: (SusfsInput) -> Unit,
-    onStaticKstat: () -> Unit,
-    viewModel: SusfsViewModel,
-) {
-    // 有保存的规则才显示「规则」分组：否则标题挂着、下面却是空的。
-    val hasRules = remember(state.lastOutput) {
-        SusfsRepository.susPaths.isNotEmpty() ||
-            SusfsRepository.susPathLoops.isNotEmpty() ||
-            SusfsRepository.susMaps.isNotEmpty() ||
-            SusfsRepository.susKstatPaths.isNotEmpty() ||
-            SusfsRepository.susRedirects.isNotEmpty()
+    SusfsSectionTitle(stringResource(R.string.susfs_set_cmdline))
+    SusfsCard {
+        SusfsRow(
+            title = stringResource(R.string.susfs_set_cmdline),
+            summary = cmdline?.sourcePath ?: empty,
+            onClick = {
+                onEdit(
+                    EditorSpec(
+                        title = stringResource(R.string.susfs_set_cmdline),
+                        fields = listOf(fileLabel),
+                        hints = listOf("/data/local/tmp/cmdline"),
+                    ) { values ->
+                        values.firstOrNull()?.trim()?.takeIf { it.isNotEmpty() }?.let {
+                            cmdline?.let { old -> vm.removeRule(old) }
+                            vm.addRule(SusfsRule.Cmdline(it))
+                        }
+                    },
+                )
+            },
+        )
     }
 
-    MiuixScaffold(
-        topBar = {
-            MiuixTopAppBar(
-                title = stringResource(R.string.settings_susfs),
-                navigationIcon = {
-                    MiuixIconButton(onClick = onBack) {
-                        MiuixIcon(
-                            imageVector = MiuixIcons.Back,
-                            contentDescription = null,
-                            tint = colorScheme.onSurface,
-                        )
+    RuleSection(
+        title = stringResource(R.string.susfs_add_kstat),
+        rules = state.config.rules.filterIsInstance<SusfsRule.Kstat>(),
+        onAdd = {
+            onEdit(
+                EditorSpec(
+                    title = stringResource(R.string.susfs_add_kstat),
+                    fields = listOf(pathLabel),
+                    hints = listOf("/system/fonts/Roboto-Regular.ttf"),
+                ) { values -> values.firstOrNull()?.trim()?.takeIf { it.isNotEmpty() }?.let { vm.addRule(SusfsRule.Kstat(it)) } },
+            )
+        },
+        onRemove = { vm.removeRule(it) },
+    )
+}
+
+@Composable
+private fun RedirectPage(state: SusfsUiState, vm: SusfsViewModel, onEdit: (EditorSpec) -> Unit) {
+    val targetLabel = stringResource(R.string.susfs_field_target)
+    val redirectedLabel = stringResource(R.string.susfs_field_redirected)
+    RuleSection(
+        title = stringResource(R.string.susfs_add_redirect),
+        rules = state.config.rules.filterIsInstance<SusfsRule.Redirect>(),
+        onAdd = {
+            onEdit(
+                EditorSpec(
+                    title = stringResource(R.string.susfs_add_redirect),
+                    fields = listOf(targetLabel, redirectedLabel),
+                    hints = listOf("/system/example", "/data/local/tmp/example"),
+                ) { values ->
+                    val target = values.getOrNull(0).orEmpty().trim()
+                    val redirected = values.getOrNull(1).orEmpty().trim()
+                    if (target.isNotEmpty() && redirected.isNotEmpty()) {
+                        vm.addRule(SusfsRule.Redirect(target, redirected))
                     }
                 },
             )
         },
-    ) { innerPadding ->
-        LazyColumn(
-            modifier = Modifier.padding(horizontal = 12.dp),
-            contentPadding = innerPadding,
-        ) {
-            // 分组标题把「状态 / 开关 / 路径与伪装 / 规则 / 调试」分开：之前七张卡片平铺，
-            // 读者分不出哪些是常看的、哪些是改一次就不碰的。
-            item {
-                SmallTitle(
-                    text = stringResource(R.string.susfs_section_status),
-                    modifier = Modifier.padding(top = 20.dp),
-                )
-            }
-            item { SusfsStatusCard(state, onRefresh) }
-
-            if (state.status.loaded) {
-                item {
-                    SmallTitle(
-                        text = stringResource(R.string.susfs_section_switches),
-                        modifier = Modifier.padding(top = 20.dp),
-                    )
-                }
-                item { SusfsFeaturesCard(state) }
-                item { SusfsSwitchCard(state, viewModel) }
-
-                item {
-                    SmallTitle(
-                        text = stringResource(R.string.susfs_section_advanced),
-                        modifier = Modifier.padding(top = 20.dp),
-                    )
-                }
-                item { SusfsPathCard(onInput, viewModel) }
-                item { SusfsKstatCard(onInput, onStaticKstat, viewModel) }
-                item { SusfsRedirectCard(onInput, viewModel) }
-                item { SusfsUnameCard(state, onInput, viewModel) }
-
-                if (hasRules) {
-                    item {
-                        SmallTitle(
-                            text = stringResource(R.string.susfs_section_rules),
-                            modifier = Modifier.padding(top = 20.dp),
-                        )
-                    }
-                    item { SusfsRulesCard(state) }
-                }
-            }
-
-            item {
-                SmallTitle(
-                    text = stringResource(R.string.susfs_section_debug),
-                    modifier = Modifier.padding(top = 20.dp),
-                )
-            }
-            item { SusfsProcCard(state) }
-            item { SusfsLogCard(state) }
-        }
-    }
+        onRemove = { vm.removeRule(it) },
+    )
 }
 
-/** Version / variant / feature list, or a note that nothing answered. */
 @Composable
-private fun SusfsStatusCard(state: SusfsUiState, onRefresh: () -> Unit) {
-    Card(modifier = Modifier.padding(top = 12.dp)) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            MiuixText(
-                text = stringResource(R.string.susfs_status_title),
-                style = MiuixTheme.textStyles.title2,
-                color = colorScheme.onSurface,
-            )
-            val line = when {
-                state.isLoading -> stringResource(R.string.susfs_status_loading)
-                state.status.loaded -> stringResource(
-                    R.string.susfs_status_loaded,
-                    state.status.version,
-                    state.status.variant,
-                )
-
-                else -> stringResource(R.string.susfs_status_unloaded)
-            }
-            MiuixText(
-                text = line,
-                style = MiuixTheme.textStyles.body2,
-                color = colorScheme.onSurfaceVariantSummary,
-                modifier = Modifier.padding(top = 6.dp),
-            )
-            // 这一串 CONFIG_KSU_SUSFS_* 是编译期能力表，逐项状态在「功能启用状态」卡里已经
-            // 列过了；在这里整段铺开会把状态卡变成一堵墙，所以只留一句计数。
-            if (state.status.features.isNotEmpty()) {
-                MiuixText(
-                    text = stringResource(R.string.susfs_config_count, state.status.features.size),
-                    style = MiuixTheme.textStyles.footnote1,
-                    color = colorScheme.onSurfaceVariantSummary,
-                    modifier = Modifier.padding(top = 6.dp),
-                )
-            }
-            val error = state.error
-            if (error != null) {
-                MiuixText(
-                    text = error,
-                    style = MiuixTheme.textStyles.footnote1,
-                    color = colorScheme.error,
-                    modifier = Modifier.padding(top = 6.dp),
-                )
-            }
-        }
-        ArrowPreference(
-            title = stringResource(R.string.susfs_refresh),
-            startAction = {
-                MiuixIcon(
-                    imageVector = Icons.Filled.Refresh,
-                    contentDescription = null,
-                    tint = colorScheme.onBackground,
-                    modifier = Modifier.padding(end = 6.dp),
-                )
-            },
-            onClick = onRefresh,
-        )
-    }
-}
-
-/**
- * The kernel's enabled-feature list, one row per known feature.
- *
- * Mirrors the upstream SuSFS panel: every feature the build can have is
- * listed, and the ones the kernel did not report simply read as disabled.
- */
-@Composable
-private fun SusfsFeaturesCard(state: SusfsUiState) {
-    Card(modifier = Modifier.padding(top = 12.dp)) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            MiuixText(
-                text = stringResource(R.string.susfs_features_title),
-                style = MiuixTheme.textStyles.title2,
-                color = colorScheme.onSurface,
-            )
-            MiuixText(
-                text = stringResource(R.string.susfs_features_summary),
-                style = MiuixTheme.textStyles.footnote1,
-                color = colorScheme.onSurfaceVariantSummary,
-                modifier = Modifier.padding(top = 4.dp),
-            )
-        }
-        for (feature in state.features) {
-            val name = stringResource(feature.nameRes)
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                MiuixText(
-                    text = name,
-                    style = MiuixTheme.textStyles.body1,
-                    color = colorScheme.onSurface,
-                    modifier = Modifier.weight(1f),
-                )
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(
-                            if (feature.enabled) colorScheme.primaryContainer
-                            else colorScheme.surfaceVariant
-                        )
-                        .padding(horizontal = 10.dp, vertical = 4.dp),
-                ) {
-                    MiuixText(
-                        text = stringResource(
-                            if (feature.enabled) R.string.susfs_feature_enabled
-                            else R.string.susfs_feature_disabled
-                        ),
-                        style = MiuixTheme.textStyles.footnote1,
-                        color = if (feature.enabled) colorScheme.onPrimaryContainer
-                        else colorScheme.onSurfaceVariantSummary,
-                    )
-                }
-            }
-        }
-    }
-}
-
-/** The three kernel-wide toggles. */
-@Composable
-private fun SusfsSwitchCard(state: SusfsUiState, viewModel: SusfsViewModel) {
-    Card(modifier = Modifier.padding(top = 12.dp)) {
-        SwitchPreference(
-            title = stringResource(R.string.susfs_log),
-            summary = stringResource(R.string.susfs_log_summary),
-            startAction = {
-                MiuixIcon(
-                    imageVector = Icons.Filled.Info,
-                    contentDescription = null,
-                    tint = colorScheme.onBackground,
-                    modifier = Modifier.padding(end = 6.dp),
-                )
-            },
-            checked = state.logEnabled,
-            onCheckedChange = viewModel::setLogEnabled,
-        )
-        SwitchPreference(
-            title = stringResource(R.string.susfs_avc),
-            summary = stringResource(R.string.susfs_avc_summary),
-            startAction = {
-                MiuixIcon(
-                    imageVector = Icons.Filled.Security,
-                    contentDescription = null,
-                    tint = colorScheme.onBackground,
-                    modifier = Modifier.padding(end = 6.dp),
-                )
-            },
-            checked = state.avcLogSpoofing,
-            onCheckedChange = viewModel::setAvcLogSpoofing,
-        )
-        SwitchPreference(
-            title = stringResource(R.string.susfs_hide_mnts),
-            summary = stringResource(R.string.susfs_hide_mnts_summary),
-            startAction = {
-                MiuixIcon(
-                    imageVector = Icons.Filled.VisibilityOff,
-                    contentDescription = null,
-                    tint = colorScheme.onBackground,
-                    modifier = Modifier.padding(end = 6.dp),
-                )
-            },
-            checked = state.hideSusMntsForNonSuProcs,
-            onCheckedChange = viewModel::setHideSusMnts,
-        )
-    }
-}
-
-/** Hidden-path list. */
-@Composable
-private fun SusfsPathCard(onInput: (SusfsInput) -> Unit, viewModel: SusfsViewModel) {
-    val addPath = stringResource(R.string.susfs_add_path)
-    val addPathSummary = stringResource(R.string.susfs_add_path_summary)
-    val addPathLoop = stringResource(R.string.susfs_add_path_loop)
-    val addPathLoopSummary = stringResource(R.string.susfs_add_path_loop_summary)
-    val addMap = stringResource(R.string.susfs_add_map)
-    val addMapSummary = stringResource(R.string.susfs_add_map_summary)
-    val fieldPath = stringResource(R.string.susfs_field_path)
-    Card(modifier = Modifier.padding(top = 12.dp)) {
-        ArrowPreference(
-            title = addPath,
-            summary = addPathSummary,
-            startAction = {
-                MiuixIcon(
-                    imageVector = Icons.Filled.Add,
-                    contentDescription = null,
-                    tint = colorScheme.onBackground,
-                    modifier = Modifier.padding(end = 6.dp),
-                )
-            },
-            onClick = {
-                onInput(
-                    SusfsInput(title = addPath, fieldA = fieldPath) { path, _, _ ->
-                        viewModel.addSusPath(path)
-                    },
-                )
-            },
-        )
-        ArrowPreference(
-            title = addPathLoop,
-            summary = addPathLoopSummary,
-            startAction = {
-                MiuixIcon(
-                    imageVector = Icons.Filled.Add,
-                    contentDescription = null,
-                    tint = colorScheme.onBackground,
-                    modifier = Modifier.padding(end = 6.dp),
-                )
-            },
-            onClick = {
-                onInput(
-                    SusfsInput(title = addPathLoop, fieldA = fieldPath) { path, _, _ ->
-                        viewModel.addSusPathLoop(path)
-                    },
-                )
-            },
-        )
-        ArrowPreference(
-            title = addMap,
-            summary = addMapSummary,
-            startAction = {
-                MiuixIcon(
-                    imageVector = Icons.Filled.Add,
-                    contentDescription = null,
-                    tint = colorScheme.onBackground,
-                    modifier = Modifier.padding(end = 6.dp),
-                )
-            },
-            onClick = {
-                onInput(
-                    SusfsInput(title = addMap, fieldA = fieldPath) { path, _, _ ->
-                        viewModel.addSusMap(path)
-                    },
-                )
-            },
-        )
-    }
-}
-
-/** kstat spoofing — auto, full-clone, and static (manual values). */
-@Composable
-private fun SusfsKstatCard(
-    onInput: (SusfsInput) -> Unit,
-    onStaticKstat: () -> Unit,
-    viewModel: SusfsViewModel,
-) {
-    val addKstat = stringResource(R.string.susfs_add_kstat)
-    val addKstatSummary = stringResource(R.string.susfs_add_kstat_summary)
-    val updateKstat = stringResource(R.string.susfs_update_kstat)
-    val updateKstatSummary = stringResource(R.string.susfs_update_kstat_summary)
-    val updateKstatFullClone = stringResource(R.string.susfs_update_kstat_full_clone)
-    val updateKstatFullCloneSummary = stringResource(R.string.susfs_update_kstat_full_clone_summary)
-    val addKstatStatic = stringResource(R.string.susfs_add_kstat_static)
-    val addKstatStaticSummary = stringResource(R.string.susfs_add_kstat_static_summary)
-    val fieldPath = stringResource(R.string.susfs_field_path)
-    Card(modifier = Modifier.padding(top = 12.dp)) {
-        ArrowPreference(
-            title = addKstat,
-            summary = addKstatSummary,
-            startAction = {
-                MiuixIcon(
-                    imageVector = Icons.Filled.Tune,
-                    contentDescription = null,
-                    tint = colorScheme.onBackground,
-                    modifier = Modifier.padding(end = 6.dp),
-                )
-            },
-            onClick = {
-                onInput(
-                    SusfsInput(title = addKstat, fieldA = fieldPath) { path, _, _ ->
-                        viewModel.addSusKstat(path)
-                    },
-                )
-            },
-        )
-        ArrowPreference(
-            title = updateKstat,
-            summary = updateKstatSummary,
-            startAction = {
-                MiuixIcon(
-                    imageVector = Icons.Filled.Tune,
-                    contentDescription = null,
-                    tint = colorScheme.onBackground,
-                    modifier = Modifier.padding(end = 6.dp),
-                )
-            },
-            onClick = {
-                onInput(
-                    SusfsInput(title = updateKstat, fieldA = fieldPath) { path, _, _ ->
-                        viewModel.updateSusKstat(path)
-                    },
-                )
-            },
-        )
-        ArrowPreference(
-            title = updateKstatFullClone,
-            summary = updateKstatFullCloneSummary,
-            startAction = {
-                MiuixIcon(
-                    imageVector = Icons.Filled.Tune,
-                    contentDescription = null,
-                    tint = colorScheme.onBackground,
-                    modifier = Modifier.padding(end = 6.dp),
-                )
-            },
-            onClick = {
-                onInput(
-                    SusfsInput(title = updateKstatFullClone, fieldA = fieldPath) { path, _, _ ->
-                        viewModel.updateSusKstatFullClone(path)
-                    },
-                )
-            },
-        )
-        ArrowPreference(
-            title = addKstatStatic,
-            summary = addKstatStaticSummary,
-            startAction = {
-                MiuixIcon(
-                    imageVector = Icons.Filled.Tune,
-                    contentDescription = null,
-                    tint = colorScheme.onBackground,
-                    modifier = Modifier.padding(end = 6.dp),
-                )
-            },
-            onClick = onStaticKstat,
-        )
-    }
-}
-
-/** open() redirection, with uid_scheme selector. */
-@Composable
-private fun SusfsRedirectCard(onInput: (SusfsInput) -> Unit, viewModel: SusfsViewModel) {
-    val addRedirect = stringResource(R.string.susfs_add_redirect)
-    val addRedirectSummary = stringResource(R.string.susfs_add_redirect_summary)
-    val fieldTarget = stringResource(R.string.susfs_field_target)
-    val fieldRedirected = stringResource(R.string.susfs_field_redirected)
-    Card(modifier = Modifier.padding(top = 12.dp)) {
-        ArrowPreference(
-            title = addRedirect,
-            summary = addRedirectSummary,
-            startAction = {
-                MiuixIcon(
-                    imageVector = Icons.Filled.SwapHoriz,
-                    contentDescription = null,
-                    tint = colorScheme.onBackground,
-                    modifier = Modifier.padding(end = 6.dp),
-                )
-            },
-            onClick = {
-                onInput(
-                    SusfsInput(
-                        title = addRedirect,
-                        fieldA = fieldTarget,
-                        fieldB = fieldRedirected,
-                        showUidScheme = true,
-                    ) { target, redirected, uidScheme ->
-                        viewModel.addOpenRedirect(target, redirected, uidScheme)
-                    },
-                )
-            },
-        )
-    }
-}
-
-/** uname spoofing, showing what is currently set. */
-@Composable
-private fun SusfsUnameCard(
+private fun ExtensionsPage(
     state: SusfsUiState,
-    onInput: (SusfsInput) -> Unit,
-    viewModel: SusfsViewModel,
+    vm: SusfsViewModel,
+    onImport: () -> Unit,
+    onExport: () -> Unit,
 ) {
-    val setUname = stringResource(R.string.susfs_set_uname)
-    val setUnameSummary = stringResource(R.string.susfs_set_uname_summary)
-    val fieldRelease = stringResource(R.string.susfs_field_release)
-    val fieldVersion = stringResource(R.string.susfs_field_version)
-    val setCmdline = stringResource(R.string.susfs_set_cmdline)
-    val setCmdlineSummary = stringResource(R.string.susfs_set_cmdline_summary)
-    val fieldFile = stringResource(R.string.susfs_field_file)
-    Card(modifier = Modifier.padding(top = 12.dp)) {
-        ArrowPreference(
-            title = setUname,
-            summary = state.unameRelease.ifEmpty { setUnameSummary },
-            startAction = {
-                MiuixIcon(
-                    imageVector = Icons.Filled.Lock,
-                    contentDescription = null,
-                    tint = colorScheme.onBackground,
-                    modifier = Modifier.padding(end = 6.dp),
-                )
-            },
-            onClick = {
-                onInput(
-                    SusfsInput(
-                        title = setUname,
-                        fieldA = fieldRelease,
-                        fieldB = fieldVersion,
-                        valueA = state.unameRelease,
-                        valueB = state.unameVersion,
-                    ) { release, version, _ ->
-                        viewModel.setUname(release, version)
-                    },
-                )
-            },
-        )
-        ArrowPreference(
-            title = setCmdline,
-            summary = setCmdlineSummary,
-            startAction = {
-                MiuixIcon(
-                    imageVector = Icons.Filled.Lock,
-                    contentDescription = null,
-                    tint = colorScheme.onBackground,
-                    modifier = Modifier.padding(end = 6.dp),
-                )
-            },
-            onClick = {
-                onInput(
-                    SusfsInput(title = setCmdline, fieldA = fieldFile) { path, _, _ ->
-                        viewModel.setCmdline(path)
-                    },
-                )
-            },
+    SusfsSectionTitle(stringResource(R.string.susfs_config_title))
+    SusfsCard {
+        SusfsRow(title = stringResource(R.string.susfs_import), onClick = onImport)
+        SusfsRow(title = stringResource(R.string.susfs_export), onClick = onExport)
+        SusfsRow(
+            title = stringResource(R.string.susfs_rules_count, state.config.rules.size),
+            summary = stringResource(R.string.susfs_config_hint),
         )
     }
-}
 
-/** The raw `/proc/susfs_*` contents, as the module writes them. */
-@Composable
-private fun SusfsProcCard(state: SusfsUiState) {
-    val proc = state.proc
-    val entries = listOf(
-        stringResource(R.string.susfs_proc_path) to proc.path,
-        stringResource(R.string.susfs_proc_hide_mounts) to proc.hideMounts,
-        stringResource(R.string.susfs_proc_hide_modules) to proc.hideModules,
-        stringResource(R.string.susfs_proc_kstat) to proc.kstat,
-        stringResource(R.string.susfs_proc_open_redirect) to proc.openRedirect,
-        stringResource(R.string.susfs_proc_avc) to proc.avcSpoof,
-        stringResource(R.string.susfs_proc_log) to proc.enableLog,
-    )
-    Card(modifier = Modifier.padding(top = 12.dp)) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            MiuixText(
-                text = stringResource(R.string.susfs_proc_title),
-                style = MiuixTheme.textStyles.title2,
-                color = colorScheme.onSurface,
-            )
-            for ((label, value) in entries) {
-                MiuixText(
-                    text = "$label: ${value.ifEmpty { "—" }}",
-                    style = MiuixTheme.textStyles.footnote1,
-                    fontFamily = FontFamily.Monospace,
-                    color = colorScheme.onSurfaceVariantSummary,
-                    modifier = Modifier
-                        .padding(top = 6.dp)
-                        .horizontalScroll(rememberScrollState()),
-                    maxLines = 3,
-                )
+    SusfsSectionTitle(stringResource(R.string.susfs_proc_title))
+    SusfsCard {
+        val proc = state.proc
+        if (proc.isEmpty) {
+            SusfsEmptyHint(stringResource(R.string.susfs_empty))
+        } else {
+            listOf(
+                R.string.susfs_proc_path to proc.path,
+                R.string.susfs_proc_hide_mounts to proc.hideMounts,
+                R.string.susfs_proc_hide_modules to proc.hideModules,
+                R.string.susfs_proc_kstat to proc.kstat,
+                R.string.susfs_proc_open_redirect to proc.openRedirect,
+                R.string.susfs_proc_avc to proc.avcSpoof,
+                R.string.susfs_proc_log to proc.enableLog,
+            ).forEach { (res, value) ->
+                if (value.isNotBlank()) {
+                    SusfsRow(title = stringResource(res), summary = value.take(200))
+                }
             }
         }
     }
 }
 
-/** The last command's output. */
+/** 一组同类规则：标题 + 添加行 + 每条一行（右侧删除）。 */
 @Composable
-private fun SusfsLogCard(state: SusfsUiState) {
-    Card(modifier = Modifier.padding(top = 12.dp, bottom = 12.dp)) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            MiuixText(
-                text = stringResource(R.string.susfs_log_title),
-                style = MiuixTheme.textStyles.title2,
-                color = colorScheme.onSurface,
-            )
-            SelectionContainer {
-                MiuixText(
-                    text = state.lastOutput.ifEmpty { stringResource(R.string.susfs_log_idle) },
-                    style = MiuixTheme.textStyles.footnote1,
-                    fontFamily = FontFamily.Monospace,
-                    color = colorScheme.onSurfaceVariantSummary,
-                    modifier = Modifier
-                        .padding(top = 6.dp)
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
-                )
-            }
-        }
-    }
-}
-
-/** The two-field prompt (plus optional uid_scheme) used by every action. */
-@Composable
-private fun SusfsInputDialog(
-    input: SusfsInput,
-    onDismiss: () -> Unit,
-    onConfirm: (String, String, Int) -> Unit,
+private fun <T : SusfsRule> RuleSection(
+    title: String,
+    rules: List<T>,
+    onAdd: () -> Unit,
+    onRemove: (T) -> Unit,
 ) {
-    var valueA by remember { mutableStateOf(input.valueA) }
-    var valueB by remember { mutableStateOf(input.valueB) }
-    var uidMode by remember { mutableStateOf(0) }
-    var customUid by remember { mutableStateOf("") }
-
-    val resolvedUid = when (uidMode) {
-        0 -> 0
-        1 -> 1
-        else -> customUid.toIntOrNull() ?: 0
-    }
-
-    AppAlertDialog(
-        title = input.title,
-        onDismissRequest = onDismiss,
-        confirmText = stringResource(R.string.susfs_confirm),
-        dismissText = stringResource(R.string.susfs_cancel),
-        confirmEnabled = valueA.isNotBlank(),
-        onConfirm = { onConfirm(valueA, valueB, resolvedUid) },
-    ) {
-        Column {
-            SusfsTextField(
-                label = input.fieldA,
-                value = valueA,
-                onValueChange = { valueA = it },
-                modifier = Modifier.fillMaxWidth(),
-            )
-            val labelB = input.fieldB
-            if (labelB != null) {
-                SusfsTextField(
-                    label = labelB,
-                    value = valueB,
-                    onValueChange = { valueB = it },
-                    modifier = Modifier.padding(top = 12.dp).fillMaxWidth(),
-                )
-            }
-            if (input.showUidScheme) {
-                MiuixText(
-                    text = stringResource(R.string.susfs_uid_scheme_title),
-                    style = MiuixTheme.textStyles.footnote1,
-                    color = colorScheme.onSurfaceVariantSummary,
-                    modifier = Modifier.padding(top = 16.dp),
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    listOf(
-                        0 to stringResource(R.string.susfs_uid_all),
-                        1 to stringResource(R.string.susfs_uid_non_root),
-                        2 to stringResource(R.string.susfs_uid_custom),
-                    ).forEach { (mode, label) ->
-                        FilterChipCompat(
-                            selected = uidMode == mode,
-                            onClick = { uidMode = mode },
-                            label = label,
-                            modifier = Modifier.weight(1f),
+    SusfsSectionTitle(title)
+    SusfsCard {
+        SusfsRow(title = stringResource(R.string.susfs_add), onClick = onAdd)
+        if (rules.isEmpty()) {
+            SusfsEmptyHint(stringResource(R.string.susfs_empty))
+        } else {
+            rules.forEach { rule ->
+                SusfsRow(
+                    title = rule.display,
+                    trailing = {
+                        Text(
+                            text = stringResource(R.string.susfs_remove),
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.padding(start = 8.dp),
                         )
-                    }
-                }
-                if (uidMode == 2) {
-                    SusfsTextField(
-                        label = stringResource(R.string.susfs_uid_custom_hint),
-                        value = customUid,
-                        onValueChange = { customUid = it },
-                        modifier = Modifier.padding(top = 8.dp).fillMaxWidth(),
-                        keyboardType = KeyboardType.Number,
-                    )
-                }
+                    },
+                    onClick = { onRemove(rule) },
+                )
             }
         }
     }
 }
 
-/**
- * 按当前皮肤渲染的输入框。
- *
- * 弹窗容器已经跟随皮肤（见 [AppAlertDialog]），里面的输入框也必须跟随，
- * 否则 miuix 弹窗里嵌一个 Material 的 OutlinedTextField，观感仍然割裂。
- */
+/** 通用输入对话框：1–3 个字段，确认时把值回调出去。 */
 @Composable
-private fun SusfsTextField(
-    label: String,
-    value: String,
-    onValueChange: (String) -> Unit,
-    modifier: Modifier = Modifier,
-    keyboardType: KeyboardType = KeyboardType.Text,
-) {
-    if (LocalUiMode.current.isMiuixFamily) {
-        MiuixTextField(
-            value = value,
-            onValueChange = onValueChange,
-            label = label,
-            modifier = modifier,
-        )
-    } else {
-        OutlinedTextField(
-            value = value,
-            onValueChange = onValueChange,
-            singleLine = true,
-            label = { Text(label) },
-            keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
-            modifier = modifier,
-        )
-    }
-}
-
-/** Minimal selectable chip built from Box + clickable. */
-@Composable
-private fun FilterChipCompat(
-    selected: Boolean,
-    onClick: () -> Unit,
-    label: String,
-    modifier: Modifier = Modifier,
-) {
-    Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(
-                if (selected) colorScheme.primaryContainer
-                else colorScheme.surfaceVariant
-            )
-            .clickable(onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 8.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        MiuixText(
-            text = label,
-            style = MiuixTheme.textStyles.footnote1,
-            color = if (selected) colorScheme.onPrimaryContainer
-            else colorScheme.onSurfaceVariantSummary,
-        )
-    }
-}
-
-/**
- * The 13-field static kstat dialog.
- *
- * Fields are grouped: identity (ino/dev/nlink/size), times (atime/mtime/ctime
- * sec+nsec), and blocks. Every numeric field defaults to 0 so the user can
- * fill only what matters; the kernel forwards zeros verbatim.
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun SusfsStaticKstatDialog(
-    onDismiss: () -> Unit,
-    onConfirm: (SusfsStaticKstatArgs) -> Unit,
-) {
-    var path by remember { mutableStateOf("") }
-    var ino by remember { mutableStateOf("") }
-    var dev by remember { mutableStateOf("") }
-    var nlink by remember { mutableStateOf("") }
-    var size by remember { mutableStateOf("") }
-    var atimeSec by remember { mutableStateOf("") }
-    var atimeNsec by remember { mutableStateOf("0") }
-    var mtimeSec by remember { mutableStateOf("") }
-    var mtimeNsec by remember { mutableStateOf("0") }
-    var ctimeSec by remember { mutableStateOf("") }
-    var ctimeNsec by remember { mutableStateOf("0") }
-    var blocks by remember { mutableStateOf("0") }
-    var blksize by remember { mutableStateOf("0") }
-
-    fun toLong(s: String) = s.toLongOrNull() ?: 0L
-
-    AppAlertDialog(
-        title = stringResource(R.string.susfs_add_kstat_static),
+private fun SusfsEditorDialog(spec: EditorSpec, onDismiss: () -> Unit) {
+    var values by remember { mutableStateOf(spec.fields.map { "" }) }
+    AlertDialog(
         onDismissRequest = onDismiss,
-        confirmText = stringResource(R.string.susfs_confirm),
-        dismissText = stringResource(R.string.susfs_cancel),
-        confirmEnabled = path.isNotBlank() && ino.isNotBlank(),
-        onConfirm = {
-            onConfirm(
-                SusfsStaticKstatArgs(
-                    path = path,
-                    ino = toLong(ino),
-                    dev = toLong(dev),
-                    nlink = toLong(nlink),
-                    size = toLong(size),
-                    atimeSec = toLong(atimeSec),
-                    atimeNsec = toLong(atimeNsec),
-                    mtimeSec = toLong(mtimeSec),
-                    mtimeNsec = toLong(mtimeNsec),
-                    ctimeSec = toLong(ctimeSec),
-                    ctimeNsec = toLong(ctimeNsec),
-                    blocks = toLong(blocks),
-                    blksize = toLong(blksize),
-                )
-            )
-        },
-    ) {
-            Column(
-                modifier = Modifier
-                    .horizontalScroll(rememberScrollState())
-                    .fillMaxWidth()
-            ) {
-                StaticField(stringResource(R.string.susfs_field_path), path, { path = it }, KeyboardType.Text)
-                StaticField(stringResource(R.string.susfs_field_ino), ino, { ino = it })
-                StaticField(stringResource(R.string.susfs_field_dev), dev, { dev = it })
-                StaticField(stringResource(R.string.susfs_field_nlink), nlink, { nlink = it })
-                StaticField(stringResource(R.string.susfs_field_size), size, { size = it })
-                StaticField(stringResource(R.string.susfs_field_atime_sec), atimeSec, { atimeSec = it })
-                StaticField(stringResource(R.string.susfs_field_atime_nsec), atimeNsec, { atimeNsec = it })
-                StaticField(stringResource(R.string.susfs_field_mtime_sec), mtimeSec, { mtimeSec = it })
-                StaticField(stringResource(R.string.susfs_field_mtime_nsec), mtimeNsec, { mtimeNsec = it })
-                StaticField(stringResource(R.string.susfs_field_ctime_sec), ctimeSec, { ctimeSec = it })
-                StaticField(stringResource(R.string.susfs_field_ctime_nsec), ctimeNsec, { ctimeNsec = it })
-                StaticField(stringResource(R.string.susfs_field_blocks), blocks, { blocks = it })
-                StaticField(stringResource(R.string.susfs_field_blksize), blksize, { blksize = it })
-            }
-    }
-}
-
-/** One labelled OutlinedTextField for the static-kstat form. */
-@Composable
-private fun StaticField(
-    label: String,
-    value: String,
-    onValueChange: (String) -> Unit,
-    keyboardType: KeyboardType = KeyboardType.Number,
-) {
-    SusfsTextField(
-        label = label,
-        value = value,
-        onValueChange = onValueChange,
-        keyboardType = keyboardType,
-        modifier = Modifier
-            .padding(top = 6.dp)
-            .fillMaxWidth(),
-    )
-}
-
-/**
- * 已持久化的规则清单（miuix 皮肤）。
- *
- * SuSFS 内核侧没有 remove 命令，删除只影响下次开机重放；卡片里把这句话
- * 直接写出来，避免用户误以为规则已经从内核里消失。
- */
-@Composable
-private fun SusfsRulesCard(state: SusfsUiState) {
-    var localTick by remember { mutableStateOf(0) }
-    val paths = remember(state.lastOutput, localTick) { SusfsRepository.susPaths.sorted() }
-    val loops = remember(state.lastOutput, localTick) { SusfsRepository.susPathLoops.sorted() }
-    val maps = remember(state.lastOutput, localTick) { SusfsRepository.susMaps.sorted() }
-    val kstats = remember(state.lastOutput, localTick) { SusfsRepository.susKstatPaths.sorted() }
-    val redirects = remember(state.lastOutput, localTick) {
-        SusfsRepository.susRedirects.sorted().map { packed ->
-            val (target, redirected, uid) = SusfsRepository.unpackRedirect(packed)
-            "$target → $redirected (uid $uid)"
-        }
-    }
-    val total = paths.size + loops.size + maps.size + kstats.size + redirects.size
-    if (total == 0) return
-
-    Card(modifier = Modifier.padding(top = 12.dp)) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            MiuixText(
-                text = "已保存的规则（$total）",
-                style = MiuixTheme.textStyles.title2,
-                color = colorScheme.onSurface,
-            )
-            MiuixText(
-                text = "开机后自动重放；删除只影响下次开机，本次开机内规则仍然生效",
-                style = MiuixTheme.textStyles.footnote1,
-                color = colorScheme.onSurfaceVariantSummary,
-                modifier = Modifier.padding(top = 4.dp),
-            )
-        }
-        MiuixRuleGroup("隐藏路径", paths) { SusfsRepository.removeSusPath(it); localTick++ }
-        MiuixRuleGroup("循环隐藏路径", loops) { SusfsRepository.removeSusPathLoop(it); localTick++ }
-        MiuixRuleGroup("sus map", maps) { SusfsRepository.removeSusMap(it); localTick++ }
-        MiuixRuleGroup("kstat", kstats) { SusfsRepository.removeSusKstatPath(it); localTick++ }
-        MiuixRuleGroup("open redirect", redirects) { }
-    }
-}
-
-@Composable
-private fun MiuixRuleGroup(label: String, items: List<String>, onDelete: (String) -> Unit) {
-    if (items.isEmpty()) return
-    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
-        MiuixText(
-            text = label,
-            style = MiuixTheme.textStyles.footnote1,
-            color = colorScheme.primary,
-        )
-        items.forEach { item ->
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                MiuixText(
-                    text = item,
-                    style = MiuixTheme.textStyles.footnote1,
-                    fontFamily = FontFamily.Monospace,
-                    color = colorScheme.onSurfaceVariantSummary,
-                    maxLines = 2,
-                    modifier = Modifier.weight(1f).padding(vertical = 4.dp),
-                )
-                MiuixIconButton(onClick = { onDelete(item) }) {
-                    MiuixIcon(
-                        imageVector = Icons.Filled.Delete,
-                        contentDescription = "删除",
-                        tint = colorScheme.onSurfaceVariantSummary,
-                        modifier = Modifier.size(18.dp),
+        title = { Text(spec.title) },
+        text = {
+            Column {
+                spec.fields.forEachIndexed { index, label ->
+                    OutlinedTextField(
+                        value = values[index],
+                        onValueChange = { input ->
+                            values = values.toMutableList().also { it[index] = input }
+                        },
+                        label = { Text(label) },
+                        singleLine = true,
+                        modifier = Modifier.padding(bottom = 8.dp),
                     )
                 }
             }
-        }
-    }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                if (values.any { it.isNotBlank() }) spec.onConfirm(values)
+                onDismiss()
+            }) { Text(stringResource(R.string.susfs_confirm)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.susfs_cancel)) }
+        },
+    )
 }
