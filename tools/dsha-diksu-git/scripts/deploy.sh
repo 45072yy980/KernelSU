@@ -41,7 +41,7 @@ fi
 # 只覆盖源码与元数据，保留 node_modules
 for entry in lib test package.json README.md cordis.patch.yml; do
   if [ -e "$SRC/$entry" ]; then
-    rm -rf "$DST/$entry"
+    rm -rf "${DST:?}/$entry"
     cp -a "$SRC/$entry" "$DST/$entry"
   fi
 done

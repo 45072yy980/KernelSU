@@ -38,5 +38,6 @@ jobs:
           ignore_names: gradlew
           # hma-oss-config.sh 是推到设备上执行的资产脚本，不是仓库构建脚本；
           # 它带着上游的几处风格问题（SC2012/SC2059/SC2126），扫描它只会一直红。
-          # tools/ 下的脚本同上：本地工具，按下发脚本对待，不计入项目检查。
-          ignore_paths: ./userspace/ksud/src/installer.sh ./.github/scripts/setup-rust-build.sh ./manager/app/src/main/assets/hma-oss-config.sh ./tools
+          # 最后一项是本地开发工具的部署脚本：它有自己的 node 自测，不随项目检查。
+          # 注意 ignore_paths 只对具体文件生效，写目录（./tools）排除不掉其下的文件。
+          ignore_paths: ./userspace/ksud/src/installer.sh ./.github/scripts/setup-rust-build.sh ./manager/app/src/main/assets/hma-oss-config.sh ./tools/dsha-diksu-git/scripts/deploy.sh
