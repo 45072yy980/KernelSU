@@ -43,6 +43,14 @@ data class HomeUiState(
     val susfsVersion: String? = null,
     /** State of the "update ksud" action offered by the status card. */
     val ksudUpdate: KsudUpdateStatus = KsudUpdateStatus.Idle,
+    /**
+     * 已安装的 ksud 用户态版本（`/data/adb/ksud --version`），读不到为 null。
+     *
+     * 和 [ksuVersion] 是两回事：后者是内核模块上报的版本，不重新提权就不会变。
+     */
+    val ksudVersion: String? = null,
+    /** 管理器自己的版本名（含 git 构建标识），用来和 [ksudVersion] 比。 */
+    val currentManagerVersionName: String = "",
 ) {
     val isSELinuxPermissive: Boolean
         get() = systemInfo.selinuxStatus == "Permissive"
@@ -58,9 +66,13 @@ data class HomeUiState(
      * userspace binary is stale, so the status card may offer `ksud install` instead.
      */
     val hasVersionMismatch: Boolean
-        get() = isManager &&
-                ksuVersion != null &&
-                ksuVersion.toLong() != currentManagerVersionCode
+        get() {
+            if (!isManager) return false
+            // 只有两边都读得出构建标识才判断：读不到就当作一致，别拿不确定的状态去催用户更新。
+            val installed = buildIdOf(ksudVersion) ?: return false
+            val expected = buildIdOf(currentManagerVersionName) ?: return false
+            return installed != expected
+        }
 
     val showLkmUpdate: Boolean
         get() = isManager &&
@@ -106,3 +118,14 @@ data class HomeActions(
     // Leaves the "updated" / "failed" state so the next card tap starts clean.
     val onDismissKsudUpdate: () -> Unit = {},
 )
+
+/**
+ * 版本串里的构建标识：`4.1.1-5ed3ae6` 与 `4.1.1-ultra-63-g5ed3ae6` 都取 `5ed3ae6`。
+ *
+ * 管理器用 `git rev-parse --short HEAD`，ksud 用 `git describe --tags --always`，两者格式不同
+ * 但结尾都是同一个短 sha，取这一段比整串更适合判断「是不是同一次构建」。取不到返回 null。
+ */
+internal fun buildIdOf(version: String?): String? {
+    val token = version?.trim()?.substringAfterLast('-')?.removePrefix("g") ?: return null
+    return token.takeIf { it.length >= 7 && it.all { c -> c.isDigit() || c in 'a'..'f' } }
+}

@@ -51,6 +51,10 @@ fun KsudUpdateDialog(
         else -> stringResource(R.string.home_ksud_update_confirm)
     }
     val cancelText = stringResource(R.string.home_ksud_update_cancel)
+    // 把读到的实际版本摆出来：修的就是「更新完看不出变化」，这里至少让人能对照。
+    val currentText = state.ksudVersion?.let {
+        stringResource(R.string.home_ksud_update_current, it)
+    }
 
     AppAlertDialog(
         title = title,
@@ -70,6 +74,22 @@ fun KsudUpdateDialog(
                 MiuixText(text = message, fontSize = 14.sp, color = colorScheme.onSurface)
             } else {
                 Text(text = message, style = MaterialTheme.typography.bodyMedium)
+            }
+            if (currentText != null) {
+                Spacer(Modifier.height(6.dp))
+                if (miuix) {
+                    MiuixText(
+                        text = currentText,
+                        fontSize = 13.sp,
+                        color = colorScheme.onSurfaceVariantSummary,
+                    )
+                } else {
+                    Text(
+                        text = currentText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
             if (running || succeeded || failed) {
                 Spacer(Modifier.height(8.dp))

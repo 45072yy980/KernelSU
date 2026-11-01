@@ -148,6 +148,10 @@ class SettingsRepositoryImpl : SettingsRepository {
         get() = prefs.getBoolean("check_update", true)
         set(value) = prefs.edit { putBoolean("check_update", value) }
 
+    override var ksudVersionCheck: Boolean
+        get() = prefs.getBoolean("ksud_version_check", true)
+        set(value) = prefs.edit { putBoolean("ksud_version_check", value) }
+
     override var checkModuleUpdate: Boolean
         get() = prefs.getBoolean("module_check_update", true)
         set(value) = prefs.edit { putBoolean("module_check_update", value) }

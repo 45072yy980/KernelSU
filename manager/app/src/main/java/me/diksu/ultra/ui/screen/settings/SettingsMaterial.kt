@@ -100,6 +100,15 @@ fun SettingPagerMaterial(
                                 checked = uiState.checkUpdate,
                                 onCheckedChange = actions.onSetCheckUpdate
                             )
+                        },
+                        {
+                            SegmentedSwitchItem(
+                                icon = Icons.Filled.Security,
+                                title = stringResource(id = R.string.settings_ksud_version_check),
+                                summary = stringResource(id = R.string.settings_ksud_version_check_summary),
+                                checked = uiState.ksudVersionCheck,
+                                onCheckedChange = actions.onSetKsudVersionCheck
+                            )
                         }
                     )
                 )

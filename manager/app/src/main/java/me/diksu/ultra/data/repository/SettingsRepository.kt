@@ -3,6 +3,8 @@ package me.diksu.ultra.data.repository
 interface SettingsRepository {
     var uiMode: String
     var checkUpdate: Boolean
+    /** 是否检测已安装的 ksud 与管理器版本不一致（默认开）。 */
+    var ksudVersionCheck: Boolean
     var checkModuleUpdate: Boolean
     var themeMode: Int
     var miuixMonet: Boolean

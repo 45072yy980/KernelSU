@@ -90,6 +90,12 @@ class HomeViewModel(
         val lkmMode = ksuVersion?.let { if (kernelVersion.isGKI()) Natives.isLkmMode else null }
         val isRootAvailable = rootAvailable()
         val managerVersion = getManagerVersion(ksuApp)
+        // 开关关掉就一次 su 都不跑：这个检查只对越狱用户有意义，别人不该为它付代价。
+        val ksudVersion = if (isManager && settingsRepo.ksudVersionCheck) {
+            runCatching { me.diksu.ultra.ui.util.getInstalledKsudVersion() }.getOrNull()
+        } else {
+            null
+        }
 
         return HomeUiState(
             kernelVersion = kernelVersion,
@@ -109,6 +115,8 @@ class HomeViewModel(
             checkUpdateEnabled = settingsRepo.checkUpdate,
             latestVersionInfo = LatestVersionInfo(),
             currentManagerVersionCode = managerVersion.versionCode,
+            currentManagerVersionName = managerVersion.versionName,
+            ksudVersion = ksudVersion,
             systemInfo = SystemInfo(
                 kernelVersion = Os.uname().release,
                 managerVersion = "${managerVersion.versionName} (${managerVersion.versionCode}-${managerUAPIVersion})",

@@ -41,6 +41,9 @@ import java.util.zip.ZipFile
  */
 private const val TAG = "KsuCli"
 
+/** `ksud install` 落地的位置，和 APK 里自带的 libksud.so 不是同一份。 */
+private const val INSTALLED_KSUD = "/data/adb/ksud"
+
 internal fun getKsuDaemonPath(): String {
     return ksuApp.applicationInfo.nativeLibraryDir + File.separator + "libksud.so"
 }
@@ -146,6 +149,20 @@ fun install(): Boolean {
     val result = execKsud("install --libadbroot $libadbroot --data-path ${ksuApp.applicationInfo.deviceProtectedDataDir}", true)
     Log.w(TAG, "install result: $result, cost: ${SystemClock.elapsedRealtime() - start}ms")
     return result
+}
+
+/**
+ * 已安装的 ksud 用户态版本：`/data/adb/ksud --version` 的第一行，去掉 uapi 后缀。
+ *
+ * 内核模块上报的版本要重新提权才会变，用户态二进制用 `ksud install` 就能换 —— 所以判断
+ * 「管理器与 ksud 不一致」必须看这一份，看内核那份永远等不到它变。读不到返回 null。
+ */
+fun getInstalledKsudVersion(): String? {
+    val shell = getRootShell()
+    val result = shell.newJob().add("$INSTALLED_KSUD --version").exec()
+    if (!result.isSuccess) return null
+    val line = result.out.firstOrNull { it.isNotBlank() }?.trim() ?: return null
+    return line.substringBefore(" (").trim().ifEmpty { null }
 }
 
 fun listModules(): String {

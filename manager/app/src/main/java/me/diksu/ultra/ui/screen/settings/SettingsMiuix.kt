@@ -125,6 +125,20 @@ fun SettingPagerMiuix(
                             checked = uiState.checkUpdate,
                             onCheckedChange = actions.onSetCheckUpdate
                         )
+                        SwitchPreference(
+                            title = stringResource(id = R.string.settings_ksud_version_check),
+                            summary = stringResource(id = R.string.settings_ksud_version_check_summary),
+                            startAction = {
+                                Icon(
+                                    Icons.Rounded.Security,
+                                    modifier = Modifier.padding(end = 6.dp),
+                                    contentDescription = stringResource(id = R.string.settings_ksud_version_check),
+                                    tint = colorScheme.onBackground
+                                )
+                            },
+                            checked = uiState.ksudVersionCheck,
+                            onCheckedChange = actions.onSetKsudVersionCheck
+                        )
                     }
 
                     SmallTitle(

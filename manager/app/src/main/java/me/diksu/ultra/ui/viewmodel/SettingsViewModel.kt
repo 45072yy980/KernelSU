@@ -33,6 +33,7 @@ class SettingsViewModel(
     fun refresh() {
         viewModelScope.launch {
             val checkUpdate = repo.checkUpdate
+            val ksudVersionCheck = repo.ksudVersionCheck
             val checkModuleUpdate = repo.checkModuleUpdate
             val themeMode = repo.themeMode
             val miuixMonet = repo.miuixMonet
@@ -100,6 +101,7 @@ class SettingsViewModel(
                 it.copy(
                     uiMode = uiMode,
                     checkUpdate = checkUpdate,
+                    ksudVersionCheck = ksudVersionCheck,
                     checkModuleUpdate = checkModuleUpdate,
                     themeMode = themeMode,
                     miuixMonet = miuixMonet,
@@ -146,6 +148,11 @@ class SettingsViewModel(
     fun setCheckUpdate(enabled: Boolean) {
         repo.checkUpdate = enabled
         _uiState.update { it.copy(checkUpdate = enabled) }
+    }
+
+    fun setKsudVersionCheck(enabled: Boolean) {
+        repo.ksudVersionCheck = enabled
+        _uiState.update { it.copy(ksudVersionCheck = enabled) }
     }
 
     fun setUiMode(mode: String) {

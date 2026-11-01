@@ -5,13 +5,14 @@
     <string name="home_click_to_install">按一下開始安裝</string>
     <string name="home_working">運作中</string>
     <string name="home_ksud_update_title">更新 ksud</string>
-    <string name="home_ksud_update_message">管理器與目前執行的 ksud 版本不一致。更新 ksud 不需要重新開機；越獄模式下會重新注入到正在執行的會話。</string>
+    <string name="home_ksud_update_message">裝置上安裝的 ksud 比目前管理器舊。更新 ksud 不需要重新開機；越獄模式下會重新注入到正在執行的會話。</string>
     <string name="home_ksud_update_confirm">立即更新</string>
     <string name="home_ksud_update_cancel">取消</string>
     <string name="home_ksud_update_running">正在更新 ksud…</string>
-    <string name="home_ksud_update_success">ksud 已更新，狀態卡片重新整理後會顯示新版本。</string>
+    <string name="home_ksud_update_success">ksud 已更新，狀態卡片不再提示版本不一致。</string>
     <string name="home_ksud_update_failure">更新失敗。請確認已授予 root 權限後再試。</string>
     <string name="home_ksud_update_done">完成</string>
+    <string name="home_ksud_update_current">已安裝 ksud：%1$s</string>
     <string name="home_working_version">Diksu Ultra 版本：%s</string>
     <string name="home_lkm_update_available">有可用的內嵌 LKM 更新，按一下更新</string>
     <string name="home_lkm_custom">自訂</string>
@@ -143,6 +144,8 @@
     <string name="app_profile_affects_following_apps">受影響 App 如下</string>
     <string name="settings_check_update">檢查更新</string>
     <string name="settings_check_update_summary">開啟本程式時自動檢查更新</string>
+    <string name="settings_ksud_version_check">ksud 版本檢查</string>
+    <string name="settings_ksud_version_check_summary">已安裝的使用者態程式比管理器舊時提示重裝；關掉後完全不做這項檢查</string>
     <string name="settings_enable_predictive_back">預測性返回手勢</string>
     <string name="settings_enable_predictive_back_summary">啟用預測性返回手勢支援</string>
     <string name="settings_enable_swipe_dismiss">橫移返回手勢</string>

@@ -9,6 +9,7 @@ import me.diksu.ultra.ui.UiMode
 data class SettingsUiState(
     val uiMode: String = UiMode.DEFAULT_VALUE,
     val checkUpdate: Boolean = true,
+    val ksudVersionCheck: Boolean = true,
     val checkModuleUpdate: Boolean = true,
     val themeMode: Int = 0,
     val miuixMonet: Boolean = false,
@@ -71,6 +72,7 @@ data class SettingsUiState(
 @Immutable
 data class SettingsScreenActions(
     val onSetCheckUpdate: (Boolean) -> Unit,
+    val onSetKsudVersionCheck: (Boolean) -> Unit,
     val onSetCheckModuleUpdate: (Boolean) -> Unit,
     val onOpenTheme: () -> Unit,
     val onSetUiModeIndex: (Int) -> Unit,
