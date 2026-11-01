@@ -17,8 +17,22 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.BugReport
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Fingerprint
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.RestartAlt
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Terminal
+import androidx.compose.material.icons.filled.Upload
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -65,10 +79,13 @@ private data class EditorSpec(
 )
 
 /**
- * SuSFS 面板：六个可滑动的页签 + 一份配置。
+ * SuSFS 面板：六个可滑动页签 + 一份配置。
  *
- * 交互照 FinaSU：**编辑只改草稿**，顶部提示条常驻「有未应用的改动」，点应用才 `import` + `apply`；
- * 导入/恢复默认/恢复上次应用这类整份替换，先弹预览再落到草稿，仍需用户按应用才下发。
+ * 交互照 FinaSU：编辑只改草稿，顶部提示条常驻「有未应用的改动 · 应用」；导入 / 恢复 / 恢复默认
+ * 这类整份替换先弹预览，落到草稿后仍要用户按应用才下发。
+ *
+ * 外观上刻意只用项目现成的行组件（`ArrowPreference` / `SegmentedListItem`），图省事自绘 Row
+ * 的结果就是行高松散、没有箭头、和设置页格格不入。
  */
 @Composable
 fun SusfsScreen() {
@@ -78,9 +95,10 @@ fun SusfsScreen() {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     var editor by remember { mutableStateOf<EditorSpec?>(null) }
+    var pendingDelete by remember { mutableStateOf<SusfsRule?>(null) }
 
     val pager = rememberPagerState(pageCount = { 6 })
-    // 每页独立的滚动位置：pager 会回收离屏页，状态必须挂在 pager 之外（FinaSU 同样做法）。
+    // 每页滚动位置挂在 pager 之外：pager 会回收离屏页。
     val scrolls = remember { List(6) { ScrollState(0) } }
 
     val title = stringResource(R.string.settings_susfs)
@@ -151,9 +169,9 @@ fun SusfsScreen() {
                     when (page) {
                         0 -> OverviewPage(state, vm)
                         1 -> SettingsPage(state, vm)
-                        2 -> PathsPage(state, vm) { editor = it }
-                        3 -> SpoofPage(state, vm) { editor = it }
-                        4 -> RedirectPage(state, vm) { editor = it }
+                        2 -> PathsPage(state, vm, { editor = it }, { pendingDelete = it })
+                        3 -> SpoofPage(state, vm, { editor = it }, { pendingDelete = it })
+                        4 -> RedirectPage(state, vm, { editor = it }, { pendingDelete = it })
                         else -> ExtensionsPage(
                             state = state,
                             vm = vm,
@@ -202,6 +220,21 @@ fun SusfsScreen() {
 
     editor?.let { spec -> SusfsEditorDialog(spec = spec, onDismiss = { editor = null }) }
 
+    pendingDelete?.let { rule ->
+        AppAlertDialog(
+            title = stringResource(R.string.susfs_remove),
+            onDismissRequest = { pendingDelete = null },
+            confirmText = stringResource(R.string.susfs_confirm),
+            onConfirm = {
+                vm.removeRule(rule)
+                pendingDelete = null
+            },
+            dismissText = stringResource(R.string.susfs_cancel),
+        ) {
+            SusfsText(text = rule.display, size = 14)
+        }
+    }
+
     if (state.pendingReset) {
         AppAlertDialog(
             title = stringResource(R.string.susfs_reset_defaults),
@@ -239,8 +272,7 @@ fun SusfsScreen() {
 
 @Composable
 private fun OverviewPage(state: SusfsUiState, vm: SusfsViewModel) {
-    SusfsSectionTitle(stringResource(R.string.susfs_status_title))
-    SusfsCard {
+    SusfsCard(title = stringResource(R.string.susfs_status_title)) {
         val status = state.status
         SusfsRow(
             title = if (status.loaded) {
@@ -249,6 +281,7 @@ private fun OverviewPage(state: SusfsUiState, vm: SusfsViewModel) {
                 stringResource(R.string.susfs_status_unloaded)
             },
             summary = stringResource(R.string.susfs_capabilities_count, status.features.size),
+            icon = Icons.Filled.Info,
         )
         SusfsRow(
             title = stringResource(R.string.susfs_rules_count, state.draft.rules.size),
@@ -257,22 +290,27 @@ private fun OverviewPage(state: SusfsUiState, vm: SusfsViewModel) {
                 .eachCount()
                 .entries
                 .joinToString(" · ") { "${it.key} ${it.value}" },
+            icon = Icons.Filled.Layers,
         )
-        SusfsRow(title = stringResource(R.string.susfs_refresh), onClick = { vm.refresh() })
+        SusfsRow(
+            title = stringResource(R.string.susfs_refresh),
+            icon = Icons.Filled.Refresh,
+            onClick = { vm.refresh() },
+        )
     }
 
     val report = state.report
     if (report != null) {
-        SusfsSectionTitle(stringResource(R.string.susfs_report_title))
-        SusfsCard {
-            SusfsRow(title = report.summary())
+        SusfsCard(title = stringResource(R.string.susfs_report_title)) {
+            SusfsRow(title = report.summary(), icon = Icons.Filled.BugReport)
             report.failed.entries.take(5).forEach { (key, reason) ->
-                SusfsRow(title = key, summary = reason)
+                SusfsRow(title = key, summary = reason, icon = Icons.Filled.Info)
             }
             if (report.pendingReboot.isNotEmpty()) {
                 SusfsRow(
                     title = stringResource(R.string.susfs_pending_reboot, report.pendingReboot.size),
                     summary = stringResource(R.string.susfs_pending_reboot_hint),
+                    icon = Icons.Filled.RestartAlt,
                 )
             }
         }
@@ -281,52 +319,55 @@ private fun OverviewPage(state: SusfsUiState, vm: SusfsViewModel) {
 
 @Composable
 private fun SettingsPage(state: SusfsUiState, vm: SusfsViewModel) {
-    SusfsSectionTitle(stringResource(R.string.susfs_features_title))
-    SusfsCard {
+    SusfsCard(title = stringResource(R.string.susfs_features_title)) {
         SusfsSwitchRow(
             title = stringResource(R.string.susfs_log),
             summary = stringResource(R.string.susfs_log_summary),
+            icon = Icons.Filled.Terminal,
             checked = state.draft.enabled[SusfsRepository.SWITCH_LOG] == true,
             onCheckedChange = { vm.setSwitch(SusfsRepository.SWITCH_LOG, it) },
         )
         SusfsSwitchRow(
             title = stringResource(R.string.susfs_avc),
             summary = stringResource(R.string.susfs_avc_summary),
+            icon = Icons.Filled.BugReport,
             checked = state.draft.enabled[SusfsRepository.SWITCH_AVC] == true,
             onCheckedChange = { vm.setSwitch(SusfsRepository.SWITCH_AVC, it) },
         )
         SusfsSwitchRow(
             title = stringResource(R.string.susfs_hide_mnts),
             summary = stringResource(R.string.susfs_hide_mnts_summary),
+            icon = Icons.Filled.VisibilityOff,
             checked = state.draft.enabled[SusfsRepository.SWITCH_HIDE_MOUNTS] == true,
             onCheckedChange = { vm.setSwitch(SusfsRepository.SWITCH_HIDE_MOUNTS, it) },
         )
     }
 
-    SusfsSectionTitle(stringResource(R.string.susfs_capabilities_title))
-    SusfsCard {
+    SusfsCard(title = stringResource(R.string.susfs_capabilities_title)) {
         SusfsFeatureCatalog.resolve(state.status.features).forEach { (key, enabled) ->
             SusfsRow(
                 title = featureLabel(key),
-                trailing = {
-                    SusfsPill(
-                        text = stringResource(
-                            if (enabled) R.string.susfs_feature_enabled else R.string.susfs_feature_disabled,
-                        ),
-                        highlighted = enabled,
-                    )
-                },
+                summary = stringResource(
+                    if (enabled) R.string.susfs_feature_enabled else R.string.susfs_feature_disabled,
+                ),
+                icon = Icons.Filled.Settings,
             )
         }
     }
 }
 
 @Composable
-private fun PathsPage(state: SusfsUiState, vm: SusfsViewModel, onEdit: (EditorSpec) -> Unit) {
+private fun PathsPage(
+    state: SusfsUiState,
+    vm: SusfsViewModel,
+    onEdit: (EditorSpec) -> Unit,
+    onRequestDelete: (SusfsRule) -> Unit,
+) {
     val pathLabel = stringResource(R.string.susfs_field_path)
     val pathTitle = stringResource(R.string.susfs_add_path)
     val loopTitle = stringResource(R.string.susfs_add_path_loop)
     val mapTitle = stringResource(R.string.susfs_add_map)
+
     RuleSection(
         title = pathTitle,
         rules = state.draft.rules.filterIsInstance<SusfsRule.HiddenPath>(),
@@ -337,7 +378,7 @@ private fun PathsPage(state: SusfsUiState, vm: SusfsViewModel, onEdit: (EditorSp
                 },
             )
         },
-        onRemove = { vm.removeRule(it) },
+        onRequestDelete = onRequestDelete,
     )
     RuleSection(
         title = loopTitle,
@@ -349,7 +390,7 @@ private fun PathsPage(state: SusfsUiState, vm: SusfsViewModel, onEdit: (EditorSp
                 },
             )
         },
-        onRemove = { vm.removeRule(it) },
+        onRequestDelete = onRequestDelete,
     )
     RuleSection(
         title = mapTitle,
@@ -361,12 +402,17 @@ private fun PathsPage(state: SusfsUiState, vm: SusfsViewModel, onEdit: (EditorSp
                 },
             )
         },
-        onRemove = { vm.removeRule(it) },
+        onRequestDelete = onRequestDelete,
     )
 }
 
 @Composable
-private fun SpoofPage(state: SusfsUiState, vm: SusfsViewModel, onEdit: (EditorSpec) -> Unit) {
+private fun SpoofPage(
+    state: SusfsUiState,
+    vm: SusfsViewModel,
+    onEdit: (EditorSpec) -> Unit,
+    onRequestDelete: (SusfsRule) -> Unit,
+) {
     val uname = state.draft.rules.filterIsInstance<SusfsRule.Uname>().firstOrNull()
     val cmdline = state.draft.rules.filterIsInstance<SusfsRule.Cmdline>().firstOrNull()
     val empty = stringResource(R.string.susfs_empty)
@@ -378,11 +424,11 @@ private fun SpoofPage(state: SusfsUiState, vm: SusfsViewModel, onEdit: (EditorSp
     val cmdlineTitle = stringResource(R.string.susfs_set_cmdline)
     val kstatTitle = stringResource(R.string.susfs_add_kstat)
 
-    SusfsSectionTitle(unameTitle)
-    SusfsCard {
+    SusfsCard(title = unameTitle) {
         SusfsRow(
             title = unameTitle,
             summary = uname?.let { "${it.release}${if (it.version.isEmpty()) "" else " · ${it.version}"}" } ?: empty,
+            icon = Icons.Filled.Fingerprint,
             onClick = {
                 onEdit(
                     EditorSpec(title = unameTitle, fields = listOf(releaseLabel, versionLabel), hints = listOf("6.6.0-abogki", "#1 SMP PREEMPT")) { values ->
@@ -398,11 +444,11 @@ private fun SpoofPage(state: SusfsUiState, vm: SusfsViewModel, onEdit: (EditorSp
         )
     }
 
-    SusfsSectionTitle(cmdlineTitle)
-    SusfsCard {
+    SusfsCard(title = cmdlineTitle) {
         SusfsRow(
             title = cmdlineTitle,
             summary = cmdline?.sourcePath ?: empty,
+            icon = Icons.Filled.Terminal,
             onClick = {
                 onEdit(
                     EditorSpec(title = cmdlineTitle, fields = listOf(fileLabel), hints = listOf("/data/local/tmp/cmdline")) { values ->
@@ -426,12 +472,17 @@ private fun SpoofPage(state: SusfsUiState, vm: SusfsViewModel, onEdit: (EditorSp
                 },
             )
         },
-        onRemove = { vm.removeRule(it) },
+        onRequestDelete = onRequestDelete,
     )
 }
 
 @Composable
-private fun RedirectPage(state: SusfsUiState, vm: SusfsViewModel, onEdit: (EditorSpec) -> Unit) {
+private fun RedirectPage(
+    state: SusfsUiState,
+    vm: SusfsViewModel,
+    onEdit: (EditorSpec) -> Unit,
+    onRequestDelete: (SusfsRule) -> Unit,
+) {
     val targetLabel = stringResource(R.string.susfs_field_target)
     val redirectedLabel = stringResource(R.string.susfs_field_redirected)
     val redirectTitle = stringResource(R.string.susfs_add_redirect)
@@ -449,7 +500,7 @@ private fun RedirectPage(state: SusfsUiState, vm: SusfsViewModel, onEdit: (Edito
                 },
             )
         },
-        onRemove = { vm.removeRule(it) },
+        onRequestDelete = onRequestDelete,
     )
 }
 
@@ -460,24 +511,24 @@ private fun ExtensionsPage(
     onImport: () -> Unit,
     onExport: () -> Unit,
 ) {
-    SusfsSectionTitle(stringResource(R.string.susfs_config_title))
-    SusfsCard {
-        SusfsRow(title = stringResource(R.string.susfs_import), onClick = onImport)
-        SusfsRow(title = stringResource(R.string.susfs_export), onClick = onExport)
+    SusfsCard(title = stringResource(R.string.susfs_config_title)) {
+        SusfsRow(title = stringResource(R.string.susfs_import), icon = Icons.Filled.Upload, onClick = onImport)
+        SusfsRow(title = stringResource(R.string.susfs_export), icon = Icons.Filled.Download, onClick = onExport)
         SusfsRow(
             title = stringResource(R.string.susfs_restore_last),
             summary = stringResource(R.string.susfs_restore_last_summary),
+            icon = Icons.Filled.RestartAlt,
             onClick = { vm.restoreFromKernel() },
         )
         SusfsRow(
             title = stringResource(R.string.susfs_reset_defaults),
             summary = stringResource(R.string.susfs_reset_defaults_summary),
+            icon = Icons.Filled.Delete,
             onClick = { vm.requestResetDefaults() },
         )
     }
 
-    SusfsSectionTitle(stringResource(R.string.susfs_proc_title))
-    SusfsCard {
+    SusfsCard(title = stringResource(R.string.susfs_proc_title)) {
         val proc = state.proc
         if (proc.isEmpty) {
             SusfsEmptyHint(stringResource(R.string.susfs_empty))
@@ -492,37 +543,35 @@ private fun ExtensionsPage(
                 R.string.susfs_proc_log to proc.enableLog,
             ).forEach { (res, value) ->
                 if (value.isNotBlank()) {
-                    SusfsRow(title = stringResource(res), summary = value.take(200))
+                    SusfsRow(title = stringResource(res), summary = value.take(200), icon = Icons.Filled.Info)
                 }
             }
         }
     }
 }
 
-/** 一组同类规则：标题 + 添加行 + 每条一行（右侧删除）。 */
+/** 一组同类规则：标题 + 添加行 + 每条一行（点击行 = 请求删除，需二次确认）。 */
 @Composable
 private fun <T : SusfsRule> RuleSection(
     title: String,
     rules: List<T>,
     onAdd: () -> Unit,
-    onRemove: (T) -> Unit,
+    onRequestDelete: (T) -> Unit,
 ) {
-    SusfsSectionTitle(title)
-    SusfsCard {
-        SusfsRow(title = stringResource(R.string.susfs_add), onClick = onAdd)
+    SusfsCard(title = title) {
+        SusfsRow(
+            title = stringResource(R.string.susfs_add),
+            icon = Icons.Filled.Add,
+            onClick = onAdd,
+        )
         if (rules.isEmpty()) {
             SusfsEmptyHint(stringResource(R.string.susfs_empty))
         } else {
             rules.forEach { rule ->
                 SusfsRow(
                     title = rule.display,
-                    trailing = {
-                        SusfsTrailingAction(
-                            text = stringResource(R.string.susfs_remove),
-                            onClick = { onRemove(rule) },
-                            danger = true,
-                        )
-                    },
+                    icon = Icons.Filled.Link,
+                    onClick = { onRequestDelete(rule) },
                 )
             }
         }
