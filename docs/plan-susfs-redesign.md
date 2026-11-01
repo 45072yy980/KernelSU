@@ -148,3 +148,23 @@ SusfsSwitchRow / SusfsTextField / AppAlertDialog），页面只调用这些函�
 同时补上「恢复」：
 - 恢复上次应用：把 ksud 里记录的配置读回来，走导入预览再应用
 - 清空配置：置空并下发（内核规则仍要重启才失效，报告里标明）
+
+## 十、收尾（2026-11-02）
+
+SuSFS 面板到此收口。最终形态：
+
+- **ksud**：`status / import / preview / apply / export`，配置与状态在 `/data/adb/ksu/susfs/`，
+  先存后应用；报告四分类（applied / failed / skipped / pendingReboot）
+- **管理器**：六页签 + 草稿模型（改草稿 → 顶部提示 → 应用/放弃）、可滑动 pager、每页独立滚动
+- **行组件**：miuix 用 `ArrowPreference` / `SwitchPreference`，material 用 `SegmentedListItem` /
+  `SegmentedSwitchItem`，与设置页同一套语言
+- **功能**：隐藏路径 / 循环路径 / sus map / kstat 更新 / kstat 完整克隆 / 伪 uname（预填内核事实）/
+  伪 cmdline / open redirect / 三个开关 / 导入导出 / 恢复上次应用 / 恢复默认
+
+**未移植（明确放弃）**：
+- ownership 切换：只有「内置 + susfs_guard_lkm 双实现」才需要，本仓库不存在这个状态
+- schema1 备份迁移：我们没有 v1 配置
+- 静态 kstat 的 13 字段手填表单：路径级 update 与完整克隆已覆盖日常用法，手填 stat 属于极端场景
+
+**删除规则仍要重启生效**：SuSFS 内核 ABI 只有 ADD 系列命令，撤回只能等重启后不再重放；
+这一点在报告里以 pendingReboot 明示。

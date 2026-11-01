@@ -361,4 +361,5 @@
     <string name="susfs_reset_defaults_confirm">這會清空所有規則與開關，並覆寫 ksud 裡保存的那份設定——「還原上次套用」也找不回來。</string>
     <string name="susfs_dirty">有未套用的變更</string>
     <string name="susfs_apply">套用</string>
+    <string name="susfs_discard">放棄</string>
 </resources>

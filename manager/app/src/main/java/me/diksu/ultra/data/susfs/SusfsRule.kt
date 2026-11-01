@@ -29,6 +29,11 @@ sealed interface SusfsRule {
         override val key: String get() = "kstat:$path"
     }
 
+    /** 完整克隆：连 nlink / size 一起写进伪装条目，结果与源文件完全一致。 */
+    data class KstatClone(val path: String) : SusfsRule {
+        override val key: String get() = "kstat_clone:$path"
+    }
+
     /** open 重定向：把 [target] 打开成 [redirected]；uidScheme 0 表示不限 uid。 */
     data class Redirect(
         val target: String,
@@ -56,13 +61,14 @@ val SusfsRule.display: String
         is SusfsRule.HiddenLoop -> "$path (loop)"
         is SusfsRule.SusMap -> path
         is SusfsRule.Kstat -> path
+        is SusfsRule.KstatClone -> "$path (clone)"
         is SusfsRule.Redirect -> "$target → $redirected" + if (uidScheme != 0) " (uid $uidScheme)" else ""
         is SusfsRule.Uname -> "release=$release version=$version"
         is SusfsRule.Cmdline -> sourcePath
     }
 
 /** 规则类型，用来分组展示和决定调哪条命令。 */
-enum class SusfsRuleType { Path, Loop, Map, Kstat, Redirect, Uname, Cmdline }
+enum class SusfsRuleType { Path, Loop, Map, Kstat, KstatClone, Redirect, Uname, Cmdline }
 
 val SusfsRule.type: SusfsRuleType
     get() = when (this) {
@@ -70,6 +76,7 @@ val SusfsRule.type: SusfsRuleType
         is SusfsRule.HiddenLoop -> SusfsRuleType.Loop
         is SusfsRule.SusMap -> SusfsRuleType.Map
         is SusfsRule.Kstat -> SusfsRuleType.Kstat
+        is SusfsRule.KstatClone -> SusfsRuleType.KstatClone
         is SusfsRule.Redirect -> SusfsRuleType.Redirect
         is SusfsRule.Uname -> SusfsRuleType.Uname
         is SusfsRule.Cmdline -> SusfsRuleType.Cmdline

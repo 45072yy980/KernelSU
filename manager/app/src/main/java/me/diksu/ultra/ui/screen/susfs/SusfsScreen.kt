@@ -75,6 +75,8 @@ private data class EditorSpec(
     val title: String,
     val fields: List<String>,
     val hints: List<String> = emptyList(),
+    /** 打开时预填的值；长度不足时补空串。 */
+    val initial: List<String> = emptyList(),
     val onConfirm: (List<String>) -> Unit,
 )
 
@@ -157,6 +159,8 @@ fun SusfsScreen() {
                     text = stringResource(R.string.susfs_dirty),
                     actionText = stringResource(R.string.susfs_apply),
                     onAction = { vm.applyDraft() },
+                    secondaryText = stringResource(R.string.susfs_discard),
+                    onSecondary = { vm.discardDraft() },
                 )
             }
             HorizontalPager(state = pager, modifier = Modifier.weight(1f)) { page ->
@@ -424,6 +428,14 @@ private fun SpoofPage(
     val cmdlineTitle = stringResource(R.string.susfs_set_cmdline)
     val kstatTitle = stringResource(R.string.susfs_add_kstat)
 
+    // 内核事实：用户改 uname 多半是想"像另一个内核"，预填当前值比空输入框好打字。
+    val kernelFacts = remember {
+        runCatching {
+            val info = android.system.Os.uname()
+            listOf(info.release, info.version)
+        }.getOrDefault(listOf("", ""))
+    }
+
     SusfsCard(title = unameTitle) {
         SusfsRow(
             title = unameTitle,
@@ -431,14 +443,19 @@ private fun SpoofPage(
             icon = Icons.Filled.Fingerprint,
             onClick = {
                 onEdit(
-                    EditorSpec(title = unameTitle, fields = listOf(releaseLabel, versionLabel), hints = listOf("6.6.0-abogki", "#1 SMP PREEMPT")) { values ->
+                    EditorSpec(
+                        title = unameTitle,
+                        fields = listOf(releaseLabel, versionLabel),
+                        hints = listOf(kernelFacts[0], kernelFacts[1]),
+                        initial = listOf(uname?.release ?: kernelFacts[0], uname?.version ?: kernelFacts[1]),
+                    ) { values ->
                         val release = values.getOrNull(0).orEmpty().trim()
                         val version = values.getOrNull(1).orEmpty().trim()
                         if (release.isNotEmpty() || version.isNotEmpty()) {
                             uname?.let { vm.removeRule(it) }
                             vm.addRule(SusfsRule.Uname(release, version))
                         }
-                    },
+                    }
                 )
             },
         )
@@ -469,6 +486,20 @@ private fun SpoofPage(
             onEdit(
                 EditorSpec(title = kstatTitle, fields = listOf(pathLabel), hints = listOf("/system/fonts/Roboto-Regular.ttf")) { values ->
                     values.firstOrNull()?.trim()?.takeIf { it.isNotEmpty() }?.let { vm.addRule(SusfsRule.Kstat(it)) }
+                },
+            )
+        },
+        onRequestDelete = onRequestDelete,
+    )
+
+    val cloneTitle = stringResource(R.string.susfs_update_kstat_full_clone)
+    RuleSection(
+        title = cloneTitle,
+        rules = state.draft.rules.filterIsInstance<SusfsRule.KstatClone>(),
+        onAdd = {
+            onEdit(
+                EditorSpec(title = cloneTitle, fields = listOf(pathLabel), hints = listOf("/system/fonts/Roboto-Regular.ttf")) { values ->
+                    values.firstOrNull()?.trim()?.takeIf { it.isNotEmpty() }?.let { vm.addRule(SusfsRule.KstatClone(it)) }
                 },
             )
         },
@@ -581,7 +612,9 @@ private fun <T : SusfsRule> RuleSection(
 /** 通用输入对话框：1–3 个字段，确认时把值回调出去。 */
 @Composable
 private fun SusfsEditorDialog(spec: EditorSpec, onDismiss: () -> Unit) {
-    var values by remember { mutableStateOf(spec.fields.map { "" }) }
+    var values by remember {
+        mutableStateOf(spec.fields.indices.map { spec.initial.getOrNull(it).orEmpty() })
+    }
     AppAlertDialog(
         title = spec.title,
         onDismissRequest = onDismiss,

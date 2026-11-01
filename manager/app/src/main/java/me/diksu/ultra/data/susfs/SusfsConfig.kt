@@ -118,6 +118,7 @@ object SusfsConfigValidator {
                 is SusfsRule.HiddenLoop -> if (!validPath(rule.path)) problems += "路径不合法：${rule.path}"
                 is SusfsRule.SusMap -> if (!validPath(rule.path)) problems += "路径不合法：${rule.path}"
                 is SusfsRule.Kstat -> if (!validPath(rule.path)) problems += "路径不合法：${rule.path}"
+                is SusfsRule.KstatClone -> if (!validPath(rule.path)) problems += "路径不合法：${rule.path}"
                 is SusfsRule.Cmdline -> if (!validPath(rule.sourcePath)) problems += "路径不合法：${rule.sourcePath}"
                 is SusfsRule.Redirect -> {
                     if (!validPath(rule.target)) problems += "重定向源不合法：${rule.target}"
@@ -170,6 +171,7 @@ private fun ruleToJson(rule: SusfsRule): JSONObject = JSONObject().apply {
         is SusfsRule.HiddenLoop -> { put("type", "loop"); put("path", rule.path) }
         is SusfsRule.SusMap -> { put("type", "map"); put("path", rule.path) }
         is SusfsRule.Kstat -> { put("type", "kstat"); put("path", rule.path) }
+        is SusfsRule.KstatClone -> { put("type", "kstat_clone"); put("path", rule.path) }
         is SusfsRule.Cmdline -> { put("type", "cmdline"); put("path", rule.sourcePath) }
         is SusfsRule.Redirect -> {
             put("type", "redirect")
@@ -194,6 +196,7 @@ private fun ruleFromJson(obj: JSONObject?): SusfsRule? {
         "loop" -> SusfsRule.HiddenLoop(path)
         "map" -> SusfsRule.SusMap(path)
         "kstat" -> SusfsRule.Kstat(path)
+        "kstat_clone" -> SusfsRule.KstatClone(path)
         "cmdline" -> SusfsRule.Cmdline(path)
         "redirect" -> SusfsRule.Redirect(
             target = obj.optString("target"),

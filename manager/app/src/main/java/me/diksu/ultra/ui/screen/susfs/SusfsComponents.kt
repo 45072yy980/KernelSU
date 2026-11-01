@@ -280,7 +280,13 @@ fun SusfsTextField(
 
 /** 顶部提示条：未应用的改动、需要重启之类，右侧可带一个动作。 */
 @Composable
-fun SusfsNotice(text: String, actionText: String? = null, onAction: (() -> Unit)? = null) {
+fun SusfsNotice(
+    text: String,
+    actionText: String? = null,
+    onAction: (() -> Unit)? = null,
+    secondaryText: String? = null,
+    onSecondary: (() -> Unit)? = null,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -291,6 +297,11 @@ fun SusfsNotice(text: String, actionText: String? = null, onAction: (() -> Unit)
     ) {
         Column(modifier = Modifier.weight(1f)) {
             SusfsText(text = text, size = 13)
+        }
+        if (secondaryText != null && onSecondary != null) {
+            Row(modifier = Modifier.clickable(onClick = onSecondary).padding(start = 12.dp)) {
+                SusfsText(text = secondaryText, size = 13, color = mutedColor())
+            }
         }
         if (actionText != null && onAction != null) {
             Row(modifier = Modifier.clickable(onClick = onAction).padding(start = 12.dp)) {

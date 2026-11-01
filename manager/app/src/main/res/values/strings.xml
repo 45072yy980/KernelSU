@@ -756,4 +756,5 @@
     <string name="susfs_reset_defaults_confirm">This clears all rules and switches, and overwrites the saved copy inside ksud. "Restore last applied" will not bring it back.</string>
     <string name="susfs_dirty">Unapplied changes</string>
     <string name="susfs_apply">Apply</string>
+    <string name="susfs_discard">Discard</string>
 </resources>

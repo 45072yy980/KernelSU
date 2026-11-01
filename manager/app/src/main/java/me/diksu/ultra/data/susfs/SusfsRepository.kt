@@ -110,6 +110,7 @@ class SusfsRepository(private val context: Context = ksuApp) {
         is SusfsRule.SusMap -> SusfsCommands.addSusMap(rule.path)
         // 只有 update 可以被安全重放：add 是"开始跟踪"，必须紧挨着 bind mount。
         is SusfsRule.Kstat -> SusfsCommands.updateSusKstat(rule.path)
+        is SusfsRule.KstatClone -> SusfsCommands.updateSusKstatFullClone(rule.path)
         is SusfsRule.Redirect -> SusfsCommands.addOpenRedirect(rule.target, rule.redirected, rule.uidScheme)
         is SusfsRule.Uname -> SusfsCommands.setUname(rule.release, rule.version)
         is SusfsRule.Cmdline -> SusfsCommands.setCmdline(rule.sourcePath)

@@ -20,6 +20,7 @@ use crate::susfs::{
     add_open_redirect, add_sus_map, add_sus_path, add_sus_path_loop, enable_avc_log_spoofing,
     enable_log, get_susfs_features, get_susfs_status, get_susfs_variant, get_susfs_version,
     hide_sus_mnts_for_non_su_procs, set_cmdline_or_bootconfig, set_uname, update_sus_kstat,
+    update_sus_kstat_full_clone,
 };
 
 /// 与 FinaSU 一样，配置放在 `ksu` 工作目录下的独立子目录里。
@@ -76,6 +77,11 @@ pub enum Rule {
     Kstat {
         path: String,
     },
+    /// 完整克隆：把当前 stat 连同 nlink、size 一起写进伪装条目。
+    #[serde(rename = "kstat_clone")]
+    KstatClone {
+        path: String,
+    },
     Redirect {
         target: String,
         redirected: String,
@@ -100,6 +106,7 @@ impl Rule {
             Self::Loop { path } => format!("loop:{path}"),
             Self::Map { path } => format!("map:{path}"),
             Self::Kstat { path } => format!("kstat:{path}"),
+            Self::KstatClone { path } => format!("kstat_clone:{path}"),
             Self::Redirect {
                 target,
                 redirected,
@@ -117,6 +124,7 @@ impl Rule {
             Self::Map { path } => add_sus_map(path),
             // 只有 update 可以安全重放：add 是"开始跟踪"，必须紧挨着 bind mount。
             Self::Kstat { path } => update_sus_kstat(path),
+            Self::KstatClone { path } => update_sus_kstat_full_clone(path),
             Self::Redirect {
                 target,
                 redirected,

@@ -719,4 +719,5 @@
     <string name="susfs_reset_defaults_confirm">这会清空所有规则与开关，并覆盖 ksud 里保存的那份配置——「恢复上次应用」也找不回来。</string>
     <string name="susfs_dirty">有未应用的改动</string>
     <string name="susfs_apply">应用</string>
+    <string name="susfs_discard">放弃</string>
 </resources>
