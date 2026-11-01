@@ -23,7 +23,7 @@ use crate::susfs::{
 /// 上次应用成功（或部分成功）的配置落盘位置。
 const STATE_PATH: &str = "/data/adb/ksu/susfs-applied.json";
 
-fn default_version() -> u32 {
+const fn default_version() -> u32 {
     1
 }
 
@@ -84,34 +84,34 @@ impl Rule {
     /// 与应用报告里使用的键一致（管理器侧同样以它去重）。
     pub fn key(&self) -> String {
         match self {
-            Rule::Path { path } => format!("path:{path}"),
-            Rule::Loop { path } => format!("loop:{path}"),
-            Rule::Map { path } => format!("map:{path}"),
-            Rule::Kstat { path } => format!("kstat:{path}"),
-            Rule::Redirect {
+            Self::Path { path } => format!("path:{path}"),
+            Self::Loop { path } => format!("loop:{path}"),
+            Self::Map { path } => format!("map:{path}"),
+            Self::Kstat { path } => format!("kstat:{path}"),
+            Self::Redirect {
                 target,
                 redirected,
                 uid_scheme,
             } => format!("redirect:{target}:{redirected}:{uid_scheme}"),
-            Rule::Uname { .. } => "uname".to_string(),
-            Rule::Cmdline { .. } => "cmdline".to_string(),
+            Self::Uname { .. } => "uname".to_string(),
+            Self::Cmdline { .. } => "cmdline".to_string(),
         }
     }
 
     fn apply(&self) -> Result<()> {
         match self {
-            Rule::Path { path } => add_sus_path(path),
-            Rule::Loop { path } => add_sus_path_loop(path),
-            Rule::Map { path } => add_sus_map(path),
+            Self::Path { path } => add_sus_path(path),
+            Self::Loop { path } => add_sus_path_loop(path),
+            Self::Map { path } => add_sus_map(path),
             // 只有 update 可以安全重放：add 是"开始跟踪"，必须紧挨着 bind mount。
-            Rule::Kstat { path } => update_sus_kstat(path),
-            Rule::Redirect {
+            Self::Kstat { path } => update_sus_kstat(path),
+            Self::Redirect {
                 target,
                 redirected,
                 uid_scheme,
             } => add_open_redirect(target, redirected, *uid_scheme),
-            Rule::Uname { release, version } => set_uname(release, version),
-            Rule::Cmdline { path } => set_cmdline_or_bootconfig(path),
+            Self::Uname { release, version } => set_uname(release, version),
+            Self::Cmdline { path } => set_cmdline_or_bootconfig(path),
         }
     }
 }
@@ -178,10 +178,8 @@ pub fn apply_document(text: &str) -> Result<String> {
 
 /// 导出上次应用的配置。没有记录时给一份空文档，而不是报错。
 pub fn export_document() -> Result<String> {
-    match read_state() {
-        Some(doc) => serde_json::to_string_pretty(&doc).context("序列化配置失败"),
-        None => serde_json::to_string_pretty(&ConfigDoc::default()).context("序列化配置失败"),
-    }
+    let doc = read_state().unwrap_or_default();
+    serde_json::to_string_pretty(&doc).context("序列化配置失败")
 }
 
 fn is_duplicate(message: &str) -> bool {

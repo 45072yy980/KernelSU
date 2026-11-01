@@ -973,15 +973,14 @@ pub fn run() -> Result<()> {
                 Ok(())
             }
             Susfs::Apply { file } => {
-                let text = match file {
-                    Some(path) => std::fs::read_to_string(&path)
-                        .with_context(|| format!("读取配置失败：{}", path.display()))?,
-                    None => {
-                        use std::io::Read;
-                        let mut buffer = String::new();
-                        std::io::stdin().read_to_string(&mut buffer)?;
-                        buffer
-                    }
+                let text = if let Some(path) = file {
+                    std::fs::read_to_string(&path)
+                        .with_context(|| format!("读取配置失败：{}", path.display()))?
+                } else {
+                    use std::io::Read;
+                    let mut buffer = String::new();
+                    std::io::stdin().read_to_string(&mut buffer)?;
+                    buffer
                 };
                 println!("{}", crate::susfs::apply_document(&text)?);
                 Ok(())
