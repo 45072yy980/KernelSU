@@ -197,6 +197,15 @@ private fun SusfsMiuix(
     onStaticKstat: () -> Unit,
     viewModel: SusfsViewModel,
 ) {
+    // 有保存的规则才显示「规则」分组：否则标题挂着、下面却是空的。
+    val hasRules = remember(state.lastOutput) {
+        SusfsRepository.susPaths.isNotEmpty() ||
+            SusfsRepository.susPathLoops.isNotEmpty() ||
+            SusfsRepository.susMaps.isNotEmpty() ||
+            SusfsRepository.susKstatPaths.isNotEmpty() ||
+            SusfsRepository.susRedirects.isNotEmpty()
+    }
+
     MiuixScaffold(
         topBar = {
             MiuixTopAppBar(
@@ -248,13 +257,6 @@ private fun SusfsMiuix(
                 item { SusfsRedirectCard(onInput, viewModel) }
                 item { SusfsUnameCard(state, onInput, viewModel) }
 
-                val hasRules = remember(state.lastOutput) {
-                    SusfsRepository.susPaths.isNotEmpty() ||
-                        SusfsRepository.susPathLoops.isNotEmpty() ||
-                        SusfsRepository.susMaps.isNotEmpty() ||
-                        SusfsRepository.susKstatPaths.isNotEmpty() ||
-                        SusfsRepository.susRedirects.isNotEmpty()
-                }
                 if (hasRules) {
                     item {
                         SmallTitle(
