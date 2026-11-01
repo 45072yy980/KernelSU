@@ -1,11 +1,9 @@
 package me.diksu.ultra.ui.screen.about
 
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -23,26 +21,27 @@ import kotlinx.coroutines.withContext
 import me.diksu.ultra.R
 import me.diksu.ultra.ui.LocalUiMode
 import me.diksu.ultra.ui.UiMode
+import me.diksu.ultra.ui.component.material.SegmentedColumn
+import me.diksu.ultra.ui.component.material.SegmentedListItem
 import me.diksu.ultra.ui.component.material.TopBarBackButton
 import me.diksu.ultra.ui.navigation3.LocalNavigator
+import top.yukonga.miuix.kmp.basic.BasicComponent
+import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
-import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Back
-import top.yukonga.miuix.kmp.basic.Scaffold as MiuixScaffold
+import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.SmallTopAppBar
 import top.yukonga.miuix.kmp.basic.Text as MiuixText
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme
+import top.yukonga.miuix.kmp.basic.Scaffold as MiuixScaffold
 
 /**
- * The third-party libraries this build links against, with the licence each is
- * under.
+ * 本构建链接的第三方库及其许可证。
  *
- * The list is not written by hand: the AboutLibraries Gradle plugin walks the
- * resolved dependencies at build time and writes a JSON manifest into `res/raw`,
- * which is read back here. A library added in some unrelated commit therefore
- * shows up on its own, and nothing can quietly fall out of date.
+ * 列表不是手写的：AboutLibraries 插件在构建期扫描依赖、把清单写进 `res/raw`，这里读回来。
+ * 所以新增的依赖会自己出现，不会有"文档忘了更新"的问题。
  */
 @Composable
 fun OpenSourceLicenseScreen() {
@@ -60,13 +59,22 @@ fun OpenSourceLicenseScreen() {
     }
 }
 
+/** 一行副标题：版本与许可证拼在一起，缺哪个就不显示哪个。 */
+private fun librarySummary(library: Library): String {
+    val version = library.artifactVersion?.takeIf { it.isNotBlank() }
+    val licences = library.licenses.joinToString(", ") { it.name }.takeIf { it.isNotBlank() }
+    return listOfNotNull(version, licences).joinToString(" · ")
+}
+
 @Composable
 private fun OpenSourceLicenseScreenMiuix(libraries: List<Library>) {
     val navigator = LocalNavigator.current
+    val title = stringResource(R.string.open_source_license)
+    val count = stringResource(R.string.open_source_license_count, libraries.size)
     MiuixScaffold(
         topBar = {
             SmallTopAppBar(
-                title = stringResource(id = R.string.open_source_license),
+                title = title,
                 navigationIcon = {
                     IconButton(onClick = { navigator.pop() }) {
                         Icon(
@@ -83,16 +91,20 @@ private fun OpenSourceLicenseScreenMiuix(libraries: List<Library>) {
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(horizontal = 16.dp),
+                .padding(horizontal = 12.dp),
         ) {
-            items(libraries, key = { it.uniqueId }) { library ->
-                Column(modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp)) {
-                    MiuixText(
-                        text = library.name,
-                        color = colorScheme.onSurface,
-                        style = MiuixTheme.textStyles.body1,
-                    )
-                    MiuixLibraryMeta(library)
+            item {
+                SmallTitle(
+                    text = count,
+                    modifier = Modifier.padding(top = 12.dp),
+                )
+                Card(modifier = Modifier.padding(top = 12.dp).fillMaxWidth()) {
+                    libraries.forEach { library ->
+                        BasicComponent(
+                            title = library.name,
+                            summary = librarySummary(library),
+                        )
+                    }
                 }
             }
         }
@@ -100,19 +112,9 @@ private fun OpenSourceLicenseScreenMiuix(libraries: List<Library>) {
 }
 
 @Composable
-private fun MiuixLibraryMeta(library: Library) {
-    val tint = colorScheme.onSurfaceVariantSummary
-    library.artifactVersion?.takeIf { it.isNotBlank() }?.let { version ->
-        MiuixText(text = version, color = tint, style = MiuixTheme.textStyles.footnote1)
-    }
-    library.licenses.joinToString(", ") { it.name }.takeIf { it.isNotBlank() }?.let { licences ->
-        MiuixText(text = licences, color = tint, style = MiuixTheme.textStyles.footnote1)
-    }
-}
-
-@Composable
 private fun OpenSourceLicenseScreenMaterial(libraries: List<Library>) {
     val navigator = LocalNavigator.current
+    val count = stringResource(R.string.open_source_license_count, libraries.size)
     androidx.compose.material3.Scaffold(
         topBar = {
             androidx.compose.material3.TopAppBar(
@@ -129,29 +131,29 @@ private fun OpenSourceLicenseScreenMaterial(libraries: List<Library>) {
                 .padding(innerPadding)
                 .padding(horizontal = 16.dp),
         ) {
-            items(libraries, key = { it.uniqueId }) { library ->
-                Column(modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp)) {
-                    Text(
-                        text = library.name,
-                        style = MaterialTheme.typography.titleSmall,
-                    )
-                    library.artifactVersion?.takeIf { it.isNotBlank() }?.let { version ->
-                        Text(
-                            text = version,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                    }
-                    library.licenses.joinToString(", ") { it.name }
-                        .takeIf { it.isNotBlank() }
-                        ?.let { licences ->
-                            Text(
-                                text = licences,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                style = MaterialTheme.typography.bodySmall,
-                            )
+            item {
+                SegmentedColumn(
+                    modifier = Modifier.padding(top = 12.dp),
+                    title = count,
+                    content = buildList<@Composable () -> Unit> {
+                        libraries.forEach { library ->
+                            add {
+                                SegmentedListItem(
+                                    headlineContent = { Text(library.name) },
+                                    supportingContent = {
+                                        val summary = librarySummary(library)
+                                        if (summary.isNotEmpty()) {
+                                            Text(
+                                                text = summary,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                        }
+                                    },
+                                )
+                            }
                         }
-                }
+                    },
+                )
             }
         }
     }

@@ -683,4 +683,5 @@
     <string name="check_fix_ok">已处理</string>
     <string name="check_fix_failed">处理失败</string>
     <string name="version_details_section">版本信息</string>
+    <string name="open_source_license_count">共 %1$d 个库</string>
 </resources>

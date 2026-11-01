@@ -325,4 +325,5 @@
     <string name="check_fix_ok">已處理</string>
     <string name="check_fix_failed">處理失敗</string>
     <string name="version_details_section">版本資訊</string>
+    <string name="open_source_license_count">共 %1$d 個函式庫</string>
 </resources>
