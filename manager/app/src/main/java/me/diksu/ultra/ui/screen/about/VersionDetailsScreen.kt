@@ -27,7 +27,8 @@ import me.diksu.ultra.ui.UiMode
 import me.diksu.ultra.ui.component.material.TopBarBackButton
 import me.diksu.ultra.ui.navigation3.LocalNavigator
 import me.diksu.ultra.ui.screen.home.getManagerVersion
-import me.diksu.ultra.ui.util.getInstalledKsudVersion
+import me.diksu.ultra.ui.util.KsudProbe
+import me.diksu.ultra.ui.util.probeInstalledKsudVersion
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.SmallTopAppBar
@@ -52,6 +53,8 @@ data class VersionDetails(
     val manager: String = "",
     val kernel: String? = null,
     val ksud: String? = null,
+    /** 读不到 ksud 时的原因（试过哪些路径、各自失败在哪），读到了就是来源路径。 */
+    val ksudDetail: String? = null,
     val mode: String = "",
 )
 
@@ -69,6 +72,8 @@ fun VersionDetailsScreen() {
 /** Read-only snapshot; every call may touch root (ksud on disk), so it runs off the main thread. */
 private fun readVersionDetails(): VersionDetails {
     val managerInfo = getManagerVersion(ksuApp)
+    val probe = runCatching { probeInstalledKsudVersion() }
+        .getOrElse { KsudProbe(null, "探测本身失败：${it.message ?: it::class.java.simpleName}") }
     val kernelVersion = runCatching { Natives.version }.getOrDefault(0)
     val mode = when {
         runCatching { Natives.isLateLoadMode }.getOrDefault(false) -> MODE_JAILBREAK
@@ -83,7 +88,8 @@ private fun readVersionDetails(): VersionDetails {
         } else {
             null
         },
-        ksud = runCatching { getInstalledKsudVersion() }.getOrNull(),
+        ksud = probe.version,
+        ksudDetail = if (probe.version == null) probe.detail else null,
         mode = mode,
     )
 }
@@ -107,7 +113,9 @@ private fun versionRows(details: VersionDetails): List<Pair<String, String>> {
     return listOf(
         stringResource(R.string.version_details_manager) to details.manager,
         stringResource(R.string.version_details_kernel) to (details.kernel ?: unknown),
-        stringResource(R.string.version_details_ksud) to (details.ksud ?: unknown),
+        stringResource(R.string.version_details_ksud) to (
+                details.ksud ?: details.ksudDetail?.take(160)?.let { "$unknown（$it）" } ?: unknown
+                ),
         stringResource(R.string.version_details_mode) to modeLabel(details.mode),
     )
 }

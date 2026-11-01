@@ -42,7 +42,13 @@ import java.util.zip.ZipFile
 private const val TAG = "KsuCli"
 
 /** `ksud install` 落地的位置，和 APK 里自带的 libksud.so 不是同一份。 */
-private const val INSTALLED_KSUD = "/data/adb/ksud"
+private val KSUD_CANDIDATES = listOf(
+    "/data/adb/ksud",
+    "/data/adb/ksu/bin/ksud",
+)
+
+/** 一次探测的结果：读到就带版本，读不到就带能照着查的原因（路径 + 退出码/stderr）。 */
+data class KsudProbe(val version: String?, val detail: String)
 
 internal fun getKsuDaemonPath(): String {
     return ksuApp.applicationInfo.nativeLibraryDir + File.separator + "libksud.so"
@@ -157,12 +163,30 @@ fun install(): Boolean {
  * 内核模块上报的版本要重新提权才会变，用户态二进制用 `ksud install` 就能换 —— 所以判断
  * 「管理器与 ksud 不一致」必须看这一份，看内核那份永远等不到它变。读不到返回 null。
  */
-fun getInstalledKsudVersion(): String? {
+fun getInstalledKsudVersion(): String? = probeInstalledKsudVersion().version
+
+/**
+ * 探测已安装的 ksud：真机上它的落地位置不只一处（late-load 下可能只有 bin/），所以逐个试，
+ * 都不通时把每条路径的失败原因攒起来——那正是「未读取到」要回答的问题。
+ */
+fun probeInstalledKsudVersion(): KsudProbe {
     val shell = getRootShell()
-    val result = shell.newJob().add("$INSTALLED_KSUD --version").exec()
-    if (!result.isSuccess) return null
-    val line = result.out.firstOrNull { it.isNotBlank() }?.trim() ?: return null
-    return line.substringBefore(" (").trim().ifEmpty { null }
+    val notes = mutableListOf<String>()
+    for (path in KSUD_CANDIDATES) {
+        val result = runCatching { shell.newJob().add("$path --version").exec() }.getOrNull()
+        if (result == null) {
+            notes += "$path: 无法执行"
+            continue
+        }
+        val line = result.out.firstOrNull { it.isNotBlank() }?.trim()
+        if (result.isSuccess && line != null) {
+            val version = line.substringBefore(" (").trim()
+            if (version.isNotEmpty()) return KsudProbe(version, path)
+        }
+        val err = result.err.firstOrNull { it.isNotBlank() }?.trim() ?: "exit ${result.code}"
+        notes += "$path: $err"
+    }
+    return KsudProbe(null, notes.joinToString("；"))
 }
 
 fun listModules(): String {
