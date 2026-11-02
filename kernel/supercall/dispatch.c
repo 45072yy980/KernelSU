@@ -15,6 +15,7 @@
 #include "klog.h" // IWYU pragma: keep
 #include "ksu.h"
 #include "runtime/ksud_boot.h"
+#include "feature/uts_view.h"
 #include "feature/kernel_umount.h"
 #include "manager/manager_identity.h"
 #include "manager/stealth.h"
