@@ -21,7 +21,7 @@
  * 实现方式是直接替换 syscall 表的 __NR_uname 表项，而不是走 tracepoint 分发器 ——
  * 分发器只对打过标记的进程生效，而伪装内核版本恰恰要覆盖所有普通应用。
  *
- * 与 FinaSU 的差异：它改的是 uts_namespace，连 /proc/sys/kernel/* 一起伪装；这里只影响
+ * 与 FinaSU 的差异：它改的是 uts_namespace，连 /proc/sys/kernel 下的节点一起伪装；这里只影响
  * uname(2)，好处是不动 namespace、没有崩溃风险，代价是直接读 /proc 仍能看到真值。
  */
 

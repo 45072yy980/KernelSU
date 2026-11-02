@@ -18,6 +18,7 @@
 #include "runtime/ksud.h"
 #include "runtime/ksud_boot.h"
 #include "feature/sulog.h"
+#include "feature/uts_view.h"
 #include "supercall/supercall.h"
 #include "ksu.h"
 #include "infra/file_wrapper.h"
