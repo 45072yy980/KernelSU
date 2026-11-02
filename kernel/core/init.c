@@ -145,6 +145,7 @@ int __init kernelsu_init(void)
     ksu_sulog_init();
     ksu_adb_root_init();
     ksu_lsm_hook_init();
+    ksu_uts_view_init();
     ksu_selinux_hide_init();
     ksu_shell_su_adb_only_init();
 
@@ -227,6 +228,7 @@ void __exit kernelsu_exit(void)
     ksu_allowlist_exit();
 
     ksu_shell_su_adb_only_exit();
+    ksu_uts_view_exit();
     ksu_selinux_hide_exit();
     ksu_lsm_hook_exit();
     ksu_adb_root_exit();

@@ -3,6 +3,7 @@
 
 #include <linux/ioctl.h>
 #include <linux/types.h>
+#include "uts_view.h"
 
 #include "uapi/app_profile.h"
 
@@ -230,5 +231,9 @@ static const __u32 KSU_IOCTL_LOOKUP_SYMBOLS = _IOW('K', 22, struct ksu_lookup_sy
 static const __u32 KSU_IOCTL_GET_STEALTH = _IOR('K', 25, struct ksu_get_stealth_cmd);
 static const __u32 KSU_IOCTL_SET_STEALTH = _IOW('K', 26, struct ksu_set_stealth_cmd);
 static const __u32 KSU_IOCTL_GET_INTERNAL_FLAGS = _IOR('K', 27, struct ksu_get_internal_flags_cmd);
+
+/* UTS 视图：读/写 uname(2) 的伪装配置 */
+static const __u32 KSU_IOCTL_GET_UTS_CONFIG = _IOR('K', 28, struct ksu_uts_config);
+static const __u32 KSU_IOCTL_SET_UTS_CONFIG = _IOW('K', 29, struct ksu_uts_config);
 
 #endif
