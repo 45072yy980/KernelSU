@@ -122,6 +122,12 @@ enum Commands {
         command: Feature,
     },
 
+    /// UTS 视图：按 uid 伪装 uname(2)
+    Uts {
+        #[command(subcommand)]
+        command: Uts,
+    },
+
     /// Stealth mode: hide the manager from GET_INFO
     ///
     /// With it on, the kernel stops reporting KSU_GET_INFO_FLAG_MANAGER and
@@ -501,6 +507,14 @@ enum Profile {
 }
 
 #[derive(clap::Subcommand, Debug)]
+#[derive(clap::Subcommand, Debug)]
+enum Uts {
+    /// Print the current UTS config as JSON
+    Get,
+    /// Read a JSON config from stdin and apply it
+    Set,
+}
+
 enum Feature {
     /// Get feature value and support status
     Get {
@@ -967,6 +981,17 @@ pub fn run() -> Result<()> {
             Stealth::Toggle => crate::stealth::toggle(),
         },
 
+        Commands::Uts { command } => match command {
+            Uts::Get => {
+                println!("{}", crate::uts::get()?);
+                Ok(())
+            }
+            Uts::Set => {
+                let text = read_stdin_json()?;
+                println!("{}", crate::uts::set(&text)?);
+                Ok(())
+            }
+        },
         Commands::Susfs { command } => match command {
             Susfs::Version => {
                 // Print the load state first, then the version, so a caller that

@@ -336,6 +336,16 @@ pub fn get_feature(feature_id: u32) -> Result<FeatureState> {
     })
 }
 
+/// 读 UTS 视图配置。
+pub fn get_uts_config(cmd: &mut ksu_uapi::ksu_uts_config) -> Result<i32> {
+    ksuctl(ksu_uapi::KSU_IOCTL_GET_UTS_CONFIG, cmd)
+}
+
+/// 写 UTS 视图配置。
+pub fn set_uts_config(cmd: &mut ksu_uapi::ksu_uts_config) -> Result<i32> {
+    ksuctl(ksu_uapi::KSU_IOCTL_SET_UTS_CONFIG, cmd)
+}
+
 /// Set feature value in kernel
 /// Note: kernel may set the value successfully but return EAGAIN (os error 11).
 /// We verify the value after setting and treat it as success if the value matches.
