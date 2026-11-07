@@ -1,0 +1,136 @@
+name: CI
+
+# 每次 push/PR 只跑"能不能编译 + 格式"的轻量门禁：
+# 一个 ABI 的 manager 编译、一个 target 的 ksud、一个 KMI 的内核，外加三个格式检查。
+# 完整矩阵（8 个 KMI + 全部交叉 target + APK 打包签名）交给 build-manager，
+# 只在发版（release.yml）或手动 dispatch 时跑。
+on:
+  push:
+    branches: [main, dev]
+    paths:
+      - 'manager/**'
+      - 'userspace/**'
+      - 'kernel/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/ci.yml'
+      - '.github/workflows/ddk-lkm.yml'
+      - '.github/scripts/**'
+  pull_request:
+    branches: [main, dev]
+    paths:
+      - 'manager/**'
+      - 'userspace/**'
+      - 'kernel/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.github/workflows/ci.yml'
+      - '.github/workflows/ddk-lkm.yml'
+      - '.github/scripts/**'
+
+# 同一分支的新 push 直接取消上一轮的检查，避免排队烧算力。
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rust:
+    name: rustfmt + clippy
+    runs-on: ubuntu-latest
+    env:
+      RUSTFLAGS: '-Dwarnings'
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rustfmt
+
+      - name: rustfmt
+        run: cargo fmt --all --check
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: userspace/ksud
+
+      - uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: r29
+
+      - name: clippy (aarch64)
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+        run: |
+          rustup target add aarch64-linux-android
+          source .github/scripts/setup-rust-build.sh aarch64-linux-android 26
+          cargo clippy --target aarch64-linux-android --release
+
+  format-c:
+    name: clang-format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: check
+        working-directory: kernel
+        run: make check-format
+
+  shellcheck:
+    name: shellcheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ludeeus/action-shellcheck@2.0.0
+        with:
+          ignore_names: gradlew
+          ignore_paths: ./userspace/ksud/src/installer.sh ./.github/scripts/setup-rust-build.sh ./manager/app/src/main/assets/hma-oss-config.sh
+
+  ksud:
+    name: ksud (aarch64, cargo check)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: userspace/ksud
+
+      - uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: r29
+
+      - name: cargo check
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+        run: |
+          rustup target add aarch64-linux-android
+          source .github/scripts/setup-rust-build.sh aarch64-linux-android 26
+          cargo check --target aarch64-linux-android --release
+
+  manager:
+    name: manager (kotlin compile)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v6
+
+      - name: compile
+        working-directory: manager
+        run: ./gradlew :app:compileReleaseKotlin
+
+  kernel:
+    name: kernel (one KMI)
+    uses: ./.github/workflows/ddk-lkm.yml
+    with:
+      kmi: android15-6.6
