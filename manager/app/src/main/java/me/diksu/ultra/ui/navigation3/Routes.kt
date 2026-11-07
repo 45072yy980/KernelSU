@@ -62,6 +62,11 @@ sealed interface Route : NavKey, Parcelable {
     @Serializable
     data object Uts : Route
 
+    /** 网络隔离：按 uid 拒绝对外 connect(2)。 */
+    @Parcelize
+    @Serializable
+    data object Netisolate : Route
+
     /** The third-party library list the AboutLibraries plugin generates at build time. */
     @Parcelize
     @Serializable

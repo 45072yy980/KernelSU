@@ -346,6 +346,16 @@ pub fn set_uts_config(cmd: &mut ksu_uapi::ksu_uts_config) -> Result<i32> {
     ksuctl(ksu_uapi::KSU_IOCTL_SET_UTS_CONFIG, cmd)
 }
 
+/// 读网络隔离配置。
+pub fn get_netisolate(cmd: &mut ksu_uapi::ksu_netisolate_config) -> Result<i32> {
+    ksuctl(ksu_uapi::KSU_IOCTL_GET_NETISOLATE, cmd)
+}
+
+/// 写网络隔离配置。
+pub fn set_netisolate(cmd: &mut ksu_uapi::ksu_netisolate_config) -> Result<i32> {
+    ksuctl(ksu_uapi::KSU_IOCTL_SET_NETISOLATE, cmd)
+}
+
 /// Set feature value in kernel
 /// Note: kernel may set the value successfully but return EAGAIN (os error 11).
 /// We verify the value after setting and treat it as success if the value matches.

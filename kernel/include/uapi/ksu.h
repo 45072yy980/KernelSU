@@ -6,5 +6,7 @@
 #include "uapi/feature.h"
 #include "uapi/selinux.h"
 #include "uapi/sulog.h"
+#include "uapi/uts_view.h"
+#include "uapi/netisolate.h"
 
 #endif // __KSU_UAPI_KSU_H

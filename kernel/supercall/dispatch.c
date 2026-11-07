@@ -16,6 +16,7 @@
 #include "ksu.h"
 #include "runtime/ksud_boot.h"
 #include "feature/uts_view.h"
+#include "feature/netisolate.h"
 #include "feature/kernel_umount.h"
 #include "manager/manager_identity.h"
 #include "manager/stealth.h"
@@ -893,6 +894,16 @@ static int do_set_uts_config(void __user *arg)
     return ksu_uts_view_set(arg);
 }
 
+static int do_get_netisolate(void __user *arg)
+{
+    return ksu_netisolate_get(arg);
+}
+
+static int do_set_netisolate(void __user *arg)
+{
+    return ksu_netisolate_set(arg);
+}
+
 static const struct ksu_ioctl_cmd_map ksu_ioctl_handlers[] = {
     { 
         .cmd = KSU_IOCTL_GRANT_ROOT,
@@ -1062,6 +1073,18 @@ static const struct ksu_ioctl_cmd_map ksu_ioctl_handlers[] = {
         .cmd = KSU_IOCTL_SET_UTS_CONFIG,
         .name = "SET_UTS_CONFIG",
         .handler = do_set_uts_config,
+        .perm_check = manager_or_root
+    },
+    {
+        .cmd = KSU_IOCTL_GET_NETISOLATE,
+        .name = "GET_NETISOLATE",
+        .handler = do_get_netisolate,
+        .perm_check = manager_or_root
+    },
+    {
+        .cmd = KSU_IOCTL_SET_NETISOLATE,
+        .name = "SET_NETISOLATE",
+        .handler = do_set_netisolate,
         .perm_check = manager_or_root
     },
     {

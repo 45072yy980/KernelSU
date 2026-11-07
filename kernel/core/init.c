@@ -19,6 +19,7 @@
 #include "runtime/ksud_boot.h"
 #include "feature/sulog.h"
 #include "feature/uts_view.h"
+#include "feature/netisolate.h"
 #include "supercall/supercall.h"
 #include "ksu.h"
 #include "infra/file_wrapper.h"
@@ -147,6 +148,7 @@ int __init kernelsu_init(void)
     ksu_adb_root_init();
     ksu_lsm_hook_init();
     ksu_uts_view_init();
+    ksu_netisolate_init();
     ksu_selinux_hide_init();
     ksu_shell_su_adb_only_init();
 
@@ -229,6 +231,7 @@ void __exit kernelsu_exit(void)
     ksu_allowlist_exit();
 
     ksu_shell_su_adb_only_exit();
+    ksu_netisolate_exit();
     ksu_uts_view_exit();
     ksu_selinux_hide_exit();
     ksu_lsm_hook_exit();

@@ -15,6 +15,7 @@ import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.WaterDrop
+import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -79,6 +80,7 @@ fun OtherFeaturesScreen() {
     val onOpenShizuku = dropUnlessResumed { navigator.push(Route.Shizuku) }
     val onOpenBackup = dropUnlessResumed { navigator.push(Route.Backup) }
     val onOpenUts = dropUnlessResumed { navigator.push(Route.Uts) }
+    val onOpenNetisolate = dropUnlessResumed { navigator.push(Route.Netisolate) }
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -237,6 +239,7 @@ fun OtherFeaturesScreen() {
             onOpenShizuku = onOpenShizuku,
             onOpenBackup = onOpenBackup,
             onOpenUts = onOpenUts,
+            onOpenNetisolate = onOpenNetisolate,
             onReloadModules = onReloadModules,
             onSoftReboot = onSoftReboot,
             onSoftRebootHidden = onSoftRebootHidden,
@@ -256,6 +259,7 @@ fun OtherFeaturesScreen() {
             onOpenShizuku = onOpenShizuku,
             onOpenBackup = onOpenBackup,
             onOpenUts = onOpenUts,
+            onOpenNetisolate = onOpenNetisolate,
             onReloadModules = onReloadModules,
             onSoftReboot = onSoftReboot,
             onSoftRebootHidden = onSoftRebootHidden,
@@ -353,6 +357,7 @@ private fun OtherFeaturesMaterial(
     onOpenShizuku: () -> Unit = {},
     onOpenBackup: () -> Unit = {},
     onOpenUts: () -> Unit = {},
+    onOpenNetisolate: () -> Unit = {},
     onReloadModules: () -> Unit = {},
     onSoftReboot: () -> Unit = {},
     onSoftRebootHidden: () -> Unit = {},
@@ -482,6 +487,14 @@ private fun OtherFeaturesMaterial(
                     }
                     add {
                         SegmentedListItem(
+                            onClick = onOpenNetisolate,
+                            headlineContent = { Text(stringResource(R.string.netisolate_title)) },
+                            supportingContent = { Text(stringResource(R.string.netisolate_summary)) },
+                            leadingContent = { Icon(Icons.Filled.WifiOff, null) },
+                        )
+                    }
+                    add {
+                        SegmentedListItem(
                             onClick = onOpenBackup,
                             headlineContent = { Text(stringResource(R.string.backup_title)) },
                             supportingContent = { Text(stringResource(R.string.backup_summary)) },
@@ -538,6 +551,7 @@ private fun OtherFeaturesMiuix(
     onOpenShizuku: () -> Unit = {},
     onOpenBackup: () -> Unit = {},
     onOpenUts: () -> Unit = {},
+    onOpenNetisolate: () -> Unit = {},
     onReloadModules: () -> Unit = {},
     onSoftReboot: () -> Unit = {},
     onSoftRebootHidden: () -> Unit = {},
@@ -678,6 +692,19 @@ private fun OtherFeaturesMiuix(
                         title = stringResource(R.string.uts_title),
                         summary = stringResource(R.string.uts_summary),
                         onClick = onOpenUts,
+                    )
+                    ArrowPreference(
+                        title = stringResource(R.string.netisolate_title),
+                        summary = stringResource(R.string.netisolate_summary),
+                        startAction = {
+                            MiuixIcon(
+                                imageVector = Icons.Filled.WifiOff,
+                                contentDescription = null,
+                                tint = colorScheme.onBackground,
+                                modifier = Modifier.padding(end = 6.dp),
+                            )
+                        },
+                        onClick = onOpenNetisolate,
                     )
                     ArrowPreference(
                         title = stringResource(R.string.backup_title),

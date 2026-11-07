@@ -128,6 +128,12 @@ enum Commands {
         command: Uts,
     },
 
+    /// 网络隔离：按 uid 拒绝对外 connect(2)
+    Netisolate {
+        #[command(subcommand)]
+        command: Netisolate,
+    },
+
     /// Stealth mode: hide the manager from GET_INFO
     ///
     /// With it on, the kernel stops reporting KSU_GET_INFO_FLAG_MANAGER and
@@ -509,6 +515,14 @@ enum Profile {
 #[derive(clap::Subcommand, Debug)]
 enum Uts {
     /// Print the current UTS config as JSON
+    Get,
+    /// Read a JSON config from stdin and apply it
+    Set,
+}
+
+#[derive(clap::Subcommand, Debug)]
+enum Netisolate {
+    /// Print the current netisolate config as JSON
     Get,
     /// Read a JSON config from stdin and apply it
     Set,
@@ -989,6 +1003,17 @@ pub fn run() -> Result<()> {
             Uts::Set => {
                 let text = read_stdin_json()?;
                 println!("{}", crate::uts::set(&text)?);
+                Ok(())
+            }
+        },
+        Commands::Netisolate { command } => match command {
+            Netisolate::Get => {
+                println!("{}", crate::netisolate::get()?);
+                Ok(())
+            }
+            Netisolate::Set => {
+                let text = read_stdin_json()?;
+                println!("{}", crate::netisolate::set(&text)?);
                 Ok(())
             }
         },

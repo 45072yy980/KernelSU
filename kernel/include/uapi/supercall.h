@@ -4,6 +4,7 @@
 #include <linux/ioctl.h>
 #include <linux/types.h>
 #include "uts_view.h"
+#include "netisolate.h"
 
 #include "uapi/app_profile.h"
 
@@ -235,5 +236,9 @@ static const __u32 KSU_IOCTL_GET_INTERNAL_FLAGS = _IOR('K', 27, struct ksu_get_i
 /* UTS 视图：读/写 uname(2) 的伪装配置 */
 static const __u32 KSU_IOCTL_GET_UTS_CONFIG = _IOR('K', 28, struct ksu_uts_config);
 static const __u32 KSU_IOCTL_SET_UTS_CONFIG = _IOW('K', 29, struct ksu_uts_config);
+
+/* 网络隔离：按 uid 拒绝对外 connect(2) */
+static const __u32 KSU_IOCTL_GET_NETISOLATE = _IOR('K', 30, struct ksu_netisolate_config);
+static const __u32 KSU_IOCTL_SET_NETISOLATE = _IOW('K', 31, struct ksu_netisolate_config);
 
 #endif
