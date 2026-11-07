@@ -720,4 +720,21 @@
     <string name="susfs_dirty">有未应用的改动</string>
     <string name="susfs_apply">应用</string>
     <string name="susfs_discard">放弃</string>
+    <string name="uts_title">UTS 视图</string>
+    <string name="uts_summary">按应用伪装 uname(2) 的返回值</string>
+    <string name="uts_mode">模式</string>
+    <string name="uts_mode_off">关闭</string>
+    <string name="uts_mode_global">全局生效</string>
+    <string name="uts_mode_selected">仅指定应用</string>
+    <string name="uts_mode_current">当前</string>
+    <string name="uts_fields">字段</string>
+    <string name="uts_targets">目标应用</string>
+    <string name="uts_targets_empty">没有可选的用户应用</string>
+    <string name="uts_apply">应用配置</string>
+    <string name="uts_field_sysname">sysname（内核名）</string>
+    <string name="uts_field_nodename">nodename（主机名）</string>
+    <string name="uts_field_release">release（内核版本）</string>
+    <string name="uts_field_version">version（编译信息）</string>
+    <string name="uts_field_machine">machine（架构）</string>
+    <string name="uts_field_domainname">domainname（域名）</string>
 </resources>

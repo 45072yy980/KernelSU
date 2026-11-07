@@ -757,4 +757,21 @@
     <string name="susfs_dirty">Unapplied changes</string>
     <string name="susfs_apply">Apply</string>
     <string name="susfs_discard">Discard</string>
+    <string name="uts_title">UTS view</string>
+    <string name="uts_summary">Spoof uname(2), globally or for selected apps</string>
+    <string name="uts_mode">Mode</string>
+    <string name="uts_mode_off">Off</string>
+    <string name="uts_mode_global">All processes</string>
+    <string name="uts_mode_selected">Selected apps</string>
+    <string name="uts_mode_current">Current</string>
+    <string name="uts_fields">Fields</string>
+    <string name="uts_targets">Target apps</string>
+    <string name="uts_targets_empty">No user apps</string>
+    <string name="uts_apply">Apply configuration</string>
+    <string name="uts_field_sysname">sysname (kernel name)</string>
+    <string name="uts_field_nodename">nodename (hostname)</string>
+    <string name="uts_field_release">release (kernel version)</string>
+    <string name="uts_field_version">version (build info)</string>
+    <string name="uts_field_machine">machine (arch)</string>
+    <string name="uts_field_domainname">domainname</string>
 </resources>

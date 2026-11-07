@@ -12,6 +12,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material3.AlertDialog
@@ -77,6 +78,7 @@ fun OtherFeaturesScreen() {
     val onOpenKeymint = dropUnlessResumed { navigator.push(Route.Keymint) }
     val onOpenShizuku = dropUnlessResumed { navigator.push(Route.Shizuku) }
     val onOpenBackup = dropUnlessResumed { navigator.push(Route.Backup) }
+    val onOpenUts = dropUnlessResumed { navigator.push(Route.Uts) }
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -234,6 +236,7 @@ fun OtherFeaturesScreen() {
             onCalculatorChange = onCalculatorChange,
             onOpenShizuku = onOpenShizuku,
             onOpenBackup = onOpenBackup,
+            onOpenUts = onOpenUts,
             onReloadModules = onReloadModules,
             onSoftReboot = onSoftReboot,
             onSoftRebootHidden = onSoftRebootHidden,
@@ -252,6 +255,7 @@ fun OtherFeaturesScreen() {
             onCalculatorChange = onCalculatorChange,
             onOpenShizuku = onOpenShizuku,
             onOpenBackup = onOpenBackup,
+            onOpenUts = onOpenUts,
             onReloadModules = onReloadModules,
             onSoftReboot = onSoftReboot,
             onSoftRebootHidden = onSoftRebootHidden,
@@ -348,6 +352,7 @@ private fun OtherFeaturesMaterial(
     onCalculatorChange: (Boolean) -> Unit,
     onOpenShizuku: () -> Unit = {},
     onOpenBackup: () -> Unit = {},
+    onOpenUts: () -> Unit = {},
     onReloadModules: () -> Unit = {},
     onSoftReboot: () -> Unit = {},
     onSoftRebootHidden: () -> Unit = {},
@@ -469,6 +474,14 @@ private fun OtherFeaturesMaterial(
                     }
                     add {
                         SegmentedListItem(
+                            onClick = onOpenUts,
+                            headlineContent = { Text(stringResource(R.string.uts_title)) },
+                            supportingContent = { Text(stringResource(R.string.uts_summary)) },
+                            leadingContent = { Icon(Icons.Filled.Terminal, null) },
+                        )
+                    }
+                    add {
+                        SegmentedListItem(
                             onClick = onOpenBackup,
                             headlineContent = { Text(stringResource(R.string.backup_title)) },
                             supportingContent = { Text(stringResource(R.string.backup_summary)) },
@@ -524,6 +537,7 @@ private fun OtherFeaturesMiuix(
     onCalculatorChange: (Boolean) -> Unit,
     onOpenShizuku: () -> Unit = {},
     onOpenBackup: () -> Unit = {},
+    onOpenUts: () -> Unit = {},
     onReloadModules: () -> Unit = {},
     onSoftReboot: () -> Unit = {},
     onSoftRebootHidden: () -> Unit = {},
@@ -659,6 +673,11 @@ private fun OtherFeaturesMiuix(
                             )
                         },
                         onClick = onOpenShizuku,
+                    )
+                    ArrowPreference(
+                        title = stringResource(R.string.uts_title),
+                        summary = stringResource(R.string.uts_summary),
+                        onClick = onOpenUts,
                     )
                     ArrowPreference(
                         title = stringResource(R.string.backup_title),

@@ -84,6 +84,7 @@ import me.diksu.ultra.ui.screen.about.AboutScreen
 import me.diksu.ultra.ui.screen.about.OpenSourceLicenseScreen
 import me.diksu.ultra.ui.screen.about.VersionDetailsScreen
 import me.diksu.ultra.ui.screen.backup.BackupScreen
+import me.diksu.ultra.ui.screen.uts.UtsScreen
 import me.diksu.ultra.ui.screen.appprofile.AppProfileScreen
 import me.diksu.ultra.ui.screen.colorpalette.ColorPaletteScreen
 import me.diksu.ultra.ui.screen.executemoduleaction.ExecuteModuleActionScreen
@@ -346,6 +347,7 @@ open class MainActivity : ComponentActivity() {
                                 VersionDetailsScreen()
                             }
                             entry<Route.Backup>(swipeDismiss = swipeDismiss) { BackupScreen() }
+                            entry<Route.Uts>(swipeDismiss = swipeDismiss) { UtsScreen() }
                             entry<Route.OpenSourceLicense>(swipeDismiss = swipeDismiss) {
                                 OpenSourceLicenseScreen()
                             }

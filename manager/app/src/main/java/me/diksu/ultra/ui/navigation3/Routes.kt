@@ -57,6 +57,11 @@ sealed interface Route : NavKey, Parcelable {
     @Serializable
     data object Backup : Route
 
+    /** UTS 视图：按 uid 伪装 uname(2)。 */
+    @Parcelize
+    @Serializable
+    data object Uts : Route
+
     /** The third-party library list the AboutLibraries plugin generates at build time. */
     @Parcelize
     @Serializable
