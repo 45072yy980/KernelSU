@@ -146,6 +146,7 @@ import me.diksu.ultra.ui.theme.LocalModuleDescriptionMaxLines
 import me.diksu.ultra.ui.theme.LocalShowMoreModuleInfo
 import me.diksu.ultra.ui.util.formatByteSize
 import me.diksu.ultra.ui.util.reboot
+import top.yukonga.miuix.kmp.nav.gesture.WindowNavigationEventBridge
 
 @SuppressLint("StringFormatInvalid")
 @Composable
@@ -567,6 +568,7 @@ private fun ModuleShortcutSheet(
             enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded)
         )
     ) {
+        WindowNavigationEventBridge()
         Column(
             verticalArrangement = Arrangement.spacedBy(10.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
