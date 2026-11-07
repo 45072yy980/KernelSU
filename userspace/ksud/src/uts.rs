@@ -40,6 +40,10 @@ pub struct UtsConfig {
 
 // uapi 的 char 数组要用 c_char 接收：bindgen 按目标平台的 char 有符号性生成类型，
 // aarch64 是 [u8; 65]、x86_64 是 [i8; 65]，写死其中一种就只剩一个 ABI 能编过。
+//
+// 下面两个函数的 `as u8` / `as c_char` 在 aarch64 上是恒等转换，clippy 会报
+// unnecessary_cast —— 但去掉就没法在 x86_64 上编译，所以只能按目标平台放行。
+#[allow(clippy::unnecessary_cast)]
 fn read_field(buf: &[c_char]) -> String {
     let bytes: Vec<u8> = buf
         .iter()
@@ -49,6 +53,7 @@ fn read_field(buf: &[c_char]) -> String {
     String::from_utf8_lossy(&bytes).into_owned()
 }
 
+#[allow(clippy::unnecessary_cast)]
 fn write_field(buf: &mut [c_char], value: &str) {
     let bytes = value.as_bytes();
     let len = bytes.len().min(NAME_LEN - 1);
