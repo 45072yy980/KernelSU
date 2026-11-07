@@ -88,7 +88,11 @@ fn configure_bindgen() {
         // The input header we would like to generate
         // bindings for.
         .header("src/ksu_uapi.h")
-        .clang_args(["-x", "c++", "-I../../kernel/include"])
+        // -funsigned-char：uapi 里的 char 数组语义上就是字节串，但 bindgen 会按目标平台
+        // 的 char 有符号性生成类型 —— aarch64 上是 [u8; N]，x86_64 上是 [i8; N]，同一份代码
+        // 两边只能编译一边。内核自己按无符号字节处理这些字段（Android arm64 的 char 也是
+        // 无符号），所以这里统一钉成无符号，三个 ABI 的绑定就一致了。
+        .clang_args(["-x", "c++", "-I../../kernel/include", "-funsigned-char"])
         // Tell cargo to invalidate the built crate whenever any of the
         // included header files changed.
         .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()));
