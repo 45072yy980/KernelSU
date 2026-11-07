@@ -1,21 +1,21 @@
 import type { PageData } from 'vitepress'
 
-export const SITE_URL = 'https://kernelsu.org'
+export const SITE_URL = 'https://45072yy980.github.io/KernelSU'
 
 // Describes the project for search engines and AI agents. SoftwareSourceCode is used
 // instead of SoftwareApplication, which Google flags as invalid without ratings.
 const projectJsonLd = JSON.stringify({
     '@context': 'https://schema.org',
     '@type': 'SoftwareSourceCode',
-    name: 'KernelSU',
-    description: 'An open-source, kernel-based root solution for Android GKI devices.',
+    name: 'DikSU',
+    description: '不用解锁 Bootloader 的 KernelSU 分支：靠漏洞把内核模块挂进正在运行的系统。',
     url: `${SITE_URL}/`,
     image: `${SITE_URL}/logo.png`,
-    codeRepository: 'https://github.com/tiann/KernelSU',
+    codeRepository: 'https://github.com/45072yy980/KernelSU',
     license: ['https://www.gnu.org/licenses/gpl-2.0.html', 'https://www.gnu.org/licenses/gpl-3.0.html'],
     programmingLanguage: ['C', 'Rust', 'Kotlin'],
     runtimePlatform: 'Android',
-    sameAs: ['https://github.com/tiann/KernelSU', 'https://t.me/KernelSU'],
+    sameAs: ['https://github.com/45072yy980/KernelSU'],
 })
 
 export function transformPageData(pageData: PageData) {

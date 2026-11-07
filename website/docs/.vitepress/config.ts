@@ -21,9 +21,8 @@ const llmsTxtTemplate = `# {title}
 ## Official links
 
 - Website: ${SITE_URL}
-- Source code: https://github.com/tiann/KernelSU
-- Downloads (manager APK, LKM and GKI images): https://github.com/tiann/KernelSU/releases
-- Telegram: https://t.me/KernelSU
+- Source code: https://github.com/45072yy980/KernelSU
+- Downloads: https://github.com/45072yy980/KernelSU/releases
 
 ## Table of Contents
 
@@ -31,7 +30,10 @@ const llmsTxtTemplate = `# {title}
 `
 
 export default defineConfig( {
-    title: 'KernelSU',
+    title: 'DikSU',
+    description: '不用解锁 Bootloader 的 KernelSU 分支：靠漏洞把内核模块挂进正在运行的系统。',
+    // 部署在 GitHub Pages 的子路径上，资源与站内链接都按这个前缀生成
+    base: '/KernelSU/',
     locales: locales.locales,
     transformPageData,
     vite: {
@@ -47,8 +49,8 @@ export default defineConfig( {
                 },
                 customLLMsTxtTemplate: llmsTxtTemplate,
                 customTemplateVariables: {
-                    title: 'KernelSU',
-                    description: 'KernelSU is an open-source, kernel-based root solution for Android GKI devices.',
+                    title: 'DikSU',
+                    description: '不用解锁 Bootloader 的 KernelSU 分支：靠漏洞把内核模块挂进正在运行的系统。',
                     details: 'KernelSU runs inside the Linux kernel and grants root access to permitted apps directly from kernel space. ' +
                         'It consists of a kernel module (loaded as an LKM or built into a GKI kernel), the userspace daemon `ksud`, and the KernelSU manager app. ' +
                         'Most Magisk modules work on KernelSU; modules that modify `/system` require a metamodule such as meta-overlayfs.',
@@ -64,7 +66,7 @@ export default defineConfig( {
         }],
     ],
     sitemap: {
-        hostname: 'https://kernelsu.org'
+        hostname: 'https://45072yy980.github.io'
     },
     buildEnd: async (config: SiteConfig) => {
         const templateDir = resolve(config.outDir, 'templates');

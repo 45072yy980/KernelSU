@@ -1,86 +1,50 @@
----
-description: Answers to common KernelSU questions about device support, bootloader unlocking, modules, Zygisk and Xposed, Magisk compatibility, and older kernels.
----
+# 常见问题
 
-# FAQ
+## 管理器显示「未安装」或拿不到 root 标志
 
-## Does KernelSU support my device?
+越狱模式下这通常意味着内核模块没加载成功（提权失败），或者加载的是**旧版本模块**。
+先看设置 → 版本详情里的「内核模块」一行；版本对不上时重新走一次越狱激活。
 
-KernelSU supports devices running Android with an unlocked bootloader. However, official support is only for GKI Linux Kernels 5.10+ (in practice, this means your device needs to have Android 12 out-of-the-box to be supported).
+## 三个版本号为什么对不上
 
-You can easily check the support for your device through the KernelSU manager, which is available [here](https://github.com/tiann/KernelSU/releases). 
+| 版本 | 来源 |
+|---|---|
+| 管理器 | APK 自身 |
+| 内核模块 | 当前挂载进内核的 `.ko` |
+| ksud | `/data/adb/ksud` |
 
-If the app shows `Not installed`, it means your device is officially supported by KernelSU.
+越狱模式下内核模块是**每次激活时注入**的，所以在重新激活之前它不会变；`ksud` 则是随时可替换的。
+三者不一致是正常的，只要管理器与内核模块的 versionCode 一致即可。
 
-If the app shows `Unsupported`, it means your device isn't officially supported at present. However, you can build kernel source code and integrate KernelSU to make it work, or use [Unofficially supported devices](unofficially-support-devices).
+## 模块装了不生效
 
-## Do I need to unlock the bootloader to use KernelSU?
+1. 越狱模式下模块是「加载后」才挂载的，先点「重载模块」。
+2. 修改 `/system` 的模块需要 metamodule（meta-overlayfs）。
+3. 看模块目录里的 `disable`、`skip_mount` 标记有没有被误创建。
 
-Yes. KernelSU requires an unlocked bootloader.
+## 网络隔离没效果
 
-## Does KernelSU support modules?
+- 确认模式是「仅指定应用」且应用已勾选、并且点了「应用配置」。
+- 应用如果走 `AF_PACKET` 或已经被系统代理（VPN）接管，不在拦截范围。
+- `dmesg | grep netisolate` 有 `blocked connect` 说明拦到了；没有就是没命中目标 uid。
 
-Yes, most Magisk modules work on KernelSU. However, if your module needs to modify `/system` files, you need to install a [metamodule](metamodule.md) (such as `meta-overlayfs`). Other module features work without a metamodule. Check [Module guide](module.md) for more info.
+## UTS 改完 `uname -r` 变了，但 `/proc` 没变
 
-## Does KernelSU support Xposed?
+这是设计如此：只拦 `uname(2)`，不动 namespace。详见 [UTS 视图](/guide/uts)。
 
-Yes, you can use LSPosed (or other modern Xposed derivative) with [ZygiskNext](https://github.com/Dr-TSNG/ZygiskNext).
+## 重启后 root 没了
 
-## Does KernelSU support Zygisk?
+越狱模式不持久，这是预期行为。内核模块没有写进 boot 分区，重启后需要重新激活。
 
-KernelSU has no built-in Zygisk support, but you can use a module like [ZygiskNext](https://github.com/Dr-TSNG/ZygiskNext) to support it.
+## 会不会把手机变砖
 
-## Is KernelSU compatible with Magisk?
+提权失败只会停在那一步，不会写 boot / system。真正的风险来自**模块本身**，所以：
 
-KernelSU's module system conflicts with Magisk's magic mount. If any module is enabled in KernelSU, Magisk will stop working entirely.
+- 分区保护在越狱模式下强制开启；
+- 装不认识的模块前先做一次备份（设置里的「备份与恢复」）；
+- 出问题先进安全模式（管理器里有入口）或卸载对应模块。
 
-However, if you only use the `su` of KernelSU, it will work well with Magisk. KernelSU modifies the `kernel`, while Magisk modifies the `ramdisk`, allowing both to work together.
+## 支持哪些机型
 
-## Will KernelSU substitute Magisk?
-
-No. Replacing Magisk isn't our goal. Magisk is already an excellent userspace root solution. KernelSU focuses on exposing kernel interfaces to users instead of supplanting Magisk.
-
-## Can KernelSU support non-GKI devices?
-
-It's possible. But you should download the kernel source, integrate KernelSU into the source tree, and compile the kernel yourself.
-
-## Can KernelSU support devices below Android 12?
-
-It's the device's kernel that affects KernelSU's compatibility, and it has nothing to do with the Android version. The only restriction is that devices launched with Android 12 must have a kernel version of 5.10+ (GKI devices). So:
-
-1. Devices launched with Android 12 must be supported.
-2. Devices with an older kernel (some devices with Android 12 also have the older kernel) are compatible (you should build kernel yourself).
-
-## Can KernelSU support old kernel?
-
-It's possible. KernelSU is backported to kernel 4.14 now. For older kernels, you need to backport it manually, and PRs are always welcome!
-
-## How to integrate KernelSU for an older kernel?
-
-Please check the [Integrate for non-GKI devices](how-to-integrate-for-non-gki) guide.
-
-## Why my Android version is 13, and the kernel shows "android12-5.10"?
-
-The kernel version has nothing to do with the Android version. If you need to flash kernel, always use the kernel version; the Android version isn't as important.
-
-## I'm GKI 1.0, can I use this?
-
-GKI 1.0 is completely different from GKI 2.0, you must compile kernel by yourself.
-
-## How can I make `/system` RW?
-
-We don't recommend that you modify the system partition directly. Please check [Module guide](module.md) to modify it systemlessly. If you insist on doing this, check [magisk_overlayfs](https://github.com/HuskyDG/magic_overlayfs).
-
-## Can KernelSU modify hosts? How can I use AdAway？
-
-Of course. But KernelSU doesn't have built-in hosts support, you can install a module like [systemless-hosts](https://github.com/symbuzzer/systemless-hosts-KernelSU-module) to do it.
-
-## Why aren't my modules working after fresh install?
-
-If your modules need to modify `/system` files, you need to install a [metamodule](metamodule.md) to mount the `system` directory. Other module features (scripts, sepolicy, system.prop) work without a metamodule.
-
-**Solution**: See the [Metamodule Guide](metamodule.md) for installation instructions.
-
-## What is a metamodule and why do I need one?
-
-A metamodule is a special module that provides infrastructure for mounting regular modules. See the [Metamodule Guide](metamodule.md) for a complete explanation.
+只要求内核版本落在两条漏洞链的区间内。具体到机型的兼容性请以实际测试为准 ——
+同一型号不同系统版本的补丁状态可能不同。

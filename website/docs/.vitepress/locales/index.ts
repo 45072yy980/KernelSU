@@ -1,62 +1,52 @@
 import { defineConfig } from 'vitepress'
-import en from './en'
-import zh_CN from './zh_CN'
-import zh_TW from './zh_TW'
-import vi_VN from './vi_VN'
-import id_ID from './id_ID'
-import ja_JP from './ja_JP'
-import ru_RU from './ru_RU'
-import pt_BR from './pt_BR'
 
 export default defineConfig({
   locales: {
     root: {
-      label: 'English',
-      lang: en.lang,
-      themeConfig: en.themeConfig,
-      description: en.description
-    },
-    zh_CN: {
       label: '简体中文',
-      lang: zh_CN.lang,
-      themeConfig: zh_CN.themeConfig,
-      description: zh_CN.description
+      lang: 'zh-CN',
+      description: '不用解锁 Bootloader 的 KernelSU 分支：靠漏洞把内核模块挂进正在运行的系统。',
+      themeConfig: {
+        nav: [{ text: '指南', link: '/guide/what-is-diksu' }],
+
+        lastUpdatedText: '最后更新',
+
+        sidebar: {
+          '/guide/': [
+            {
+              text: '入门',
+              items: [
+                { text: 'DikSU 是什么', link: '/guide/what-is-diksu' },
+                { text: '越狱模式', link: '/guide/jailbreak' },
+              ],
+            },
+            {
+              text: '特性',
+              items: [
+                { text: 'UTS 视图', link: '/guide/uts' },
+                { text: '网络隔离', link: '/guide/netisolate' },
+                { text: 'SUSFS', link: '/guide/susfs' },
+              ],
+            },
+            {
+              text: '其它',
+              items: [{ text: '常见问题', link: '/guide/faq' }],
+            },
+          ],
+        },
+
+        socialLinks: [{ icon: 'github', link: 'https://github.com/45072yy980/KernelSU' }],
+
+        footer: {
+          message: 'GPL-3.0 授权',
+          copyright: 'Copyright © DikSU',
+        },
+
+        editLink: {
+          pattern: 'https://github.com/45072yy980/KernelSU/edit/main/website/docs/:path',
+          text: '在 GitHub 上编辑此页',
+        },
+      },
     },
-    zh_TW: {
-      label: '繁體中文',
-      lang: zh_TW.lang,
-      themeConfig: zh_TW.themeConfig,
-      description: zh_TW.description
-    },
-    ja_JP: {
-      label: '日本語',
-      lang: ja_JP.lang,
-      themeConfig: ja_JP.themeConfig,
-      description: ja_JP.description
-    },
-    vi_VN: {
-      label: 'Tiếng Việt',
-      lang: vi_VN.lang,
-      themeConfig: vi_VN.themeConfig,
-      description: vi_VN.description
-    },
-    id_ID: {
-      label: 'Bahasa',
-      lang: id_ID.lang,
-      themeConfig: id_ID.themeConfig,
-      description: id_ID.description
-    },
-    ru_RU: {
-      label: 'Русский',
-      lang: ru_RU.lang,
-      themeConfig: ru_RU.themeConfig,
-      description: ru_RU.description
-    },
-    pt_BR: {
-      label: 'Português (Brasil)',
-      lang: pt_BR.lang,
-      themeConfig: pt_BR.themeConfig,
-      description: pt_BR.description
-    }
-  }
+  },
 })
