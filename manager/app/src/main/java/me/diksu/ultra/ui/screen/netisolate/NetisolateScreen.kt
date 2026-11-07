@@ -79,7 +79,10 @@ class NetisolateViewModel : ViewModel() {
             _state.update { it.copy(loading = true) }
             val remote = withContext(Dispatchers.IO) { repository.read() }
             val apps = withContext(Dispatchers.IO) { loadUserApps() }
-            _state.update { it.copy(loading = false, config = remote ?: NetisolateConfig(), apps = apps) }
+            // 读不到（老内核没有这个 ioctl）就别假装支持：supported=false 会显示提示条，
+            // 免得用户以为能开、点「应用配置」才吃一个报错。
+            val config = remote ?: NetisolateConfig(supported = false)
+            _state.update { it.copy(loading = false, config = config, apps = apps) }
         }
     }
 
