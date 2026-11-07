@@ -67,6 +67,11 @@ sealed interface Route : NavKey, Parcelable {
     @Serializable
     data object Netisolate : Route
 
+    /** 维护合集：重载模块与两种软重启。 */
+    @Parcelize
+    @Serializable
+    data object Maintenance : Route
+
     /** The third-party library list the AboutLibraries plugin generates at build time. */
     @Parcelize
     @Serializable

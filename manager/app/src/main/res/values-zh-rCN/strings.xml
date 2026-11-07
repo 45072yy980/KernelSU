@@ -723,11 +723,13 @@
     <string name="uts_title">UTS 视图</string>
     <string name="uts_summary">按应用伪装 uname(2) 的返回值</string>
     <string name="uts_note_title">生效范围</string>
-    <string name="uts_note_body">只改写 uname(2) 的返回值，不改它背后的文件。/proc/sys/kernel/{ostype,osrelease,version,hostname} 与 sysfs 仍是真值，直接读这些的应用不会被伪装。</string>
+    <string name="uts_note_body">只改写 uname(2) 的返回值。</string>
+    <string name="uts_note_limit">直接读 /proc 或 sysfs 的应用看到的仍是真值。</string>
     <string name="netisolate_title">网络隔离</string>
     <string name="netisolate_summary">让选中的应用连不上外网</string>
     <string name="netisolate_note_title">生效方式</string>
-    <string name="netisolate_note_body">被选中的应用调用 connect() 时直接拿到 EACCES，连接不会离开设备。只过滤 AF_INET/AF_INET6 的 connect：本地 socket、走 IPC 的域名解析、以及不 connect 直接 sendto 的 UDP 不受影响。系统应用永远不在名单里——拦了等于把手机自己断网。</string>
+    <string name="netisolate_note_body">被选中的应用连外网会直接失败（connect 返回 EACCES）。</string>
+    <string name="netisolate_note_limit">本地 socket 照常；不 connect 直接 sendto 的 UDP 目前拦不住。</string>
     <string name="netisolate_mode">模式</string>
     <string name="netisolate_mode_off">关闭</string>
     <string name="netisolate_mode_selected">仅指定应用</string>
@@ -743,6 +745,10 @@
     <string name="netisolate_applied">已应用</string>
     <string name="netisolate_unsupported">当前内核不支持</string>
     <string name="netisolate_unsupported_summary">socket_connect 钩子没装上，需要更新内核模块。</string>
+    <string name="maintenance_title">维护</string>
+    <string name="maintenance_summary">重载模块、软重启与隐藏软重启</string>
+    <string name="maintenance_group_actions">操作</string>
+    <string name="maintenance_group_note">三项都直接作用于当前系统；软重启只重跑开机流程，不是完整重启。</string>
     <string name="uts_mode">模式</string>
     <string name="uts_mode_off">关闭</string>
     <string name="uts_mode_global">全局生效</string>

@@ -760,11 +760,13 @@
     <string name="uts_title">UTS view</string>
     <string name="uts_summary">Spoof uname(2), globally or for selected apps</string>
     <string name="uts_note_title">Scope</string>
-    <string name="uts_note_body">Only the return value of uname(2) is rewritten, never the files behind it. /proc/sys/kernel/{ostype,osrelease,version,hostname} and sysfs still report the real values, so anything reading those will not be spoofed.</string>
+    <string name="uts_note_body">Only the return value of uname(2) is rewritten.</string>
+    <string name="uts_note_limit">Anything reading /proc or sysfs still sees the real values.</string>
     <string name="netisolate_title">Network isolation</string>
     <string name="netisolate_summary">Block outbound connections for selected apps</string>
     <string name="netisolate_note_title">What this does</string>
-    <string name="netisolate_note_body">A blocked app gets EACCES from connect(), so the connection never leaves the device. Only AF_INET/AF_INET6 connect is filtered: local sockets, DNS over IPC and UDP sent with sendto() without connect still work. System apps are never targeted - cutting them off would take the phone down with them.</string>
+    <string name="netisolate_note_body">A blocked app cannot reach the network: connect() fails with EACCES.</string>
+    <string name="netisolate_note_limit">Local sockets still work; UDP sent with sendto and no connect is not covered yet.</string>
     <string name="netisolate_mode">Mode</string>
     <string name="netisolate_mode_off">Off</string>
     <string name="netisolate_mode_selected">Selected apps</string>
@@ -780,6 +782,10 @@
     <string name="netisolate_applied">Applied</string>
     <string name="netisolate_unsupported">This kernel does not support it</string>
     <string name="netisolate_unsupported_summary">The socket_connect hook could not be installed. Update the kernel module.</string>
+    <string name="maintenance_title">Maintenance</string>
+    <string name="maintenance_summary">Reload modules, soft reboot, hidden reboot</string>
+    <string name="maintenance_group_actions">Actions</string>
+    <string name="maintenance_group_note">These run against the live system. A soft reboot reruns the boot pipeline without a full restart.</string>
     <string name="uts_mode">Mode</string>
     <string name="uts_mode_off">Off</string>
     <string name="uts_mode_global">All processes</string>

@@ -37,6 +37,7 @@ import me.diksu.ultra.ui.component.material.TopBarBackButton
 import me.diksu.ultra.ui.isMiuixFamily
 import me.diksu.ultra.ui.navigation3.LocalNavigator
 import me.diksu.ultra.ui.screen.susfs.SusfsCard
+import me.diksu.ultra.ui.screen.susfs.SusfsNote
 import me.diksu.ultra.ui.screen.susfs.SusfsRow
 import me.diksu.ultra.ui.screen.susfs.SusfsSwitchRow
 import me.diksu.ultra.ui.screen.susfs.SusfsText
@@ -131,8 +132,9 @@ fun NetisolateScreen() {
                 .padding(horizontal = 12.dp),
         ) {
             SusfsCard(title = stringResource(R.string.netisolate_note_title)) {
-                Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-                    SusfsText(text = stringResource(R.string.netisolate_note_body), size = 13)
+                Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+                    SusfsNote(text = stringResource(R.string.netisolate_note_body))
+                    SusfsNote(text = stringResource(R.string.netisolate_note_limit), muted = true)
                 }
             }
 

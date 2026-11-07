@@ -72,12 +72,28 @@ private fun errorColor(): Color =
 
 /** 统一的文字：字号与颜色都跟着皮肤走。 */
 @Composable
-fun SusfsText(text: String, size: Int = 15, color: Color? = null) {
+fun SusfsText(text: String, size: Int = 15, color: Color? = null, modifier: Modifier = Modifier) {
     if (miuixSkin()) {
-        MiuixText(text = text, fontSize = size.sp, color = color ?: textColor())
+        MiuixText(text = text, fontSize = size.sp, color = color ?: textColor(), modifier = modifier)
     } else {
-        Text(text = text, fontSize = size.sp, color = color ?: textColor())
+        Text(text = text, fontSize = size.sp, color = color ?: textColor(), modifier = modifier)
     }
+}
+
+/**
+ * 页面顶部的说明文字。
+ *
+ * 一整段长句压在卡片里很难读：miuix 的 Text 不吃行距参数，所以这里按「一行一句」排，
+ * 句间用 padding 拉开；[muted] 为真时用次要色，把限制条件弱化成补充说明。
+ */
+@Composable
+fun SusfsNote(text: String, muted: Boolean = false, modifier: Modifier = Modifier) {
+    SusfsText(
+        text = text,
+        size = 13,
+        color = if (muted) mutedColor() else textColor(),
+        modifier = modifier.padding(bottom = 6.dp),
+    )
 }
 
 /**

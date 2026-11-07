@@ -11,6 +11,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Calculate
+import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material.icons.filled.VisibilityOff
@@ -38,13 +39,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.dropUnlessResumed
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.diksu.ultra.Natives
 import me.diksu.ultra.R
-import me.diksu.ultra.ui.util.reboot
-import me.diksu.ultra.ui.util.reloadModules
 import me.diksu.ultra.ui.LocalUiMode
 import me.diksu.ultra.ui.UiMode
 import me.diksu.ultra.ui.component.material.SegmentedColumn
@@ -81,26 +79,12 @@ fun OtherFeaturesScreen() {
     val onOpenBackup = dropUnlessResumed { navigator.push(Route.Backup) }
     val onOpenUts = dropUnlessResumed { navigator.push(Route.Uts) }
     val onOpenNetisolate = dropUnlessResumed { navigator.push(Route.Netisolate) }
+    val onOpenMaintenance = dropUnlessResumed { navigator.push(Route.Maintenance) }
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    // 原来「维护工具」整页只有这三件事，页签去掉之后直接放这里：
-    // 重载模块是功能操作，两个软重启是打扰性操作，所以重启一律先确认。
-    var pendingReboot by remember { mutableStateOf(RebootKind.None) }
-    val onReloadModules: () -> Unit = {
-        scope.launch {
-            val ok = withContext(Dispatchers.IO) { reloadModules() }
-            val text = if (ok == 3) {
-                context.getString(R.string.maintenance_log_reload_ok)
-            } else {
-                context.getString(R.string.maintenance_log_reload_partial, ok)
-            }
-            Toast.makeText(context, text, Toast.LENGTH_SHORT).show()
-        }
-    }
-    val onSoftReboot: () -> Unit = { pendingReboot = RebootKind.Plain }
-    val onSoftRebootHidden: () -> Unit = { pendingReboot = RebootKind.Hidden }
+    // 维护三项（重载模块、两个软重启）已收进 Route.Maintenance 子页面。
     // System-partition guard: forced on (locked) in jailbreak/late-load mode,
     // otherwise it follows the user setting.
     val isLateLoad = Natives.isLateLoadMode
@@ -240,9 +224,7 @@ fun OtherFeaturesScreen() {
             onOpenBackup = onOpenBackup,
             onOpenUts = onOpenUts,
             onOpenNetisolate = onOpenNetisolate,
-            onReloadModules = onReloadModules,
-            onSoftReboot = onSoftReboot,
-            onSoftRebootHidden = onSoftRebootHidden,
+            onOpenMaintenance = onOpenMaintenance,
         )
         UiMode.Miuix, UiMode.MiuixStock -> OtherFeaturesMiuix(
             onBack = onBack,
@@ -260,9 +242,7 @@ fun OtherFeaturesScreen() {
             onOpenBackup = onOpenBackup,
             onOpenUts = onOpenUts,
             onOpenNetisolate = onOpenNetisolate,
-            onReloadModules = onReloadModules,
-            onSoftReboot = onSoftReboot,
-            onSoftRebootHidden = onSoftRebootHidden,
+            onOpenMaintenance = onOpenMaintenance,
         )
     }
 
@@ -272,38 +252,6 @@ fun OtherFeaturesScreen() {
             phase = open,
             onDismiss = { phase = null },
             onRun = onRunHideAppList,
-        )
-    }
-
-    if (pendingReboot != RebootKind.None) {
-        val hidden = pendingReboot == RebootKind.Hidden
-        val done = {
-            pendingReboot = RebootKind.None
-            scope.launch {
-                // 隐藏重启：先把开关写进内核，再重启；写失败也照常重启，
-                // 只是这一趟回来管理器仍然可见。
-                if (hidden && stealthSupported) {
-                    withContext(Dispatchers.IO) { setStealthEnabled(true) }
-                }
-                delay(1200)
-                withContext(Dispatchers.IO) { reboot("soft_reboot") }
-            }
-            Unit
-        }
-        AlertDialog(
-            onDismissRequest = { pendingReboot = RebootKind.None },
-            title = { Text(stringResource(R.string.maintenance_confirm_title)) },
-            text = { Text(stringResource(R.string.maintenance_confirm_message)) },
-            confirmButton = {
-                TextButton(onClick = done) {
-                    Text(stringResource(R.string.maintenance_confirm_ok))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { pendingReboot = RebootKind.None }) {
-                    Text(stringResource(R.string.maintenance_confirm_cancel))
-                }
-            },
         )
     }
 
@@ -358,9 +306,7 @@ private fun OtherFeaturesMaterial(
     onOpenBackup: () -> Unit = {},
     onOpenUts: () -> Unit = {},
     onOpenNetisolate: () -> Unit = {},
-    onReloadModules: () -> Unit = {},
-    onSoftReboot: () -> Unit = {},
-    onSoftRebootHidden: () -> Unit = {},
+    onOpenMaintenance: () -> Unit = {},
 ) {
     Scaffold(
         topBar = {
@@ -503,29 +449,10 @@ private fun OtherFeaturesMaterial(
                     }
                     add {
                         SegmentedListItem(
-                            onClick = onReloadModules,
-                            headlineContent = { Text(stringResource(R.string.maintenance_reload_modules)) },
-                            supportingContent = {
-                                Text(stringResource(R.string.maintenance_reload_modules_summary))
-                            },
-                        )
-                    }
-                    add {
-                        SegmentedListItem(
-                            onClick = onSoftReboot,
-                            headlineContent = { Text(stringResource(R.string.maintenance_soft_reboot)) },
-                            supportingContent = {
-                                Text(stringResource(R.string.maintenance_soft_reboot_summary))
-                            },
-                        )
-                    }
-                    add {
-                        SegmentedListItem(
-                            onClick = onSoftRebootHidden,
-                            headlineContent = { Text(stringResource(R.string.maintenance_soft_reboot_hidden)) },
-                            supportingContent = {
-                                Text(stringResource(R.string.maintenance_soft_reboot_hidden_summary))
-                            },
+                            onClick = onOpenMaintenance,
+                            headlineContent = { Text(stringResource(R.string.maintenance_title)) },
+                            supportingContent = { Text(stringResource(R.string.maintenance_summary)) },
+                            leadingContent = { Icon(Icons.Filled.RestartAlt, null) },
                         )
                     }
                 },
@@ -552,9 +479,7 @@ private fun OtherFeaturesMiuix(
     onOpenBackup: () -> Unit = {},
     onOpenUts: () -> Unit = {},
     onOpenNetisolate: () -> Unit = {},
-    onReloadModules: () -> Unit = {},
-    onSoftReboot: () -> Unit = {},
-    onSoftRebootHidden: () -> Unit = {},
+    onOpenMaintenance: () -> Unit = {},
 ) {
     MiuixScaffold(
         topBar = {
@@ -691,6 +616,14 @@ private fun OtherFeaturesMiuix(
                     ArrowPreference(
                         title = stringResource(R.string.uts_title),
                         summary = stringResource(R.string.uts_summary),
+                        startAction = {
+                            MiuixIcon(
+                                imageVector = Icons.Filled.Terminal,
+                                contentDescription = null,
+                                tint = colorScheme.onBackground,
+                                modifier = Modifier.padding(end = 6.dp),
+                            )
+                        },
                         onClick = onOpenUts,
                     )
                     ArrowPreference(
@@ -709,32 +642,31 @@ private fun OtherFeaturesMiuix(
                     ArrowPreference(
                         title = stringResource(R.string.backup_title),
                         summary = stringResource(R.string.backup_summary),
+                        startAction = {
+                            MiuixIcon(
+                                imageVector = Icons.Filled.Security,
+                                contentDescription = null,
+                                tint = colorScheme.onBackground,
+                                modifier = Modifier.padding(end = 6.dp),
+                            )
+                        },
                         onClick = onOpenBackup,
                     )
                     ArrowPreference(
-                        title = stringResource(R.string.maintenance_reload_modules),
-                        summary = stringResource(R.string.maintenance_reload_modules_summary),
-                        onClick = onReloadModules,
-                    )
-                    ArrowPreference(
-                        title = stringResource(R.string.maintenance_soft_reboot),
-                        summary = stringResource(R.string.maintenance_soft_reboot_summary),
-                        onClick = onSoftReboot,
-                    )
-                    ArrowPreference(
-                        title = stringResource(R.string.maintenance_soft_reboot_hidden),
-                        summary = if (stealthSupported) {
-                            stringResource(R.string.maintenance_soft_reboot_hidden_summary)
-                        } else {
-                            stringResource(R.string.maintenance_soft_reboot_hidden_summary_unsupported)
+                        title = stringResource(R.string.maintenance_title),
+                        summary = stringResource(R.string.maintenance_summary),
+                        startAction = {
+                            MiuixIcon(
+                                imageVector = Icons.Filled.RestartAlt,
+                                contentDescription = null,
+                                tint = colorScheme.onBackground,
+                                modifier = Modifier.padding(end = 6.dp),
+                            )
                         },
-                        onClick = onSoftRebootHidden,
+                        onClick = onOpenMaintenance,
                     )
                 }
             }
         }
     }
 }
-
-/** 两个软重启之间只差一件事：重启前先把隐藏模式打开。 */
-private enum class RebootKind { None, Plain, Hidden }

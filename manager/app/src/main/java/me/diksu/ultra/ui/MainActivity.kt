@@ -100,6 +100,7 @@ import me.diksu.ultra.ui.screen.settings.SettingPager
 import me.diksu.ultra.ui.screen.settings.AutoEscalationScreen
 import me.diksu.ultra.ui.screen.settings.BasicSettingsScreen
 import me.diksu.ultra.ui.screen.settings.KeymintScreen
+import me.diksu.ultra.ui.screen.settings.MaintenanceScreen
 import me.diksu.ultra.ui.screen.settings.OtherFeaturesScreen
 import me.diksu.ultra.ui.screen.susfs.SusfsScreen
 import me.diksu.ultra.ui.screen.shizuku.ShizukuScreen
@@ -350,6 +351,7 @@ open class MainActivity : ComponentActivity() {
                             entry<Route.Backup>(swipeDismiss = swipeDismiss) { BackupScreen() }
                             entry<Route.Uts>(swipeDismiss = swipeDismiss) { UtsScreen() }
                             entry<Route.Netisolate>(swipeDismiss = swipeDismiss) { NetisolateScreen() }
+                            entry<Route.Maintenance>(swipeDismiss = swipeDismiss) { MaintenanceScreen() }
                             entry<Route.OpenSourceLicense>(swipeDismiss = swipeDismiss) {
                                 OpenSourceLicenseScreen()
                             }
