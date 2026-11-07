@@ -36,8 +36,6 @@ import me.diksu.ultra.ui.util.LkmSelection
 import me.diksu.ultra.ui.util.getAvailablePartitions
 import me.diksu.ultra.ui.util.getCurrentKmi
 import me.diksu.ultra.ui.util.getDefaultPartition
-import me.diksu.ultra.ui.util.getLoadedBlockableModules
-import me.diksu.ultra.ui.util.isBlockModulesValid
 import me.diksu.ultra.ui.util.getSlotSuffix
 import me.diksu.ultra.ui.util.isAbDevice
 import me.diksu.ultra.ui.util.probeRemoteBootPartitions
