@@ -27,9 +27,10 @@
  * 只拦 AF_INET/AF_INET6 的 connect，AF_UNIX、AF_NETLINK 一律放行 —— 拦掉它们会让应用
  * 连本地 Binder/日志都发不出去，崩溃点在使用者手里，很难排查。
  *
- * 与 FinaSU 的差异：它那套还管 strict socket（连 socket_create 都拦）与 sendmsg，这里
- * 只做 connect。UDP 不 connect 直接 sendto 的流量拦不住，这是本版已知的缺口，
- * 管理器页面的说明里写清楚了。
+ * 两个钩子：socket_connect 管 TCP 与已连接 UDP；socket_sendmsg 补上「不 connect 直接
+ * sendto」的数据报（msg_name 非空才算，已连接的 send 走的是 socket 里记的地址）。
+ * 与 FinaSU 的差异只剩 strict socket（连 socket_create 都拦）没做 —— 那个会让应用连
+ * 本地服务都建不起来，收益远小于误伤。
  *
  * 热点路径：只做一次原子读；真正要查表时才进 RCU 读区，配置更新走「换指针 + synchronize_rcu」。
  */
@@ -38,12 +39,17 @@ static struct ksu_netisolate_config __rcu *ni_config;
 static DEFINE_MUTEX(ni_config_lock);
 static atomic_t ni_active = ATOMIC_INIT(0);
 static bool ni_supported;
+static bool ni_sendmsg_installed;
 static int (*ni_connect_original)(struct socket *sock, struct sockaddr *address, int addrlen);
+static int (*ni_sendmsg_original)(struct socket *sock, struct msghdr *msg, int size);
 
 static int ksu_ni_socket_connect(struct socket *sock, struct sockaddr *address, int addrlen);
+static int ksu_ni_socket_sendmsg(struct socket *sock, struct msghdr *msg, int size);
 
 static struct ksu_lsm_hook ni_connect_hook =
     KSU_LSM_HOOK_INIT(socket_connect, "selinux_socket_connect", ksu_ni_socket_connect, 0);
+static struct ksu_lsm_hook ni_sendmsg_hook =
+    KSU_LSM_HOOK_INIT(socket_sendmsg, "selinux_socket_sendmsg", ksu_ni_socket_sendmsg, 0);
 
 static int validate_config(const struct ksu_netisolate_config *cfg)
 {
@@ -230,6 +236,55 @@ static int ksu_ni_socket_connect(struct socket *sock, struct sockaddr *address, 
     return netisolate_call_original(sock, address, addrlen);
 }
 
+static int netisolate_call_sendmsg_original(struct socket *sock, struct msghdr *msg, int size)
+{
+    int (*original)(struct socket *sock, struct msghdr *msg, int size) = READ_ONCE(ni_sendmsg_original);
+
+    return original ? original(sock, msg, size) : 0;
+}
+
+/*
+ * 只处理「未连接的数据报」：msg_name 为空说明地址在 socket 里（connect 阶段已经拦过），
+ * 再拦一次会把已放行的连接也打回去。
+ */
+static int ksu_ni_socket_sendmsg(struct socket *sock, struct msghdr *msg, int size)
+{
+    struct ksu_netisolate_config *config;
+    u16 family;
+    u32 uid;
+    bool blocked = false;
+
+    if (!atomic_read(&ni_active))
+        return netisolate_call_sendmsg_original(sock, msg, size);
+
+    if (!sock || !sock->sk || !msg || !msg->msg_name || msg->msg_namelen <= 0)
+        return netisolate_call_sendmsg_original(sock, msg, size);
+
+    family = READ_ONCE(sock->sk->sk_family);
+    if (family != AF_INET && family != AF_INET6)
+        return netisolate_call_sendmsg_original(sock, msg, size);
+
+    rcu_read_lock();
+    config = rcu_dereference(ni_config);
+    if (!config || config->mode != KSU_NETISOLATE_MODE_SELECTED) {
+        rcu_read_unlock();
+        return netisolate_call_sendmsg_original(sock, msg, size);
+    }
+
+    uid = current_uid().val;
+    if (uid_is_target(config, uid) &&
+        !netisolate_address_allowed(config, family, (const struct sockaddr *)msg->msg_name, msg->msg_namelen))
+        blocked = true;
+    rcu_read_unlock();
+
+    if (blocked) {
+        pr_info_ratelimited("netisolate: blocked sendmsg for uid %u\n", uid);
+        return -EACCES;
+    }
+
+    return netisolate_call_sendmsg_original(sock, msg, size);
+}
+
 int ksu_netisolate_get(struct ksu_netisolate_config __user *arg)
 {
     struct ksu_netisolate_config snapshot;
@@ -297,6 +352,8 @@ int ksu_netisolate_init(void)
 
     ni_config = NULL;
     ni_connect_original = NULL;
+    ni_sendmsg_original = NULL;
+    ni_sendmsg_installed = false;
     ni_supported = false;
     atomic_set(&ni_active, 0);
 
@@ -310,6 +367,16 @@ int ksu_netisolate_init(void)
     ni_supported = true;
     pr_info("netisolate: socket_connect hook installed\n");
 
+    /* sendmsg 只是补 UDP sendto 的缺口：装不上就退回「只拦 connect」，不算不支持。 */
+    ret = ksu_register_lsm_hook(&ni_sendmsg_hook);
+    if (ret) {
+        pr_warn("netisolate: socket_sendmsg hook unavailable: %d (connect-only)\n", ret);
+    } else {
+        ni_sendmsg_original = (int (*)(struct socket *, struct msghdr *, int))ni_sendmsg_hook.original;
+        ni_sendmsg_installed = true;
+        pr_info("netisolate: socket_sendmsg hook installed\n");
+    }
+
     return 0;
 }
 
@@ -319,9 +386,14 @@ void ksu_netisolate_exit(void)
 
     atomic_set(&ni_active, 0);
 
+    if (ni_sendmsg_installed)
+        ksu_unregister_lsm_hook(&ni_sendmsg_hook);
+
     if (ni_supported)
         ksu_unregister_lsm_hook(&ni_connect_hook);
 
+    ni_sendmsg_installed = false;
+    ni_sendmsg_original = NULL;
     ni_supported = false;
     ni_connect_original = NULL;
 

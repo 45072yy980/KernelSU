@@ -724,7 +724,7 @@
     <string name="netisolate_summary">让选中的应用连不上外网</string>
     <string name="netisolate_note_title">生效方式</string>
     <string name="netisolate_note_body">被选中的应用连外网会直接失败（connect 返回 EACCES）。</string>
-    <string name="netisolate_note_limit">本地 socket 照常；不 connect 直接 sendto 的 UDP 目前拦不住。</string>
+    <string name="netisolate_note_limit">本地 socket 与系统解析不受影响；原始套接字（AF_PACKET）不在拦截范围。</string>
     <string name="netisolate_mode">模式</string>
     <string name="netisolate_mode_off">关闭</string>
     <string name="netisolate_mode_selected">仅指定应用</string>

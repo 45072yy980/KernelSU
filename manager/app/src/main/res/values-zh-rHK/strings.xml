@@ -488,7 +488,7 @@
     <string name="netisolate_summary">讓選中的應用程式連不上外網</string>
     <string name="netisolate_note_title">生效方式</string>
     <string name="netisolate_note_body">被選中的應用程式連外網會直接失敗（connect 回傳 EACCES）。</string>
-    <string name="netisolate_note_limit">本地 socket 照常；不 connect 直接 sendto 的 UDP 目前攔不住。</string>
+    <string name="netisolate_note_limit">本地 socket 與系統解析不受影響；原始套接字（AF_PACKET）不在攔截範圍。</string>
     <string name="netisolate_mode">模式</string>
     <string name="netisolate_mode_off">關閉</string>
     <string name="netisolate_mode_selected">僅指定應用程式</string>

@@ -4,6 +4,8 @@
 #include <linux/kernel.h>
 #include <linux/mutex.h>
 #include <linux/printk.h>
+#include <linux/rcupdate.h>
+#include <linux/slab.h>
 #include <linux/ptrace.h>
 #include <linux/sched.h>
 #include <linux/string.h>
@@ -25,7 +27,7 @@
  * uname(2)，好处是不动 namespace、没有崩溃风险，代价是直接读 /proc 仍能看到真值。
  */
 
-static struct ksu_uts_config uts_config;
+static struct ksu_uts_config __rcu *uts_config;
 static DEFINE_MUTEX(uts_config_lock);
 static syscall_fn_t uname_original;
 
@@ -87,13 +89,18 @@ static bool uid_is_target(u32 uid)
 int ksu_uts_view_get(struct ksu_uts_config __user *arg)
 {
     struct ksu_uts_config snapshot;
+    struct ksu_uts_config *config;
 
     if (!arg)
         return -EINVAL;
 
-    mutex_lock(&uts_config_lock);
-    snapshot = uts_config;
-    mutex_unlock(&uts_config_lock);
+    memset(&snapshot, 0, sizeof(snapshot));
+
+    rcu_read_lock();
+    config = rcu_dereference(uts_config);
+    if (config)
+        memcpy(&snapshot, config, sizeof(snapshot));
+    rcu_read_unlock();
 
     if (copy_to_user(arg, &snapshot, sizeof(snapshot)))
         return -EFAULT;
@@ -104,6 +111,7 @@ int ksu_uts_view_get(struct ksu_uts_config __user *arg)
 int ksu_uts_view_set(struct ksu_uts_config __user *arg)
 {
     struct ksu_uts_config incoming;
+    struct ksu_uts_config *config, *old;
     int ret;
 
     if (!arg)
@@ -116,9 +124,18 @@ int ksu_uts_view_set(struct ksu_uts_config __user *arg)
     if (ret)
         return ret;
 
+    config = kzalloc(sizeof(*config), GFP_KERNEL);
+    if (!config)
+        return -ENOMEM;
+
+    memcpy(config, &incoming, sizeof(*config));
+
     mutex_lock(&uts_config_lock);
-    uts_config = incoming;
+    old = rcu_replace_pointer(uts_config, config, true);
     mutex_unlock(&uts_config_lock);
+
+    synchronize_rcu();
+    kfree(old);
 
     pr_info("uts_view: mode=%u mask=0x%x targets=%u\n", incoming.mode, incoming.field_mask, incoming.target_count);
 
@@ -145,6 +162,7 @@ static void apply_fields(struct new_utsname *patched, const struct ksu_uts_confi
 static long ksu_uts_uname(const struct pt_regs *regs)
 {
     struct ksu_uts_config snapshot;
+    struct ksu_uts_config *config;
     struct new_utsname patched;
     struct new_utsname __user *name_user;
     u32 mode, field_mask;
@@ -162,15 +180,20 @@ static long ksu_uts_uname(const struct pt_regs *regs)
     if (!name_user)
         return 0;
 
-    mutex_lock(&uts_config_lock);
-    snapshot = uts_config;
+    rcu_read_lock();
+    config = rcu_dereference(uts_config);
+    if (!config) {
+        rcu_read_unlock();
+        return 0;
+    }
+    snapshot = *config;
     mode = snapshot.mode;
     field_mask = snapshot.field_mask;
     if (mode == KSU_UTS_MODE_SELECTED)
         targeted = uid_is_target(current_uid().val);
     else
         targeted = true;
-    mutex_unlock(&uts_config_lock);
+    rcu_read_unlock();
 
     if (mode == KSU_UTS_MODE_DISABLED || field_mask == 0 || !targeted)
         return 0;
@@ -189,8 +212,7 @@ static long ksu_uts_uname(const struct pt_regs *regs)
 
 int ksu_uts_view_init(void)
 {
-    memset(&uts_config, 0, sizeof(uts_config));
-    uts_config.mode = KSU_UTS_MODE_DISABLED;
+    uts_config = NULL;
     uname_original = NULL;
     ksu_syscall_table_hook(__NR_uname, ksu_uts_uname, &uname_original);
     pr_info("uts_view: uname hook installed\n");
@@ -199,6 +221,15 @@ int ksu_uts_view_init(void)
 
 void ksu_uts_view_exit(void)
 {
+    struct ksu_uts_config *old;
+
     ksu_syscall_table_unhook(__NR_uname);
     uname_original = NULL;
+
+    mutex_lock(&uts_config_lock);
+    old = rcu_replace_pointer(uts_config, NULL, true);
+    mutex_unlock(&uts_config_lock);
+
+    synchronize_rcu();
+    kfree(old);
 }

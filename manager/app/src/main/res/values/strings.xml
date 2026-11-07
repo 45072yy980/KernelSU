@@ -761,7 +761,7 @@
     <string name="netisolate_summary">Block outbound connections for selected apps</string>
     <string name="netisolate_note_title">What this does</string>
     <string name="netisolate_note_body">A blocked app cannot reach the network: connect() fails with EACCES.</string>
-    <string name="netisolate_note_limit">Local sockets still work; UDP sent with sendto and no connect is not covered yet.</string>
+    <string name="netisolate_note_limit">Local sockets still work; raw sockets (AF_PACKET) are not filtered.</string>
     <string name="netisolate_mode">Mode</string>
     <string name="netisolate_mode_off">Off</string>
     <string name="netisolate_mode_selected">Selected apps</string>

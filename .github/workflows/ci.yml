@@ -90,8 +90,15 @@ jobs:
           ignore_paths: ./userspace/ksud/src/installer.sh ./.github/scripts/setup-rust-build.sh ./manager/app/src/main/assets/hma-oss-config.sh
 
   ksud:
-    name: ksud (aarch64, cargo check)
+    # 两个 ABI 都要编：bindgen 会按目标平台的 char 有符号性生成不同类型
+    # （aarch64 是 [u8; N]、x86_64 是 [i8; N]），只编 aarch64 会把跨 ABI 的问题
+    # 一直留到 build-manager 的完整矩阵才暴露。
+    name: ksud (${{ matrix.target }}, cargo check)
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [aarch64-linux-android, x86_64-linux-android]
     steps:
       - uses: actions/checkout@v7
 
@@ -110,9 +117,9 @@ jobs:
         env:
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
         run: |
-          rustup target add aarch64-linux-android
-          source .github/scripts/setup-rust-build.sh aarch64-linux-android 26
-          cargo check --target aarch64-linux-android --release
+          rustup target add ${{ matrix.target }}
+          source .github/scripts/setup-rust-build.sh ${{ matrix.target }} 26
+          cargo check --target ${{ matrix.target }} --release
 
   manager:
     name: manager (kotlin compile)
