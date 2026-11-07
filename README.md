@@ -294,6 +294,28 @@ versionCode = major × 10000 + minor × 1000 + patch × 100 + tag 之后的提�
 - `kernel/Kbuild` 的 `KSU_EXPECTED_SIZE/HASH` 自基线起一直是上游官方证书，而本仓库用 `ksu-signing.jks` 签名。CI 会用 keytool 现算并覆盖，所以 CI 产物一直是对的；但**本地直接 `make -C kernel`** 编出来的 `.ko` 会认不出本管理器，表现为"模块能加载、su 能用、首页显示未安装"。
 - 默认值已改为仓库自带签名的实际值（799 / `b27c5a47…`），并注明 CI 覆盖链路。
 
+#### 内核：UTS 视图
+- 按 uid 伪装 `uname(2)` 的六个字段：关闭 / 全局 / 仅指定应用三种模式，最多 64 个目标。
+- 实现是替换 syscall 表里的 `__NR_uname`，不动 namespace —— 只影响 `uname(2)`，直接读 `/proc/sys/kernel/*` 与 sysfs 仍是真值，界面里写明了这一点。
+- 热路径走 RCU（读侧拷快照、写侧换指针 + `synchronize_rcu`），多个进程同时 `uname` 不排队。
+
+#### 内核：网络隔离
+- 按 uid 拒绝应用对外连接：挂 LSM 的 `socket_connect` 与 `socket_sendmsg`，后者只处理未连接数据报，堵住 UDP `sendto` 的漏。
+- 可放行回环与私网/链路本地；`AF_UNIX`、`AF_NETLINK` 从不拦，`AF_PACKET` 原始套接字不覆盖。
+- 被拦调用返回 `EACCES`，关回「关闭」立即恢复；钩子装不上时管理器显示「当前内核不支持」，不假装成功。
+
+#### 管理器：两个特性页
+- UTS 与网络隔离都按 Shizuku 页的骨架重做：`LazyColumn` + 小标题分组 + 状态卡，模式是单选行，应用选择带搜索、图标与已选计数。
+- 应用数量按内核上限截住（UTS 64 / 网络隔离 128），避免整份配置被 `-EINVAL` 拒掉。
+- 设置页「工具」组统一图标列；重载模块、软重启、隐藏软重启收进「维护」子页面。
+
+#### 上游同步
+- 合并 `tiann/KernelSU` 25 个提交（`96770dfb` → `730f6446`），其中最关键的是 6.6.144 的 `lsm_blob_sizes` 变动：改用 `vmlinux.btf` 查 `lbs_inode` 偏移，否则升级内核后会失效甚至 panic。
+- WebUI 新增 File / pm 接口与 BlobDownload；下载完成后可直接打开文件。
+
+#### 文档站
+- `website/` 换成 DikSU 自己的文档（越狱模式、UTS、网络隔离、SUSFS、FAQ），不再部署上游 KernelSU 文档镜像；部署在 GitHub Pages 的 `/KernelSU/` 子路径下。
+
 > 本轮未打 tag、未发布：版本号按"tag 之后提交数"递增，发版前需要先把 tag 打到最终 HEAD 或直接起 `4.1.1`。
 
 ### v4.1.0-ultra
