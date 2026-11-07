@@ -38,8 +38,7 @@ static int validate_config(const struct ksu_uts_config *cfg)
 {
     u32 i, j;
 
-    if (cfg->mode != KSU_UTS_MODE_DISABLED && cfg->mode != KSU_UTS_MODE_GLOBAL &&
-        cfg->mode != KSU_UTS_MODE_SELECTED)
+    if (cfg->mode != KSU_UTS_MODE_DISABLED && cfg->mode != KSU_UTS_MODE_GLOBAL && cfg->mode != KSU_UTS_MODE_SELECTED)
         return -EINVAL;
 
     if (cfg->field_mask & ~KSU_UTS_FIELD_VALID_MASK)
@@ -121,8 +120,7 @@ int ksu_uts_view_set(struct ksu_uts_config __user *arg)
     uts_config = incoming;
     mutex_unlock(&uts_config_lock);
 
-    pr_info("uts_view: mode=%u mask=0x%x targets=%u\n", incoming.mode, incoming.field_mask,
-            incoming.target_count);
+    pr_info("uts_view: mode=%u mask=0x%x targets=%u\n", incoming.mode, incoming.field_mask, incoming.target_count);
 
     return 0;
 }

@@ -66,11 +66,11 @@ mod sulog;
 #[cfg(target_os = "android")]
 mod susfs;
 #[cfg(target_os = "android")]
-mod uts;
-#[cfg(target_os = "android")]
 mod unload;
 #[cfg(target_os = "android")]
 mod utils;
+#[cfg(target_os = "android")]
+mod uts;
 mod webui;
 mod webui_apps;
 mod webui_files;

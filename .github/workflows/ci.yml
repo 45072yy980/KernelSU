@@ -118,7 +118,11 @@ jobs:
     name: manager (kotlin compile)
     runs-on: ubuntu-latest
     steps:
+      # Gradle 的 versionCode 要按 git tag 算，浅克隆会直接报 "No version tag found"
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
 
       - uses: actions/setup-java@v6
         with:
