@@ -75,12 +75,12 @@ static int validate_config(const struct ksu_uts_config *cfg)
     return 0;
 }
 
-static bool uid_is_target(u32 uid)
+static bool uid_is_target(const struct ksu_uts_config *cfg, u32 uid)
 {
     u32 i;
 
-    for (i = 0; i < uts_config.target_count; i++) {
-        if (uts_config.target_uids[i] == uid)
+    for (i = 0; i < cfg->target_count; i++) {
+        if (cfg->target_uids[i] == uid)
             return true;
     }
     return false;
@@ -190,7 +190,7 @@ static long ksu_uts_uname(const struct pt_regs *regs)
     mode = snapshot.mode;
     field_mask = snapshot.field_mask;
     if (mode == KSU_UTS_MODE_SELECTED)
-        targeted = uid_is_target(current_uid().val);
+        targeted = uid_is_target(config, current_uid().val);
     else
         targeted = true;
     rcu_read_unlock();
