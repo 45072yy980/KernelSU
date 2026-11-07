@@ -3,6 +3,8 @@
 //! 与 SuSFS 的 `set-uname` 不同：那个只能在打开 SuSFS 时用、且只有 release/version；
 //! 这里是内核自带特性，六个字段都能改，还能按 uid 只对指定应用生效。
 
+use std::ffi::c_char;
+
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
@@ -36,20 +38,22 @@ pub struct UtsConfig {
     pub domainname: String,
 }
 
-fn read_field(buf: &[u8]) -> String {
+// uapi 的 char 数组要用 c_char 接收：bindgen 按目标平台的 char 有符号性生成类型，
+// aarch64 是 [u8; 65]、x86_64 是 [i8; 65]，写死其中一种就只剩一个 ABI 能编过。
+fn read_field(buf: &[c_char]) -> String {
     let bytes: Vec<u8> = buf
         .iter()
-        .copied()
+        .map(|value| *value as u8)
         .take_while(|value| *value != 0)
         .collect();
     String::from_utf8_lossy(&bytes).into_owned()
 }
 
-fn write_field(buf: &mut [u8], value: &str) {
+fn write_field(buf: &mut [c_char], value: &str) {
     let bytes = value.as_bytes();
     let len = bytes.len().min(NAME_LEN - 1);
     for (index, slot) in buf.iter_mut().enumerate().take(NAME_LEN) {
-        *slot = if index < len { bytes[index] } else { 0 };
+        *slot = if index < len { bytes[index] as c_char } else { 0 };
     }
 }
 
