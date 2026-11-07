@@ -1,0 +1,122 @@
+/* DikSU 文档站主题：暗色为基调，绿色是品牌色。 */
+
+:root {
+  --vp-c-brand-1: #0f8a70;
+  --vp-c-brand-2: #12a184;
+  --vp-c-brand-3: #16b894;
+  --vp-c-brand-soft: rgba(18, 161, 132, 0.14);
+
+  --vp-c-bg: #f6f8f9;
+  --vp-c-bg-alt: #eef2f4;
+  --vp-c-bg-soft: #e9eef1;
+
+  --vp-home-hero-name-color: transparent;
+  --vp-home-hero-name-background: linear-gradient(120deg, #16b894 10%, #2f7fd6 90%);
+
+  --diksu-radius: 16px;
+  --diksu-border: 1px solid var(--vp-c-divider);
+  --diksu-shadow: 0 8px 28px rgba(15, 23, 42, 0.08);
+}
+
+.dark {
+  --vp-c-brand-1: #3ddc97;
+  --vp-c-brand-2: #34c98a;
+  --vp-c-brand-3: #2bb47c;
+  --vp-c-brand-soft: rgba(61, 220, 151, 0.14);
+
+  --vp-c-bg: #10141a;
+  --vp-c-bg-alt: #0c1015;
+  --vp-c-bg-soft: #161c24;
+
+  --diksu-border: 1px solid #232c37;
+  --diksu-shadow: 0 10px 34px rgba(0, 0, 0, 0.45);
+}
+
+/* 首页 hero 稍微收紧一点，别太长 */
+.VPHero .name {
+  font-size: 46px;
+  letter-spacing: -0.5px;
+}
+.VPHero .text {
+  font-size: 30px;
+  line-height: 1.25;
+}
+.VPHero .tagline {
+  font-size: 15px;
+  color: var(--vp-c-text-2);
+  max-width: 34em;
+}
+.VPHero .image-bg {
+  background: radial-gradient(closest-side, rgba(61, 220, 151, 0.18), transparent 70%);
+}
+
+/* 特性卡片：圆角 + 描边 + hover 抬起 */
+.VPFeature {
+  border-radius: var(--diksu-radius) !important;
+  border: var(--diksu-border) !important;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+.VPFeature:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--diksu-shadow);
+  border-color: var(--vp-c-brand-2) !important;
+}
+.VPFeature .title {
+  font-weight: 650;
+}
+
+/* 正文卡片化：提示块圆角更明显 */
+.custom-block {
+  border-radius: 12px;
+}
+
+/* 表格更像数据表 */
+.vp-doc table {
+  display: table;
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: var(--diksu-border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.vp-doc th {
+  background: var(--vp-c-bg-soft);
+  font-weight: 650;
+}
+.vp-doc tr:nth-child(2n) td {
+  background: transparent;
+}
+
+/* 代码块：更柔和的底色与圆角 */
+.vp-doc div[class*='language-'] {
+  border-radius: 12px;
+  border: var(--diksu-border);
+}
+
+/* 侧边栏当前项加一条品牌色指示 */
+.VPSidebarItem.is-active > .item .link .text {
+  color: var(--vp-c-brand-1);
+  font-weight: 600;
+}
+
+/* 首页底部快速开始的按钮组 */
+.diksu-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
+  margin: 28px 0 8px;
+}
+.diksu-actions a {
+  padding: 10px 18px;
+  border-radius: 10px;
+  border: var(--diksu-border);
+  font-weight: 600;
+  font-size: 14px;
+  transition: all 0.16s ease;
+}
+.diksu-actions a:hover {
+  border-color: var(--vp-c-brand-2);
+  color: var(--vp-c-brand-1);
+}

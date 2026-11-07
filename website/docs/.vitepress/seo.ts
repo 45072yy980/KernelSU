@@ -10,7 +10,7 @@ const projectJsonLd = JSON.stringify({
     name: 'DikSU',
     description: '不用解锁 Bootloader 的 KernelSU 分支：靠漏洞把内核模块挂进正在运行的系统。',
     url: `${SITE_URL}/`,
-    image: `${SITE_URL}/logo.png`,
+    image: `${SITE_URL}/logo.svg`,
     codeRepository: 'https://github.com/45072yy980/KernelSU',
     license: ['https://www.gnu.org/licenses/gpl-2.0.html', 'https://www.gnu.org/licenses/gpl-3.0.html'],
     programmingLanguage: ['C', 'Rust', 'Kotlin'],
