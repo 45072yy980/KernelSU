@@ -259,62 +259,64 @@ versionCode = major × 10000 + minor × 1000 + patch × 100 + tag 之后的提�
 
 ### v4.2.0-ultra
 
-这一版补网页端的两块空白（SuSFS、Shizuku），并把 4.1 留下的"置灰只做了一半"和"Material 只清了一页"收尾。
-
-#### 网页端：SuSFS 面板
-- 新增 4 条接口：`GET /api/susfs/status`、`POST /api/susfs/toggle`、`POST /api/susfs/add`、`POST /api/susfs/remove`。
-- 状态卡显示**内核真值**（是否加载 / 版本 / variant / 特性清单），全部来自 supercall，不是读配置猜的。
-- 三个开关（log / AVC log spoofing / hide sus mnts）真实下发；因为**内核没有查询当前值的命令**，开关初始显示"当前值未知"，点过之后只显示"已下发"，不画成开关态。
-- 五类规则（path / path_loop / map / kstat / redirect）可添加，路径强制绝对路径且不含 NUL。
-- 删除如实说明：**内核没有 remove 命令**，已添加的规则无法在运行时撤销，只能等重启；不做"删除成功"的假象。
-- 未加载时整块置灰并给出"去首页提权/安装"，不整块消失。
-
-#### 网页端：内置 Shizuku 管理
-- 状态卡：运行中/已停止 + pid + 运行身份（root/uid）+ "binder 可用性请在 App 内确认"。
-- 启动/停止：启动沿用 App 里 `setsid -d env CLASSPATH=… app_process … --nice-name=shizuku_server` 的命令形态；停止只对校验过 `/proc/<pid>` 的 `shizuku_server` 逐个 SIGKILL，不整组杀。
-- 失败时把完整错误（含 `/data/local/tmp/shizuku_ksu.log` 尾部）显示出来，不只弹"成功"。
-- 开机自启的开关状态与**上次结果**（时间/来源/失败原因）、授权应用数量与文件权限异常提示。
-- **授权写入不在网页端做**：Shizuku 的授权要调 binder，ksud 侧没有 binder 通道，改 `shizuku.json` 也不会通知运行中的 server，所以只显示"授权请在 App 内修改"，不装样子。
-
-#### 网页端：资产拆分与视觉
-- 单文件从 5165 行拆成 `index.html`（DOM）+ `app.css` + `app.js`，`webui.rs` 用 `include_str!` 内嵌并新增 `/ui/app.css`、`/ui/app.js` 两条路由；两条路由在令牌校验之前返回（WebView 子资源不一定带 cookie，否则会出现"首页能开、css/js 403"）。
-- 视觉按 App 的 Miuix 美化版对齐：语义 token 层（颜色/圆角/间距/字号/阴影）+ 组件层覆盖，亮色/暗色/AMOLED 三套都成立；旧的 `--bg-*` / `--text-*` / `--accent` 仍是主题引擎唯一可写源。
-- 设置页 section 顺序调整：状态类卡片置顶，SuSFS 与「内置 Shizuku」上移到「工具」之前。
-
-#### 导航置灰做细
-- 4.1 是"整条导航共用一个状态"：非 full-featured 时五个导航组件一起降级，`userScrollEnabled` 与 `badgeEnabled` 也被连带关掉——首页和设置明明能进，却一起锁死。
-- 4.2 拆成 `NavEntry` 逐入口判定：Home/Settings 永远可用，只有 SuperUser/Module 需要 full-featured；五个导航组件只置灰不可用的那一个，点它弹原因与恢复入口；翻页手势与徽标只跟用户设置走。
-
-#### Material 3 巡检
-- 逐页过了 25 个 Material 页面/分支，结论写在 `docs/material3-audit.md`。
-- 修掉：主设置页 9 个残留 import；基础功能页那条**和自动提权共用同一个偏好、文案却还写着 Magica** 的"自动越狱"开关；SuSFS 页 open redirect 规则组"有垃圾桶图标但点了没反应"的空实现。
-- 澄清：`sulog` 与「应用配置模板」仍有入口（4.1 只删了主设置页入口），不是死代码；本分支没有独立的文件管理页。
-
-#### 内核：默认签名哈希
-- `kernel/Kbuild` 的 `KSU_EXPECTED_SIZE/HASH` 自基线起一直是上游官方证书，而本仓库用 `ksu-signing.jks` 签名。CI 会用 keytool 现算并覆盖，所以 CI 产物一直是对的；但**本地直接 `make -C kernel`** 编出来的 `.ko` 会认不出本管理器，表现为"模块能加载、su 能用、首页显示未安装"。
-- 默认值已改为仓库自带签名的实际值（799 / `b27c5a47…`），并注明 CI 覆盖链路。
+从 4.1.0 到这里的 169 个提交：两套新的内核特性（UTS、网络隔离）、SUSFS 面板整体重构、
+分区保护改成安装前三级判定、备份与自检补齐，并同步上游 25 个提交。
 
 #### 内核：UTS 视图
-- 按 uid 伪装 `uname(2)` 的六个字段：关闭 / 全局 / 仅指定应用三种模式，最多 64 个目标。
-- 实现是替换 syscall 表里的 `__NR_uname`，不动 namespace —— 只影响 `uname(2)`，直接读 `/proc/sys/kernel/*` 与 sysfs 仍是真值，界面里写明了这一点。
-- 热路径走 RCU（读侧拷快照、写侧换指针 + `synchronize_rcu`），多个进程同时 `uname` 不排队。
+- 替换 syscall 表里的 `__NR_uname`，按 uid 伪装 `uname(2)` 的六个字段；关闭 / 全局 /
+  仅指定应用三种模式，最多 64 个目标。
+- 不动 namespace：只影响 `uname(2)`，直接读 `/proc/sys/kernel/*` 与 sysfs 仍是真值，
+  界面里写明了这一点。
+- 热路径走 RCU（读侧拷快照、写侧换指针 + `synchronize_rcu`）。
 
 #### 内核：网络隔离
-- 按 uid 拒绝应用对外连接：挂 LSM 的 `socket_connect` 与 `socket_sendmsg`，后者只处理未连接数据报，堵住 UDP `sendto` 的漏。
-- 可放行回环与私网/链路本地；`AF_UNIX`、`AF_NETLINK` 从不拦，`AF_PACKET` 原始套接字不覆盖。
-- 被拦调用返回 `EACCES`，关回「关闭」立即恢复；钩子装不上时管理器显示「当前内核不支持」，不假装成功。
+- 按 uid 拒绝应用对外连接：拦 `connect()` 与未连接数据报的 `sendmsg()`，UDP `sendto`
+  不再漏。
+- 可放行回环与私网/链路本地；`AF_UNIX`、`AF_NETLINK` 从不拦，`AF_PACKET` 不覆盖。
+- 被拦调用返回 `EACCES`；钩子装不上时管理器显示「当前内核不支持」，不假装成功。
 
-#### 管理器：两个特性页
-- UTS 与网络隔离都按 Shizuku 页的骨架重做：`LazyColumn` + 小标题分组 + 状态卡，模式是单选行，应用选择带搜索、图标与已选计数。
-- 应用数量按内核上限截住（UTS 64 / 网络隔离 128），避免整份配置被 `-EINVAL` 拒掉。
-- 设置页「工具」组统一图标列；重载模块、软重启、隐藏软重启收进「维护」子页面。
+#### 内核：分区保护改为安装前判定
+- 删掉运行时拦截（6 个 syscall 钩子 + 管理器子开关）：挂在 `write`/`writev` 上，
+  收益低、风险高。
+- 保护前移到安装前：`ksud` 把模块脚本逐行读一遍，绿/黄/红三级判定，红级别 `--force`
+  也不放行；规则从 23 条扩到 39 条，修掉 3 个 P0 与 12 处漏检、8 处误报。
 
-#### 上游同步
-- 合并 `tiann/KernelSU` 25 个提交（`96770dfb` → `730f6446`），其中最关键的是 6.6.144 的 `lsm_blob_sizes` 变动：改用 `vmlinux.btf` 查 `lbs_inode` 偏移，否则升级内核后会失效甚至 panic。
-- WebUI 新增 File / pm 接口与 BlobDownload；下载完成后可直接打开文件。
+#### 上游同步（25 个提交）
+- **6.6.144 的 `lsm_blob_sizes` 变动**会让 `selinux_inode` 失效甚至 panic，改用
+  `vmlinux.btf` 查 `lbs_inode` 偏移；否则升级内核后整套机制失效。
+- SELinux hide 策略解析对齐、file_wrapper 引用计数修复、热点路径去噪、6.19+ 兼容、
+  bind-mount 场景的 init.rc 检测、`su_mount_ns` 改走 ksyscall。
 
-#### 文档站
-- `website/` 换成 DikSU 自己的文档（越狱模式、UTS、网络隔离、SUSFS、FAQ），不再部署上游 KernelSU 文档镜像；部署在 GitHub Pages 的 `/KernelSU/` 子路径下。
+#### 管理器：SUSFS 面板重构
+- 六页签（概览 / 设置 / 路径 / 伪装 / 重定向 / 扩展）+ 可滑动 pager + 页签颜色过渡、
+  提示条展开动效。
+- 草稿模型：改任何一项先落草稿，顶部「应用 / 放弃」，点应用才写进内核。
+- 隐藏/循环/映射路径、kstat 更新与完整克隆、伪 uname（预填内核事实）、伪 cmdline、
+  open 重定向、三个开关、导入导出（先看差异）、恢复上次应用、恢复默认。
+
+#### 管理器：两个新特性页
+- UTS 与网络隔离都按 Shizuku 页的骨架重做：状态卡 + 小标题分组 + 单选行 + 带图标与
+  搜索的应用选择。
+- 应用数量按内核上限截住（UTS 64 / 网络隔离 128），不再整份配置被 `-EINVAL` 拒掉。
+
+#### 管理器：备份、自检与观感
+- 授权规则与模块可打包备份 / 恢复，恢复前列差异；修掉「root 建的包 App 读不了」与
+  「失败留下空壳 zip」两个坑。
+- 版本详情页：三份版本并排 + 越狱自检与一键修复；首页在版本不一致时提示并提供更新入口。
+- 尊重系统的「关闭动画」设置；导航置灰细化到每个入口；「工具」组统一图标列，
+  重载模块 / 软重启 / 隐藏软重启收进「维护」子页面。
+- Material 3 巡检过了 25 个页面/分支，修掉一批残留 import 与空实现。
+
+#### 网页端（WebUI）
+- 新增 SUSFS 面板（内核真值 + 三类开关 + 五类规则）与内置 Shizuku 管理（状态、启停、日志）。
+- 新增 File / pm 接口与 BlobDownload，下载完成后可直接打开文件。
+- 资产拆成 `index.html` + `app.css` + `app.js`；修掉首页开关点不动、旧名残留等问题。
+
+#### 工程
+- CI 拆成轻量门禁（每次 push：一个 ABI、一个 target、一个 KMI）与完整矩阵（发版/手动）。
+- `ksud` 的 `cargo check` 增加 x86_64 矩阵：bindgen 按目标平台 char 的有符号性生成
+  `[u8; N]` / `[i8; N]`，只编 aarch64 会把跨 ABI 问题留到发版才暴露。
+- 文档站换成 DikSU 自己的 14 页：https://45072yy980.github.io/KernelSU/
 
 > 已发布：tag `v4.2.0-ultra`。版本号按"tag 之后提交数"递增，后续提交会自然进到 4.2.x。
 
