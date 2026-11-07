@@ -16,6 +16,8 @@ on:
       - '.github/workflows/ci.yml'
       - '.github/workflows/ddk-lkm.yml'
       - '.github/scripts/**'
+  # 允许手动触发（fork 恢复 Actions 后，用 dispatch 直接验证一次）
+  workflow_dispatch:
   pull_request:
     branches: [main, dev]
     paths:
