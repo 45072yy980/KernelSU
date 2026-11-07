@@ -749,6 +749,13 @@
     <string name="maintenance_summary">重载模块、软重启与隐藏软重启</string>
     <string name="maintenance_group_actions">操作</string>
     <string name="maintenance_group_note">三项都直接作用于当前系统；软重启只重跑开机流程，不是完整重启。</string>
+    <string name="feature_selected_count">%1$d 个</string>
+    <string name="feature_app_search">搜索应用</string>
+    <string name="feature_app_search_hint">先搜索，再勾选要生效的应用</string>
+    <string name="feature_app_no_match">没有匹配的应用</string>
+    <string name="netisolate_kernel_support">内核支持</string>
+    <string name="netisolate_kernel_supported">已就绪</string>
+    <string name="netisolate_kernel_unsupported">不支持</string>
     <string name="uts_mode">模式</string>
     <string name="uts_mode_off">关闭</string>
     <string name="uts_mode_global">全局生效</string>

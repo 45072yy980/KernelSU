@@ -508,6 +508,13 @@
     <string name="maintenance_summary">重新載入模組、軟重啟與隱藏軟重啟</string>
     <string name="maintenance_group_actions">操作</string>
     <string name="maintenance_group_note">三項都直接作用於目前系統；軟重啟只重跑開機流程，不是完整重啟。</string>
+    <string name="feature_selected_count">%1$d 個</string>
+    <string name="feature_app_search">搜尋應用程式</string>
+    <string name="feature_app_search_hint">先搜尋，再勾選要生效的應用程式</string>
+    <string name="feature_app_no_match">沒有符合的應用程式</string>
+    <string name="netisolate_kernel_support">核心支援</string>
+    <string name="netisolate_kernel_supported">已就緒</string>
+    <string name="netisolate_kernel_unsupported">不支援</string>
     <string name="uts_mode">模式</string>
     <string name="uts_mode_off">關閉</string>
     <string name="uts_mode_global">全域生效</string>

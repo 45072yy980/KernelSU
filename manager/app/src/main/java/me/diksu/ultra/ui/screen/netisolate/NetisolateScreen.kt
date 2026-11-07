@@ -2,19 +2,18 @@ package me.diksu.ultra.ui.screen.netisolate
 
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -33,13 +32,20 @@ import me.diksu.ultra.data.netisolate.NetisolateConfig
 import me.diksu.ultra.data.netisolate.NetisolateRepository
 import me.diksu.ultra.ksuApp
 import me.diksu.ultra.ui.LocalUiMode
+import me.diksu.ultra.ui.component.AppSearchField
+import me.diksu.ultra.ui.component.AppToggleRow
+import me.diksu.ultra.ui.component.FeatureCard
+import me.diksu.ultra.ui.component.FeatureRadioRow
+import me.diksu.ultra.ui.component.FeatureSectionTitle
+import me.diksu.ultra.ui.component.FeatureSwitchRow
+import me.diksu.ultra.ui.component.FeatureText
+import me.diksu.ultra.ui.component.FeatureValueRow
+import me.diksu.ultra.ui.component.PickedApp
 import me.diksu.ultra.ui.component.material.TopBarBackButton
 import me.diksu.ultra.ui.isMiuixFamily
 import me.diksu.ultra.ui.navigation3.LocalNavigator
-import me.diksu.ultra.ui.screen.susfs.SusfsCard
 import me.diksu.ultra.ui.screen.susfs.SusfsNote
 import me.diksu.ultra.ui.screen.susfs.SusfsRow
-import me.diksu.ultra.ui.screen.susfs.SusfsSwitchRow
 import me.diksu.ultra.ui.screen.susfs.SusfsText
 import top.yukonga.miuix.kmp.basic.Icon as MiuixIcon
 import top.yukonga.miuix.kmp.basic.IconButton as MiuixIconButton
@@ -49,14 +55,12 @@ import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme
 
-/** 一个可选的目标应用。 */
-data class NetisolateApp(val label: String, val uid: Int)
-
 data class NetisolateUiState(
     val loading: Boolean = true,
     val busy: Boolean = false,
     val config: NetisolateConfig = NetisolateConfig(),
-    val apps: List<NetisolateApp> = emptyList(),
+    val apps: List<PickedApp> = emptyList(),
+    val query: String = "",
     val message: String? = null,
 )
 
@@ -91,6 +95,10 @@ class NetisolateViewModel : ViewModel() {
         _state.update { it.copy(config = config) }
     }
 
+    fun setQuery(query: String) {
+        _state.update { it.copy(query = query) }
+    }
+
     fun apply() {
         if (_state.value.busy) return
         viewModelScope.launch {
@@ -105,12 +113,12 @@ class NetisolateViewModel : ViewModel() {
         }
     }
 
-    private fun loadUserApps(): List<NetisolateApp> {
+    private fun loadUserApps(): List<PickedApp> {
         val pm = ksuApp.packageManager
         return pm.getInstalledApplications(PackageManager.GET_META_DATA)
             .asSequence()
             .filter { (it.flags and ApplicationInfo.FLAG_SYSTEM) == 0 }
-            .map { NetisolateApp(pm.getApplicationLabel(it).toString(), it.uid) }
+            .map { PickedApp(it.packageName, pm.getApplicationLabel(it).toString(), it.uid, it) }
             .sortedBy { it.label.lowercase() }
             .toList()
     }
@@ -123,89 +131,167 @@ fun NetisolateScreen() {
     val navigator = LocalNavigator.current
     val title = stringResource(R.string.netisolate_title)
 
-    val body: @Composable (PaddingValues) -> Unit = { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 12.dp),
-        ) {
-            SusfsCard(title = stringResource(R.string.netisolate_note_title)) {
-                Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
-                    SusfsNote(text = stringResource(R.string.netisolate_note_body))
-                    SusfsNote(text = stringResource(R.string.netisolate_note_limit), muted = true)
+    val selectedCount = state.config.targetUids.size
+    val visibleApps = remember(state.apps, state.query, state.config.targetUids) {
+        if (state.query.isBlank()) {
+            state.apps.filter { state.config.targetUids.contains(it.uid) }
+        } else {
+            state.apps
+                .filter {
+                    it.label.contains(state.query, ignoreCase = true) ||
+                        it.packageName.contains(state.query, ignoreCase = true)
                 }
-            }
+                .take(80)
+        }
+    }
 
-            if (!state.config.supported) {
-                SusfsCard {
-                    SusfsRow(
-                        title = stringResource(R.string.netisolate_unsupported),
-                        summary = stringResource(R.string.netisolate_unsupported_summary),
+    val body: @Composable (PaddingValues) -> Unit = { padding ->
+        LazyColumn(
+            modifier = Modifier.padding(horizontal = 12.dp),
+            contentPadding = padding,
+        ) {
+            item { Spacer(Modifier.height(4.dp)) }
+
+            item {
+                FeatureCard {
+                    FeatureValueRow(
+                        label = stringResource(R.string.netisolate_mode),
+                        value = if (state.config.mode == NetisolateConfig.MODE_SELECTED) {
+                            stringResource(R.string.netisolate_mode_selected)
+                        } else {
+                            stringResource(R.string.netisolate_mode_off)
+                        },
+                    )
+                    FeatureValueRow(
+                        label = stringResource(R.string.netisolate_targets),
+                        value = stringResource(R.string.feature_selected_count, selectedCount),
+                    )
+                    FeatureValueRow(
+                        label = stringResource(R.string.netisolate_kernel_support),
+                        value = if (state.config.supported) {
+                            stringResource(R.string.netisolate_kernel_supported)
+                        } else {
+                            stringResource(R.string.netisolate_kernel_unsupported)
+                        },
                     )
                 }
             }
 
-            SusfsCard(title = stringResource(R.string.netisolate_mode)) {
-                ModeRow(R.string.netisolate_mode_off, state.config.mode == NetisolateConfig.MODE_DISABLED) {
-                    vm.update(state.config.copy(mode = NetisolateConfig.MODE_DISABLED))
-                }
-                ModeRow(R.string.netisolate_mode_selected, state.config.mode == NetisolateConfig.MODE_SELECTED) {
-                    vm.update(state.config.copy(mode = NetisolateConfig.MODE_SELECTED))
+            item {
+                FeatureSectionTitle(stringResource(R.string.netisolate_note_title))
+                FeatureCard {
+                    SusfsNote(
+                        text = stringResource(R.string.netisolate_note_body),
+                        modifier = Modifier.padding(start = 16.dp, top = 12.dp),
+                    )
+                    SusfsNote(
+                        text = stringResource(R.string.netisolate_note_limit),
+                        muted = true,
+                        modifier = Modifier.padding(start = 16.dp),
+                    )
                 }
             }
 
-            SusfsCard(title = stringResource(R.string.netisolate_options)) {
-                SusfsSwitchRow(
-                    title = stringResource(R.string.netisolate_allow_loopback),
-                    summary = stringResource(R.string.netisolate_allow_loopback_summary),
-                    checked = state.config.allowLoopback,
-                    onCheckedChange = { on -> vm.update(state.config.withFlag(NetisolateConfig.FLAG_ALLOW_LOOPBACK, on)) },
-                )
-                SusfsSwitchRow(
-                    title = stringResource(R.string.netisolate_allow_private),
-                    summary = stringResource(R.string.netisolate_allow_private_summary),
-                    checked = state.config.allowPrivate,
-                    onCheckedChange = { on -> vm.update(state.config.withFlag(NetisolateConfig.FLAG_ALLOW_PRIVATE, on)) },
-                )
+            item {
+                FeatureSectionTitle(stringResource(R.string.netisolate_mode))
+                FeatureCard {
+                    FeatureRadioRow(
+                        title = stringResource(R.string.netisolate_mode_off),
+                        summary = null,
+                        selected = state.config.mode == NetisolateConfig.MODE_DISABLED,
+                        onClick = { vm.update(state.config.copy(mode = NetisolateConfig.MODE_DISABLED)) },
+                    )
+                    FeatureRadioRow(
+                        title = stringResource(R.string.netisolate_mode_selected),
+                        summary = null,
+                        selected = state.config.mode == NetisolateConfig.MODE_SELECTED,
+                        onClick = { vm.update(state.config.copy(mode = NetisolateConfig.MODE_SELECTED)) },
+                    )
+                }
+            }
+
+            item {
+                FeatureSectionTitle(stringResource(R.string.netisolate_options))
+                FeatureCard {
+                    FeatureSwitchRow(
+                        title = stringResource(R.string.netisolate_allow_loopback),
+                        summary = stringResource(R.string.netisolate_allow_loopback_summary),
+                        checked = state.config.allowLoopback,
+                        onCheckedChange = { on ->
+                            vm.update(state.config.withFlag(NetisolateConfig.FLAG_ALLOW_LOOPBACK, on))
+                        },
+                    )
+                    FeatureSwitchRow(
+                        title = stringResource(R.string.netisolate_allow_private),
+                        summary = stringResource(R.string.netisolate_allow_private_summary),
+                        checked = state.config.allowPrivate,
+                        onCheckedChange = { on ->
+                            vm.update(state.config.withFlag(NetisolateConfig.FLAG_ALLOW_PRIVATE, on))
+                        },
+                    )
+                }
             }
 
             if (state.config.mode == NetisolateConfig.MODE_SELECTED) {
-                SusfsCard(title = stringResource(R.string.netisolate_targets)) {
-                    if (state.apps.isEmpty()) {
-                        SusfsRow(title = stringResource(R.string.netisolate_targets_empty))
-                    } else {
-                        state.apps.take(60).forEach { app ->
-                            val checked = state.config.targetUids.contains(app.uid)
-                            SusfsSwitchRow(
-                                title = app.label,
-                                summary = "uid ${app.uid}",
-                                checked = checked,
-                                onCheckedChange = { on ->
-                                    val next = if (on) {
-                                        state.config.targetUids + app.uid
+                item {
+                    FeatureSectionTitle(
+                        stringResource(R.string.netisolate_targets) + "（" +
+                            stringResource(R.string.feature_selected_count, selectedCount) + "）",
+                    )
+                    FeatureCard {
+                        AppSearchField(
+                            value = state.query,
+                            onValueChange = vm::setQuery,
+                            label = stringResource(R.string.feature_app_search),
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                        )
+                        if (visibleApps.isEmpty()) {
+                            FeatureText(
+                                text = stringResource(
+                                    if (state.query.isBlank()) {
+                                        R.string.feature_app_search_hint
                                     } else {
-                                        state.config.targetUids - app.uid
-                                    }
-                                    vm.update(state.config.copy(targetUids = next.distinct()))
-                                },
+                                        R.string.feature_app_no_match
+                                    },
+                                ),
+                                muted = true,
+                                size = 13,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
                             )
+                        } else {
+                            visibleApps.forEach { app ->
+                                AppToggleRow(
+                                    app = app,
+                                    checked = state.config.targetUids.contains(app.uid),
+                                    onCheckedChange = { on ->
+                                        val next = if (on) {
+                                            state.config.targetUids + app.uid
+                                        } else {
+                                            state.config.targetUids - app.uid
+                                        }
+                                        vm.update(state.config.copy(targetUids = next.distinct()))
+                                    },
+                                )
+                            }
                         }
+                        Spacer(Modifier.height(4.dp))
                     }
                 }
             }
 
-            SusfsCard {
-                SusfsRow(
-                    title = stringResource(R.string.netisolate_apply),
-                    onClick = { vm.apply() },
-                )
+            item {
+                FeatureCard {
+                    SusfsRow(
+                        title = stringResource(R.string.netisolate_apply),
+                        onClick = { vm.apply() },
+                    )
+                }
+                state.message?.let {
+                    SusfsText(text = it, size = 13, modifier = Modifier.padding(start = 16.dp, top = 8.dp))
+                }
             }
-            state.message?.let {
-                SusfsText(text = it, size = 13)
-            }
-            Spacer(Modifier.height(24.dp))
+
+            item { Spacer(Modifier.height(24.dp)) }
         }
     }
 
@@ -236,13 +322,4 @@ fun NetisolateScreen() {
             },
         ) { padding -> body(padding) }
     }
-}
-
-@Composable
-private fun ModeRow(labelRes: Int, selected: Boolean, onClick: () -> Unit) {
-    SusfsRow(
-        title = stringResource(labelRes),
-        summary = if (selected) stringResource(R.string.netisolate_mode_current) else null,
-        onClick = onClick,
-    )
 }
