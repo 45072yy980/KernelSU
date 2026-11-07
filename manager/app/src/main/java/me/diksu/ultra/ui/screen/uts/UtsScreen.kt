@@ -87,7 +87,8 @@ class UtsViewModel : ViewModel() {
             val apps = withContext(Dispatchers.IO) { loadUserApps() }
             val kernelFacts = runCatching {
                 val info = android.system.Os.uname()
-                listOf(info.sysname, info.nodename, info.release, info.version, info.machine, info.domainname)
+                // StructUtsname 在 Android 上没有 domainname 字段，留空
+                listOf(info.sysname, info.nodename, info.release, info.version, info.machine, "")
             }.getOrDefault(List(6) { "" })
             val base = remote ?: UtsConfig(
                 sysname = kernelFacts[0],

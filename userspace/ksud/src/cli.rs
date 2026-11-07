@@ -507,7 +507,6 @@ enum Profile {
 }
 
 #[derive(clap::Subcommand, Debug)]
-#[derive(clap::Subcommand, Debug)]
 enum Uts {
     /// Print the current UTS config as JSON
     Get,
@@ -515,6 +514,7 @@ enum Uts {
     Set,
 }
 
+#[derive(clap::Subcommand, Debug)]
 enum Feature {
     /// Get feature value and support status
     Get {
