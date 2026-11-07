@@ -141,6 +141,12 @@ fun UtsScreen() {
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 12.dp),
         ) {
+            SusfsCard(title = stringResource(R.string.uts_note_title)) {
+                Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                    SusfsText(text = stringResource(R.string.uts_note_body), size = 13)
+                }
+            }
+
             SusfsCard(title = stringResource(R.string.uts_mode)) {
                 ModeRow(R.string.uts_mode_off, state.config.mode == UtsConfig.MODE_DISABLED) {
                     vm.update(state.config.copy(mode = UtsConfig.MODE_DISABLED))

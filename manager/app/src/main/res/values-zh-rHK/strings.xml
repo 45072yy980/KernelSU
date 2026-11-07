@@ -481,6 +481,8 @@
     <string name="susfs_discard">放棄</string>
     <string name="uts_title">UTS 檢視</string>
     <string name="uts_summary">按應用程式偽裝 uname(2) 的回傳值</string>
+    <string name="uts_note_title">生效範圍</string>
+    <string name="uts_note_body">只改寫 uname(2) 的回傳值，不改它背後的檔案。/proc/sys/kernel/{ostype,osrelease,version,hostname} 與 sysfs 仍是真值，直接讀這些的應用程式不會被偽裝。</string>
     <string name="uts_mode">模式</string>
     <string name="uts_mode_off">關閉</string>
     <string name="uts_mode_global">全域生效</string>

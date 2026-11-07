@@ -759,6 +759,8 @@
     <string name="susfs_discard">Discard</string>
     <string name="uts_title">UTS view</string>
     <string name="uts_summary">Spoof uname(2), globally or for selected apps</string>
+    <string name="uts_note_title">Scope</string>
+    <string name="uts_note_body">Only the return value of uname(2) is rewritten, never the files behind it. /proc/sys/kernel/{ostype,osrelease,version,hostname} and sysfs still report the real values, so anything reading those will not be spoofed.</string>
     <string name="uts_mode">Mode</string>
     <string name="uts_mode_off">Off</string>
     <string name="uts_mode_global">All processes</string>
