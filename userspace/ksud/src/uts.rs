@@ -53,7 +53,11 @@ fn write_field(buf: &mut [c_char], value: &str) {
     let bytes = value.as_bytes();
     let len = bytes.len().min(NAME_LEN - 1);
     for (index, slot) in buf.iter_mut().enumerate().take(NAME_LEN) {
-        *slot = if index < len { bytes[index] as c_char } else { 0 };
+        *slot = if index < len {
+            bytes[index] as c_char
+        } else {
+            0
+        };
     }
 }
 
