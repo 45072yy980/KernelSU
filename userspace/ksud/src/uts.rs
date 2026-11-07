@@ -37,7 +37,11 @@ pub struct UtsConfig {
 }
 
 fn read_field(buf: &[u8]) -> String {
-    let bytes: Vec<u8> = buf.iter().copied().take_while(|value| *value != 0).collect();
+    let bytes: Vec<u8> = buf
+        .iter()
+        .copied()
+        .take_while(|value| *value != 0)
+        .collect();
     String::from_utf8_lossy(&bytes).into_owned()
 }
 
