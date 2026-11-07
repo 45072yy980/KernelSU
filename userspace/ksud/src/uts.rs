@@ -53,41 +53,43 @@ fn write_field(buf: &mut [u8], value: &str) {
     }
 }
 
-impl UtsConfig {
-    fn to_kernel(&self) -> Result<ksu_uapi::ksu_uts_config> {
-        if self.target_uids.len() > MAX_TARGETS {
-            anyhow::bail!("目标应用过多：上限 {MAX_TARGETS} 个");
-        }
-        // SAFETY: 结构体是纯 POD，零初始化即可用作 out 参数。
-        let mut cmd: ksu_uapi::ksu_uts_config = unsafe { std::mem::zeroed() };
-        cmd.mode = self.mode;
-        cmd.field_mask = self.field_mask;
-        cmd.target_count = self.target_uids.len() as u32;
-        for (index, uid) in self.target_uids.iter().enumerate() {
-            cmd.target_uids[index] = *uid;
-        }
-        write_field(&mut cmd.sysname, &self.sysname);
-        write_field(&mut cmd.nodename, &self.nodename);
-        write_field(&mut cmd.release, &self.release);
-        write_field(&mut cmd.version, &self.version);
-        write_field(&mut cmd.machine, &self.machine);
-        write_field(&mut cmd.domainname, &self.domainname);
-        Ok(cmd)
+/// 把文档转成内核结构体。
+///
+/// 刻意放在类型外面：`UtsConfig` 要 `derive(Deserialize)`，而 clippy 不允许在带 `unsafe`
+/// 方法的类型上派生 Deserialize（`unsafe-derive`）。转换逻辑本来也不需要挂在类型上。
+fn to_kernel(config: &UtsConfig) -> Result<ksu_uapi::ksu_uts_config> {
+    if config.target_uids.len() > MAX_TARGETS {
+        anyhow::bail!("目标应用过多：上限 {MAX_TARGETS} 个");
     }
+    // SAFETY: 结构体是纯 POD，零初始化即可用作 ioctl 的 out 参数。
+    let mut cmd: ksu_uapi::ksu_uts_config = unsafe { std::mem::zeroed() };
+    cmd.mode = config.mode;
+    cmd.field_mask = config.field_mask;
+    cmd.target_count = config.target_uids.len() as u32;
+    for (index, uid) in config.target_uids.iter().enumerate() {
+        cmd.target_uids[index] = *uid;
+    }
+    write_field(&mut cmd.sysname, &config.sysname);
+    write_field(&mut cmd.nodename, &config.nodename);
+    write_field(&mut cmd.release, &config.release);
+    write_field(&mut cmd.version, &config.version);
+    write_field(&mut cmd.machine, &config.machine);
+    write_field(&mut cmd.domainname, &config.domainname);
+    Ok(cmd)
+}
 
-    fn from_kernel(cmd: &ksu_uapi::ksu_uts_config) -> Self {
-        let count = (cmd.target_count as usize).min(MAX_TARGETS);
-        Self {
-            mode: cmd.mode,
-            field_mask: cmd.field_mask,
-            target_uids: cmd.target_uids[..count].to_vec(),
-            sysname: read_field(&cmd.sysname),
-            nodename: read_field(&cmd.nodename),
-            release: read_field(&cmd.release),
-            version: read_field(&cmd.version),
-            machine: read_field(&cmd.machine),
-            domainname: read_field(&cmd.domainname),
-        }
+fn from_kernel(cmd: &ksu_uapi::ksu_uts_config) -> UtsConfig {
+    let count = (cmd.target_count as usize).min(MAX_TARGETS);
+    UtsConfig {
+        mode: cmd.mode,
+        field_mask: cmd.field_mask,
+        target_uids: cmd.target_uids[..count].to_vec(),
+        sysname: read_field(&cmd.sysname),
+        nodename: read_field(&cmd.nodename),
+        release: read_field(&cmd.release),
+        version: read_field(&cmd.version),
+        machine: read_field(&cmd.machine),
+        domainname: read_field(&cmd.domainname),
     }
 }
 
@@ -95,14 +97,14 @@ impl UtsConfig {
 pub fn get() -> Result<String> {
     let mut cmd: ksu_uapi::ksu_uts_config = unsafe { std::mem::zeroed() };
     ksucalls::get_uts_config(&mut cmd).context("读取 UTS 配置失败（内核可能不支持该特性）")?;
-    let config = UtsConfig::from_kernel(&cmd);
+    let config = from_kernel(&cmd);
     serde_json::to_string_pretty(&config).context("序列化 UTS 配置失败")
 }
 
 /// 从 stdin 的 JSON 写配置。
 pub fn set(text: &str) -> Result<String> {
     let config: UtsConfig = serde_json::from_str(text).context("解析 UTS 配置失败")?;
-    let mut cmd = config.to_kernel()?;
+    let mut cmd = to_kernel(&config)?;
     ksucalls::set_uts_config(&mut cmd).context("写入 UTS 配置失败（参数不合法或内核不支持）")?;
     Ok("{\"ok\":true}".to_string())
 }
