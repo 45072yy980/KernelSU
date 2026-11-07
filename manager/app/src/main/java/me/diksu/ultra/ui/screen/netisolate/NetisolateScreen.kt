@@ -55,6 +55,9 @@ import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme
 
+/** 与 kernel/include/uapi/netisolate.h 的 KSU_NETISOLATE_MAX_TARGETS 保持一致。 */
+private const val MAX_TARGETS = 128
+
 data class NetisolateUiState(
     val loading: Boolean = true,
     val busy: Boolean = false,
@@ -265,7 +268,12 @@ fun NetisolateScreen() {
                                     checked = state.config.targetUids.contains(app.uid),
                                     onCheckedChange = { on ->
                                         val next = if (on) {
-                                            state.config.targetUids + app.uid
+                                            // 内核侧上限 128，超了整份配置都会被拒；这里直接截住。
+                                            if (state.config.targetUids.size >= MAX_TARGETS) {
+                                                state.config.targetUids
+                                            } else {
+                                                state.config.targetUids + app.uid
+                                            }
                                         } else {
                                             state.config.targetUids - app.uid
                                         }

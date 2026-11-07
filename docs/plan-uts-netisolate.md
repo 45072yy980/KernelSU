@@ -49,8 +49,10 @@ sysfs 上的同名信息。FinaSU 改的是 uts_namespace，覆盖面更广；�
 
 **落地情况（2026-11-07，`c935d0773`）**：照本方案实现，实际与上面的草案有两处收敛：
 
-- **只挂 `socket_connect`**，没有动 `socket_create` / `sendmsg`。后两者会打断已建立的连接，
-  副作用远大于收益；代价是不 connect 直接 `sendto` 的 UDP 拦不住，这条已写进管理器页面说明。
+- **挂 `socket_connect` + `socket_sendmsg`**：后者只处理 `msg_name` 非空的未连接数据报，
+  堵掉 UDP `sendto` 的缺口；已连接的 `send` 走 socket 里记的地址，connect 阶段已经拦过，
+  二次拦截会把放行的连接也打回去。`socket_create` 仍然不碰 —— 拦它会让应用连本地服务
+  都建不起来，副作用远大于收益。
 - **开关从三个收敛成两个**：放行回环、放行私网（含链路本地与运营商 NAT 段）。草案里的
   strict socket 不做。
 - 目标 uid 强制 `>= 10000`，系统进程永远进不来；`AF_UNIX` / `AF_NETLINK` 一律放行。

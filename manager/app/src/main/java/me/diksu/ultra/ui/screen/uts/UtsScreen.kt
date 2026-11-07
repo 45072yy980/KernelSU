@@ -261,7 +261,12 @@ fun UtsScreen() {
                                     checked = state.config.targetUids.contains(app.uid),
                                     onCheckedChange = { on ->
                                         val next = if (on) {
-                                            state.config.targetUids + app.uid
+                                            // 内核侧上限 64，超了整份配置都会被拒；这里直接截住。
+                                            if (state.config.targetUids.size >= MAX_TARGETS) {
+                                                state.config.targetUids
+                                            } else {
+                                                state.config.targetUids + app.uid
+                                            }
                                         } else {
                                             state.config.targetUids - app.uid
                                         }
@@ -319,6 +324,9 @@ fun UtsScreen() {
         ) { padding -> body(padding) }
     }
 }
+
+/** 与 kernel/include/uapi/uts_view.h 的 KSU_UTS_MAX_TARGETS 保持一致。 */
+private const val MAX_TARGETS = 64
 
 private val FIELD_TITLES = listOf(
     R.string.uts_field_sysname,
