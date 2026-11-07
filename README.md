@@ -257,7 +257,7 @@ versionCode = major × 10000 + minor × 1000 + patch × 100 + tag 之后的提�
   实际使用中几乎没人开。安装前的静态扫描才是真正有用的那一层。
 - 已保存的 feature 配置里残留 id 8 会被静默丢弃，不影响老设备升级。
 
-### v4.2.0-ultra（开发中，未打 tag）
+### v4.2.0-ultra
 
 这一版补网页端的两块空白（SuSFS、Shizuku），并把 4.1 留下的"置灰只做了一半"和"Material 只清了一页"收尾。
 
@@ -316,7 +316,7 @@ versionCode = major × 10000 + minor × 1000 + patch × 100 + tag 之后的提�
 #### 文档站
 - `website/` 换成 DikSU 自己的文档（越狱模式、UTS、网络隔离、SUSFS、FAQ），不再部署上游 KernelSU 文档镜像；部署在 GitHub Pages 的 `/KernelSU/` 子路径下。
 
-> 本轮未打 tag、未发布：版本号按"tag 之后提交数"递增，发版前需要先把 tag 打到最终 HEAD 或直接起 `4.1.1`。
+> 已发布：tag `v4.2.0-ultra`。版本号按"tag 之后提交数"递增，后续提交会自然进到 4.2.x。
 
 ### v4.1.0-ultra
 
