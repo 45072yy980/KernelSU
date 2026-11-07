@@ -36,20 +36,16 @@ pub struct UtsConfig {
     pub domainname: String,
 }
 
-fn read_field(buf: &[i8]) -> String {
-    let bytes: Vec<u8> = buf
-        .iter()
-        .map(|value| *value as u8)
-        .take_while(|value| *value != 0)
-        .collect();
+fn read_field(buf: &[u8]) -> String {
+    let bytes: Vec<u8> = buf.iter().copied().take_while(|value| *value != 0).collect();
     String::from_utf8_lossy(&bytes).into_owned()
 }
 
-fn write_field(buf: &mut [i8], value: &str) {
+fn write_field(buf: &mut [u8], value: &str) {
     let bytes = value.as_bytes();
     let len = bytes.len().min(NAME_LEN - 1);
     for (index, slot) in buf.iter_mut().enumerate().take(NAME_LEN) {
-        *slot = if index < len { bytes[index] as i8 } else { 0 };
+        *slot = if index < len { bytes[index] } else { 0 };
     }
 }
 
