@@ -50,7 +50,7 @@ import me.diksu.ultra.ui.screen.susfs.SusfsNote
 private const val MAX_TARGETS = 128
 private const val MAX_SEARCH_RESULTS = 80
 
-private data class NetisolateUiState(
+internal data class NetisolateUiState(
     val loading: Boolean = true,
     val busy: Boolean = false,
     val config: NetisolateConfig = NetisolateConfig(supported = false),
@@ -64,7 +64,7 @@ private data class NetisolateUiState(
 }
 
 /** 网络隔离页面：让选中的应用连不上外网。 */
-class NetisolateViewModel : ViewModel() {
+internal class NetisolateViewModel : ViewModel() {
     private val repository = NetisolateRepository()
     private val _state = MutableStateFlow(NetisolateUiState())
     val state = _state.asStateFlow()

@@ -1,6 +1,9 @@
 package me.diksu.ultra.ui.component.dialog
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -12,6 +15,8 @@ import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults as MaterialButtonDefaults
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -21,6 +26,7 @@ import me.diksu.ultra.ui.LocalUiMode
 import me.diksu.ultra.ui.isMiuixFamily
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.TextButton as MiuixTextButton
+import top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme as miuixColors
 import top.yukonga.miuix.kmp.window.WindowDialog
 
 /**
@@ -45,6 +51,8 @@ fun AppAlertDialog(
     onConfirm: () -> Unit,
     dismissText: String? = null,
     confirmEnabled: Boolean = true,
+    /** 危险操作（删除、清除、重启）用错误色强调确定键。 */
+    confirmDestructive: Boolean = false,
     body: @Composable () -> Unit,
 ) {
     if (LocalUiMode.current.isMiuixFamily) {
@@ -56,8 +64,14 @@ fun AppAlertDialog(
             title = title,
             onDismissRequest = onDismissRequest,
             content = {
-                Column {
-                    body()
+                Column(modifier = Modifier.heightIn(max = 520.dp)) {
+                    Column(
+                        modifier = Modifier
+                            .weight(1f, fill = false)
+                            .verticalScroll(rememberScrollState()),
+                    ) {
+                        body()
+                    }
                     Row(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         modifier = Modifier.padding(top = 12.dp),
@@ -75,7 +89,14 @@ fun AppAlertDialog(
                             onClick = onConfirm,
                             enabled = confirmEnabled,
                             modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.textButtonColorsPrimary(),
+                            colors = if (confirmDestructive) {
+                                ButtonDefaults.textButtonColors(
+                                    color = miuixColors.error,
+                                    textColor = miuixColors.onError,
+                                )
+                            } else {
+                                ButtonDefaults.textButtonColorsPrimary()
+                            },
                         )
                     }
                 }
@@ -85,9 +106,27 @@ fun AppAlertDialog(
         AlertDialog(
             onDismissRequest = onDismissRequest,
             title = { Text(title) },
-            text = { body() },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .heightIn(max = 440.dp)
+                        .verticalScroll(rememberScrollState()),
+                ) {
+                    body()
+                }
+            },
             confirmButton = {
-                TextButton(onClick = onConfirm, enabled = confirmEnabled) {
+                TextButton(
+                    onClick = onConfirm,
+                    enabled = confirmEnabled,
+                    colors = if (confirmDestructive) {
+                        MaterialButtonDefaults.textButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error,
+                        )
+                    } else {
+                        MaterialButtonDefaults.textButtonColors()
+                    },
+                ) {
                     Text(confirmText)
                 }
             },

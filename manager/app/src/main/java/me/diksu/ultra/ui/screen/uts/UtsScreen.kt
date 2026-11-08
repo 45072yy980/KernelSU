@@ -51,7 +51,7 @@ private const val MAX_TARGETS = 64
 private const val MAX_FIELD_BYTES = 64
 private const val MAX_SEARCH_RESULTS = 80
 
-private data class UtsUiState(
+internal data class UtsUiState(
     val loading: Boolean = true,
     val busy: Boolean = false,
     val supported: Boolean = false,
@@ -66,7 +66,7 @@ private data class UtsUiState(
 }
 
 /** 按 uid 伪装 uname(2)，字段留空表示不改写。 */
-class UtsViewModel : ViewModel() {
+internal class UtsViewModel : ViewModel() {
     private val repository = UtsRepository()
     private val _state = MutableStateFlow(UtsUiState())
     val state = _state.asStateFlow()
@@ -281,7 +281,7 @@ fun UtsScreen() {
                     SusfsNote(
                         text = stringResource(R.string.uts_fields_hint),
                         muted = true,
-                        modifier = Modifier.padding(horizontal = 16.dp, top = 12.dp),
+                        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp),
                     )
                     FIELD_TITLES.forEachIndexed { index, res ->
                         SusfsTextField(

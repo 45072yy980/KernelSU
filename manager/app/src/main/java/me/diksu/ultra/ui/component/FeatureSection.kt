@@ -35,7 +35,7 @@ import top.yukonga.miuix.kmp.basic.IconButton as MiuixIconButton
 import top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator
 import top.yukonga.miuix.kmp.basic.Scaffold as MiuixScaffold
 import top.yukonga.miuix.kmp.basic.SmallTitle
-import top.yukonga.miuix.kmp.basic.SmallTopAppBar
+import top.yukonga.miuix.kmp.basic.TopAppBar as MiuixTopAppBar
 import top.yukonga.miuix.kmp.basic.Text as MiuixText
 import top.yukonga.miuix.kmp.basic.TextButton as MiuixTextButton
 import top.yukonga.miuix.kmp.icon.MiuixIcons
@@ -57,7 +57,7 @@ fun FeatureScaffold(
     if (LocalUiMode.current.isMiuixFamily) {
         MiuixScaffold(
             topBar = {
-                SmallTopAppBar(
+                MiuixTopAppBar(
                     title = title,
                     navigationIcon = {
                         MiuixIconButton(onClick = onBack) {
@@ -83,8 +83,7 @@ fun FeatureScaffold(
                     },
                 )
             },
-            content = content,
-        )
+        ) { padding -> content(padding) }
     } else {
         Scaffold(
             topBar = {
@@ -103,8 +102,7 @@ fun FeatureScaffold(
                     },
                 )
             },
-            content = content,
-        )
+        ) { padding -> content(padding) }
     }
 }
 

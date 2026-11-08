@@ -171,7 +171,6 @@ private fun GroupsPanel(
     if (showDialog.value) {
         MultiSelectDialog(
             title = "Groups",
-            subtitle = "${selected.size} / 32",
             items = groups,
             selectedItems = selected.toSet(),
             itemTitle = { it.display },
@@ -280,7 +279,6 @@ private fun RootProfileFlagPanel(
     if (showDialog.value) {
         MultiSelectDialog(
             title = stringResource(R.string.profile_flags),
-            subtitle = "${selectedFlags.size} / ${Natives.Profile.RootProfileFlag.entries.size}",
             items = flags,
             selectedItems = selectedFlags.toSet(),
             itemTitle = { it.display },
@@ -334,7 +332,6 @@ private fun CapsPanel(
     if (showDialog.value) {
         MultiSelectDialog(
             title = "Capabilities",
-            subtitle = "${selectedCaps.size} / ${Capabilities.entries.size}",
             items = capabilities,
             selectedItems = selectedCaps.toSet(),
             itemTitle = { it.display },
