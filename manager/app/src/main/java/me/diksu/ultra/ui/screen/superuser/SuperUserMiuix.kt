@@ -530,13 +530,14 @@ private fun GroupItem(
     onToggleExpand: () -> Unit,
     onClickPrimary: () -> Unit,
 ) {
-    val isInDarkTheme = isInDarkTheme()
     val bg = colorScheme.secondaryContainer.copy(alpha = 0.8f)
     val rootBg = colorScheme.tertiaryContainer.copy(alpha = 0.6f)
-    val unmountBg = if (isInDarkTheme) Color.White.copy(alpha = 0.4f) else Color.Black.copy(alpha = 0.3f)
+    // 半透明白/黑叠出来的徽标只有 2–3:1，还在 9sp 上，几乎看不清；
+    // 改用主题容器色配对，对比度由主题保证。
+    val unmountBg = colorScheme.surfaceContainerHigh
     val fg = colorScheme.onSecondaryContainer
     val rootFg = colorScheme.onTertiaryContainer.copy(alpha = 0.8f)
-    val unmountFg = if (isInDarkTheme) Color.Black.copy(alpha = 0.4f) else Color.White.copy(alpha = 0.8f)
+    val unmountFg = colorScheme.onSurfaceVariant
 
     val userId = group.uid / 100000
     val tags = remember(group.anyAllowSu, group.shouldUmount, group.anyCustom, userId) {

@@ -30,7 +30,7 @@ fun StatusTagMiuix(
             modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
             text = label,
             color = contentColor,
-            fontSize = 9.sp,
+            fontSize = 10.sp,
             fontWeight = FontWeight(750),
             maxLines = 1,
             softWrap = false
