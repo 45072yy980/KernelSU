@@ -59,6 +59,17 @@ fun ScaleDialog(
                     }
                 },
             )
+            // 越界以前是静默夹到边界（输入 200、确认后变 110），看不出来被改过。
+            // 现在越界直接标错并禁用确定，让数字和标题的 80–110% 对得上。
+            val parsed = text.toIntOrNull()
+            val inRange = parsed != null && parsed in 80..110
+            if (!inRange) {
+                Text(
+                    text = "请输入 80 到 110 之间的整数",
+                    modifier = Modifier.padding(bottom = 8.dp),
+                    color = colorScheme.error,
+                )
+            }
             Row(horizontalArrangement = Arrangement.SpaceBetween) {
                 TextButton(
                     text = stringResource(android.R.string.cancel),
@@ -68,10 +79,10 @@ fun ScaleDialog(
                 Spacer(Modifier.width(20.dp))
                 TextButton(
                     text = stringResource(android.R.string.ok),
+                    enabled = inRange,
                     onClick = {
-                        val parsed = text.toIntOrNull()
-                        val clamped = parsed?.coerceIn(80, 110) ?: (volumeState() * 100).toInt()
-                        onVolumeChange(clamped / 100f)
+                        val value = text.toIntOrNull() ?: return@TextButton
+                        onVolumeChange(value / 100f)
                         onDismissRequest()
                     },
                     modifier = Modifier.weight(1f),

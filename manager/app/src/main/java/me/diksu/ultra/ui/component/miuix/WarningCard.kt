@@ -224,8 +224,15 @@ private fun WarningLevel.contentColor(): Color = when {
         WarningLevel.Notice -> colorScheme.onTertiaryContainer
     }
 
+    // 纯饱和红/橙压在浅色底上只有 1.8–3.5:1，正文会发飘；
+    // 浅色用同色相的深值、深色用浅值，两边都过 4.5:1。
+    isInDarkTheme() -> when (this) {
+        WarningLevel.Error -> Color(0xFFFFB4AB)
+        WarningLevel.Notice -> Color(0xFFFFD08A)
+    }
+
     else -> when (this) {
-        WarningLevel.Error -> Color(0xFFF72727)
-        WarningLevel.Notice -> Color(0xFFF5A623)
+        WarningLevel.Error -> Color(0xFFB3261E)
+        WarningLevel.Notice -> Color(0xFF7A4F01)
     }
 }
