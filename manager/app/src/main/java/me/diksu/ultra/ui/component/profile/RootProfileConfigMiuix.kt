@@ -471,11 +471,7 @@ private fun SELinuxPanel(
                             .padding(vertical = 8.dp),
                         label = stringResource(id = R.string.profile_selinux_domain),
                         colors = TextFieldDefaults.textFieldColors(
-                            borderColor = if (isDomainValid) {
-                                colorScheme.primary
-                            } else {
-                                Color.Red.copy(alpha = if (isSystemInDarkTheme()) 0.3f else 0.6f)
-                            },
+                            borderColor = if (isDomainValid) colorScheme.primary else colorScheme.error,
                         ),
                         keyboardOptions = KeyboardOptions(
                             keyboardType = KeyboardType.Ascii,
@@ -491,11 +487,7 @@ private fun SELinuxPanel(
                             .padding(vertical = 8.dp),
                         label = stringResource(id = R.string.profile_selinux_rules),
                         colors = TextFieldDefaults.textFieldColors(
-                            borderColor = if (isRulesValid) {
-                                colorScheme.primary
-                            } else {
-                                Color.Red.copy(alpha = if (isSystemInDarkTheme()) 0.3f else 0.6f)
-                            },
+                            borderColor = if (isRulesValid) colorScheme.primary else colorScheme.error,
                         ),
                         keyboardOptions = KeyboardOptions(
                             keyboardType = KeyboardType.Ascii,

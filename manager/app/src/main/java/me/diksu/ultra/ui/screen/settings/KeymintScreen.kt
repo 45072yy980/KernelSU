@@ -80,6 +80,7 @@ import top.yukonga.miuix.kmp.basic.IconButton as MiuixIconButton
 import top.yukonga.miuix.kmp.basic.Scaffold as MiuixScaffold
 import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Text as MiuixText
+import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.TextButton as MiuixTextButton
 import top.yukonga.miuix.kmp.basic.TextField as MiuixTextField
 import top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator
@@ -836,6 +837,9 @@ private fun RemoteKeyboxDialog(
     onDownload: (String) -> Unit,
 ) {
     var url by remember { mutableStateOf(DEFAULT_KEYBOX_URL) }
+    // 明文 http 会把密钥材料摊在网上，所以只收 https；不合法就当面说清楚，
+    // 而不是点下去毫无反应。
+    val httpsOnly = url.trim().startsWith("https://", ignoreCase = true)
     val body = @Composable {
         Column {
             SearchField(
@@ -843,6 +847,14 @@ private fun RemoteKeyboxDialog(
                 label = stringResource(R.string.keymint_keybox_url),
                 modifier = Modifier,
             ) { url = it }
+            if (!httpsOnly) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = stringResource(R.string.keymint_keybox_https_only),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
         }
     }
 
@@ -852,23 +864,20 @@ private fun RemoteKeyboxDialog(
         body = body,
         onDismiss = onDismiss,
         actions = {
-            ActionButton(
-                stringResource(R.string.keymint_keybox_start),
-                primary = true,
-                modifier = Modifier.weight(1f),
-            ) {
-                val target = url.trim()
-                if (!target.startsWith("https://", ignoreCase = true)) {
-                    // Plain http would put the key material on the wire in the clear.
-                    return@ActionButton
-                }
-                onDownload(target)
-            }
+            // 项目里统一「取消在左、确定在右」。
             ActionButton(
                 stringResource(android.R.string.cancel),
                 modifier = Modifier.weight(1f),
                 onClick = onDismiss,
             )
+            ActionButton(
+                stringResource(R.string.keymint_keybox_start),
+                primary = true,
+                enabled = httpsOnly,
+                modifier = Modifier.weight(1f),
+            ) {
+                onDownload(url.trim())
+            }
         },
     )
 }
@@ -938,6 +947,7 @@ private fun KeymintDialogShell(
 private fun ActionButton(
     text: String,
     primary: Boolean = false,
+    enabled: Boolean = true,
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
@@ -945,11 +955,16 @@ private fun ActionButton(
         MiuixTextButton(
             text = text,
             onClick = onClick,
+            enabled = enabled,
             modifier = modifier,
-
+            colors = if (primary) {
+                ButtonDefaults.textButtonColorsPrimary()
+            } else {
+                ButtonDefaults.textButtonColors()
+            },
         )
     } else {
-        TextButton(onClick = onClick, modifier = modifier) { Text(text) }
+        TextButton(onClick = onClick, enabled = enabled, modifier = modifier) { Text(text) }
     }
 }
 

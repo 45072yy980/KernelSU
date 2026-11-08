@@ -275,6 +275,7 @@
     <string name="keymint_keybox_local_summary">Choose a keybox.xml that is already on the device</string>
     <string name="keymint_keybox_remote">From a URL</string>
     <string name="keymint_keybox_remote_hint">Downloads keybox.xml from the address below and replaces the current keys once it checks out.</string>
+    <string name="keymint_keybox_https_only">Only https URLs are accepted; plain http would send the key material in the clear.</string>
     <string name="keymint_keybox_url">keybox.xml download address</string>
     <string name="keymint_keybox_start">Update now</string>
     <string name="keymint_restart_keymint">Restart keymint</string>

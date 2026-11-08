@@ -431,4 +431,5 @@
     <string name="feature_keep_editing">繼續編輯</string>
     <string name="feature_refresh">重新整理</string>
     <string name="feature_refresh_warning">重新整理會以核心目前設定取代你的修改，未套用的改動將會遺失。</string>
+    <string name="keymint_keybox_https_only">只接受 https 位址，明文 http 會把密鑰材料裸露在網上。</string>
 </resources>

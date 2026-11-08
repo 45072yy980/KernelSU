@@ -108,14 +108,12 @@ private fun EditDialog(
                     text = stringResource(R.string.confirm),
                     onClick = {
                         onDismissRequest()
-                        with(filter.getInputValue().text) {
-                            if (isEmpty()) {
-                                onValueChange(0)
-                                filter.setInputValue("0")
-                            } else {
-                                onValueChange(this@with.toInt())
-                            }
-
+                        // 空串不再补成 0：当作没改，恢复成原值。
+                        val typed = filter.getInputValue().text
+                        if (typed.isEmpty()) {
+                            filter.setInputValue(dialogTextFieldValue.toString())
+                        } else {
+                            typed.toIntOrNull()?.let(onValueChange)
                         }
                     },
                     modifier = Modifier.weight(1f),

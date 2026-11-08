@@ -12,6 +12,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -121,24 +122,49 @@ private fun UidGidPanel(
     onUidChange: (Int) -> Unit,
     onGidChange: (Int) -> Unit
 ) {
+    // 输入中的字符串单独持有：以前每敲一下就 toIntOrNull() ?: 0，
+    // 把输入框清空、或只打到半个数，都会立刻把 UID/GID 写成 0。
+    var uidText by remember { mutableStateOf(uid.toString()) }
+    var gidText by remember { mutableStateOf(gid.toString()) }
+    LaunchedEffect(uid) { if (uidText.toIntOrNull() != uid) uidText = uid.toString() }
+    LaunchedEffect(gid) { if (gidText.toIntOrNull() != gid) gidText = gid.toString() }
+
     SegmentedColumn(
         modifier = Modifier.padding(horizontal = 16.dp),
         content = listOf(
             {
                 SegmentedTextField(
                     enabled = enabled,
-                    value = uid.toString(),
-                    onValueChange = { onUidChange(it.toIntOrNull() ?: 0) },
+                    value = uidText,
+                    onValueChange = { raw ->
+                        uidText = raw.filter { it.isDigit() }.take(10)
+                        uidText.toIntOrNull()?.let(onUidChange)
+                    },
                     label = "UID",
+                    isError = uidText.isEmpty(),
+                    supportingContent = if (uidText.isEmpty()) {
+                        { Text("留空会沿用上一个值") }
+                    } else {
+                        null
+                    },
                     singleLine = true
                 )
             },
             {
                 SegmentedTextField(
                     enabled = enabled,
-                    value = gid.toString(),
-                    onValueChange = { onGidChange(it.toIntOrNull() ?: 0) },
+                    value = gidText,
+                    onValueChange = { raw ->
+                        gidText = raw.filter { it.isDigit() }.take(10)
+                        gidText.toIntOrNull()?.let(onGidChange)
+                    },
                     label = "GID",
+                    isError = gidText.isEmpty(),
+                    supportingContent = if (gidText.isEmpty()) {
+                        { Text("留空会沿用上一个值") }
+                    } else {
+                        null
+                    },
                     singleLine = true
                 )
             }

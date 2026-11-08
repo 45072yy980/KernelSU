@@ -258,6 +258,7 @@
     <string name="keymint_keybox_local_summary">从设备上选一个 keybox.xml</string>
     <string name="keymint_keybox_remote">远程更新</string>
     <string name="keymint_keybox_remote_hint">从下面的地址下载 keybox.xml，验证通过后替换当前密钥。</string>
+    <string name="keymint_keybox_https_only">只接受 https 地址，明文 http 会把密钥材料裸露在网上。</string>
     <string name="keymint_keybox_url">keybox.xml 的下载地址</string>
     <string name="keymint_keybox_start">开始更新</string>
     <string name="keymint_restart_keymint">重启 keymint</string>

@@ -336,7 +336,7 @@ fun JailbreakFlashWarningDialog(
         stringResource(R.string.install_next)
     }
 
-    if (LocalUiMode.current == UiMode.Miuix) {
+    if (LocalUiMode.current.isMiuixFamily) {
         OverlayDialog(
             show = true,
             title = stringResource(android.R.string.dialog_alert_title),

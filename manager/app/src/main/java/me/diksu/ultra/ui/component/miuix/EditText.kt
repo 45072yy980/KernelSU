@@ -100,11 +100,8 @@ fun EditText(
                     enabled = enabled,
                     textStyle = MiuixTheme.textStyles.main.copy(
                         textAlign = TextAlign.End,
-                        color = if (isError) {
-                            Color.Red.copy(alpha = if (isSystemInDarkTheme()) 0.3f else 0.6f)
-                        } else {
-                            rightActionColor.color(enabled)
-                        }
+                        // 跟随应用主题，而不是系统深色：强制浅色皮肤时手写红色透明度会太淡。
+                        color = if (isError) colorScheme.error else rightActionColor.color(enabled)
                     ),
                     keyboardOptions = keyboardOptions,
                     cursorBrush = SolidColor(colorScheme.primary),

@@ -155,8 +155,11 @@ fun SusfsRow(
             headlineContent = { Text(title) },
             supportingContent = if (summaryText != null) ({ Text(summaryText) }) else null,
             leadingContent = if (icon != null) ({ MaterialIcon(icon, null) }) else null,
-            trailingContent = {
-                MaterialIcon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null)
+            // 没有 onClick 就是纯信息行，别画箭头骗人去点。
+            trailingContent = if (onClick != null) {
+                { MaterialIcon(Icons.AutoMirrored.Filled.KeyboardArrowRight, null) }
+            } else {
+                null
             },
         )
     }
