@@ -537,7 +537,7 @@ private fun GroupItem(
     val unmountBg = colorScheme.surfaceContainerHigh
     val fg = colorScheme.onSecondaryContainer
     val rootFg = colorScheme.onTertiaryContainer.copy(alpha = 0.8f)
-    val unmountFg = colorScheme.onSurfaceVariant
+    val unmountFg = colorScheme.onSurfaceVariantSummary
 
     val userId = group.uid / 100000
     val tags = remember(group.anyAllowSu, group.shouldUmount, group.anyCustom, userId) {
