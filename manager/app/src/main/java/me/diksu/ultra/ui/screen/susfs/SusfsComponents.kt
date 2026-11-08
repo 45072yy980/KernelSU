@@ -275,20 +275,24 @@ fun SusfsTextField(
     onValueChange: (String) -> Unit,
     label: String,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    singleLine: Boolean = true,
 ) {
     if (miuixSkin()) {
         MiuixTextField(
             value = value,
-            onValueChange = onValueChange,
+            onValueChange = { if (enabled) onValueChange(it) },
             label = label,
             modifier = modifier,
+            singleLine = singleLine,
         )
     } else {
         OutlinedTextField(
             value = value,
             onValueChange = onValueChange,
             label = { Text(label) },
-            singleLine = true,
+            singleLine = singleLine,
+            enabled = enabled,
             modifier = modifier,
         )
     }

@@ -8,10 +8,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -20,8 +16,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import me.diksu.ultra.ui.component.dialog.AppAlertDialog
+import me.diksu.ultra.ui.screen.susfs.SusfsTextField
 import me.diksu.ultra.ui.util.clearManagerHidden
 import me.diksu.ultra.ui.util.matchesTriggerCode
 
@@ -64,62 +61,54 @@ fun ManagerHiddenRecovery(content: @Composable () -> Unit) {
     }
 
     if (asking) {
-        AlertDialog(
+        AppAlertDialog(
+            title = "解除伪装",
             onDismissRequest = { asking = false },
-            title = { Text("解除伪装") },
-            text = {
-                Column {
-                    Text("输入解除码。忘了的话，在计算器里输入的也是同一个码。")
-                    OutlinedTextField(
-                        value = typed,
-                        onValueChange = { entry ->
-                            typed = entry.filter { it.isDigit() }
-                            wrong = false
-                        },
-                        singleLine = true,
-                        isError = wrong,
-                        visualTransformation = PasswordVisualTransformation(),
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    if (wrong) {
-                        // The old behaviour said nothing at all, which left "wrong code" and
-                        // "nothing happened" looking identical. The code is still not revealed:
-                        // this only says the entry was not it.
-                        Text(
-                            "解除码不对",
-                            modifier = Modifier.padding(top = 8.dp),
-                        )
+            confirmText = "确定",
+            onConfirm = {
+                val entry = typed
+                // Off the main thread: this reads the trigger file and may run two root
+                // commands.
+                Thread {
+                    val ok = matchesTriggerCode(entry)
+                    if (ok) {
+                        clearManagerHidden()
                     }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    val entry = typed
-                    // Off the main thread: this reads the trigger file and may run two root
-                    // commands.
-                    Thread {
-                        val ok = matchesTriggerCode(entry)
+                    Handler(Looper.getMainLooper()).post {
                         if (ok) {
-                            clearManagerHidden()
+                            asking = false
+                            Toast.makeText(context, "已解除", Toast.LENGTH_SHORT).show()
+                        } else {
+                            wrong = true
                         }
-                        Handler(Looper.getMainLooper()).post {
-                            if (ok) {
-                                asking = false
-                                Toast.makeText(context, "已解除", Toast.LENGTH_SHORT).show()
-                            } else {
-                                wrong = true
-                            }
-                        }
-                    }.start()
-                }) {
-                    Text("确定")
-                }
+                    }
+                }.start()
             },
-            dismissButton = {
-                TextButton(onClick = { asking = false }) {
-                    Text("取消")
+            dismissText = "取消",
+            confirmEnabled = typed.isNotEmpty(),
+        ) {
+            Column {
+                FeatureText(
+                    text = "输入解除码。忘了的话，在计算器里输入的也是同一个码。",
+                    size = 13,
+                    muted = true,
+                )
+                SusfsTextField(
+                    value = typed,
+                    onValueChange = { entry ->
+                        typed = entry.filter { it.isDigit() }
+                        wrong = false
+                    },
+                    label = "解除码",
+                    modifier = Modifier.padding(top = 12.dp).fillMaxWidth(),
+                )
+                if (wrong) {
+                    // The old behaviour said nothing at all, which left "wrong code" and
+                    // "nothing happened" looking identical. The code is still not revealed:
+                    // this only says the entry was not it.
+                    FeatureText(text = "解除码不对", size = 13, modifier = Modifier.padding(top = 8.dp))
                 }
-            },
-        )
+            }
+        }
     }
 }

@@ -2,6 +2,7 @@ package me.diksu.ultra.ui.screen.shizuku
 
 import android.content.Intent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -25,6 +26,7 @@ import androidx.compose.material.icons.automirrored.filled.Article
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
@@ -39,7 +41,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -66,11 +67,13 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.diksu.ultra.shizuku.ShizukuServiceManager
 import me.diksu.ultra.ui.LocalUiMode
+import me.diksu.ultra.ui.component.dialog.AppAlertDialog
 import me.diksu.ultra.ui.isMiuixFamily
 import me.diksu.ultra.ui.navigation3.LocalNavigator
-import top.yukonga.miuix.kmp.basic.Card as MiuixCard
 import top.yukonga.miuix.kmp.basic.Icon as MiuixIcon
 import top.yukonga.miuix.kmp.basic.IconButton as MiuixIconButton
+import top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator
+import top.yukonga.miuix.kmp.basic.InputField
 import top.yukonga.miuix.kmp.basic.Scaffold as MiuixScaffold
 import top.yukonga.miuix.kmp.basic.Text as MiuixText
 import top.yukonga.miuix.kmp.basic.TopAppBar as MiuixTopAppBar
@@ -187,6 +190,11 @@ private fun rememberLogState(): Pair<LogState, LogActions> {
     }
 
     val actions = LogActions(
+        onSourceChange = { source = it },
+        onQueryChange = { query = it },
+        onToggleLevel = { level ->
+            activeLevels = if (level in activeLevels) activeLevels - level else activeLevels + level
+        },
         onRefresh = { refresh() },
         onCopy = {
             val text = visibleLines.joinToString("\n") { it.text }
@@ -248,6 +256,9 @@ private data class LogState(
 )
 
 private data class LogActions(
+    val onSourceChange: (LogSource) -> Unit,
+    val onQueryChange: (String) -> Unit,
+    val onToggleLevel: (LogLevel) -> Unit,
     val onRefresh: () -> Unit,
     val onCopy: () -> Unit,
     val onExport: () -> Unit,
@@ -259,16 +270,9 @@ private data class LogActions(
 @Composable
 private fun ShizukuLogScreenMiuix(onBack: () -> Unit) {
     val (state, actions) = rememberLogState()
-    var source by remember { mutableStateOf(state.source) }
-    var query by remember { mutableStateOf(state.query) }
-    var activeLevels by remember { mutableStateOf(state.activeLevels) }
     var showMenu by remember { mutableStateOf(false) }
     var isSearchActive by remember { mutableStateOf(false) }
-
-    // 同步外部状态变化
-    LaunchedEffect(state.source) { source = state.source }
-    LaunchedEffect(state.query) { query = state.query }
-    LaunchedEffect(state.activeLevels) { activeLevels = state.activeLevels }
+    var confirmClear by remember { mutableStateOf(false) }
 
     MiuixScaffold(
         topBar = {
@@ -278,7 +282,7 @@ private fun ShizukuLogScreenMiuix(onBack: () -> Unit) {
                     MiuixIconButton(onClick = {
                         if (isSearchActive) {
                             isSearchActive = false
-                            query = ""
+                            actions.onQueryChange("")
                         } else {
                             onBack()
                         }
@@ -288,8 +292,8 @@ private fun ShizukuLogScreenMiuix(onBack: () -> Unit) {
                 },
                 actions = {
                     if (isSearchActive) {
-                        if (query.isNotEmpty()) {
-                            MiuixIconButton(onClick = { query = "" }) {
+                        if (state.query.isNotEmpty()) {
+                            MiuixIconButton(onClick = { actions.onQueryChange("") }) {
                                 MiuixIcon(Icons.Filled.Close, contentDescription = null, tint = colorScheme.onSurface)
                             }
                         }
@@ -300,7 +304,7 @@ private fun ShizukuLogScreenMiuix(onBack: () -> Unit) {
                     }
                     Box {
                         MiuixIconButton(onClick = { showMenu = !showMenu }) {
-                            MiuixIcon(Icons.Filled.Refresh, contentDescription = "更多", tint = colorScheme.onSurface)
+                            MiuixIcon(Icons.Filled.MoreVert, contentDescription = "更多", tint = colorScheme.onSurface)
                         }
                         DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
                             DropdownMenuItem(
@@ -320,7 +324,7 @@ private fun ShizukuLogScreenMiuix(onBack: () -> Unit) {
                             )
                             DropdownMenuItem(
                                 text = { Text("清除日志") },
-                                onClick = { showMenu = false; actions.onClear() },
+                                onClick = { showMenu = false; confirmClear = true },
                                 leadingIcon = { Icon(Icons.Filled.DeleteSweep, contentDescription = null) },
                             )
                         }
@@ -333,13 +337,14 @@ private fun ShizukuLogScreenMiuix(onBack: () -> Unit) {
             // 搜索栏
             if (isSearchActive) {
                 Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                    OutlinedTextField(
-                        value = query,
-                        onValueChange = { query = it },
-                        placeholder = { Text("搜索日志...", fontSize = 14.sp) },
-                        singleLine = true,
+                    InputField(
+                        query = state.query,
+                        onQueryChange = actions.onQueryChange,
+                        label = "搜索日志…",
                         modifier = Modifier.fillMaxWidth(),
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                        onSearch = { },
+                        expanded = false,
+                        onExpandedChange = { },
                     )
                 }
             }
@@ -352,15 +357,15 @@ private fun ShizukuLogScreenMiuix(onBack: () -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(
-                        selected = source == LogSource.SERVER,
-                        onClick = { source = LogSource.SERVER },
-                        label = { Text("服务日志", fontSize = 13.sp) },
+                    MiuixFilterChip(
+                        text = "服务日志",
+                        selected = state.source == LogSource.SERVER,
+                        onClick = { actions.onSourceChange(LogSource.SERVER) },
                     )
-                    FilterChip(
-                        selected = source == LogSource.LOGCAT,
-                        onClick = { source = LogSource.LOGCAT },
-                        label = { Text("Logcat", fontSize = 13.sp) },
+                    MiuixFilterChip(
+                        text = "Logcat",
+                        selected = state.source == LogSource.LOGCAT,
+                        onClick = { actions.onSourceChange(LogSource.LOGCAT) },
                     )
                 }
                 Row(
@@ -370,23 +375,11 @@ private fun ShizukuLogScreenMiuix(onBack: () -> Unit) {
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     LogLevel.entries.filter { it != LogLevel.Unknown }.forEach { level ->
-                        FilterChip(
-                            selected = level in activeLevels,
-                            onClick = {
-                                activeLevels = if (level in activeLevels) {
-                                    activeLevels - level
-                                } else {
-                                    activeLevels + level
-                                }
-                            },
-                            label = {
-                                Text(
-                                    "${level.letter} ${level.name}",
-                                    fontSize = 12.sp,
-                                    color = level.color,
-                                    fontWeight = FontWeight.Medium,
-                                )
-                            },
+                        MiuixFilterChip(
+                            text = "${level.letter} ${level.name}",
+                            selected = level in state.activeLevels,
+                            textColor = level.color,
+                            onClick = { actions.onToggleLevel(level) },
                         )
                     }
                 }
@@ -397,7 +390,7 @@ private fun ShizukuLogScreenMiuix(onBack: () -> Unit) {
                 state.isLoading -> Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center,
-                ) { CircularProgressIndicator() }
+                ) { InfiniteProgressIndicator() }
                 state.visibleLines.isEmpty() -> Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center,
@@ -411,7 +404,7 @@ private fun ShizukuLogScreenMiuix(onBack: () -> Unit) {
                         )
                         Spacer(Modifier.height(12.dp))
                         MiuixText(
-                            text = "暂无日志",
+                            text = if (state.allLines.isEmpty()) "暂无日志" else "没有匹配的日志",
                             fontSize = 14.sp,
                             color = colorScheme.onSurfaceVariantSummary,
                         )
@@ -455,6 +448,55 @@ private fun ShizukuLogScreenMiuix(onBack: () -> Unit) {
             }
         }
     }
+
+    if (confirmClear) {
+        val server = state.source == LogSource.SERVER
+        AppAlertDialog(
+            title = "清除日志",
+            onDismissRequest = { confirmClear = false },
+            confirmText = if (server) "清除" else "知道了",
+            confirmDestructive = server,
+            onConfirm = {
+                confirmClear = false
+                if (server) actions.onClear()
+            },
+            dismissText = if (server) "取消" else null,
+        ) {
+            MiuixText(
+                text = if (server) {
+                    "将清空服务端持久日志，无法恢复。"
+                } else {
+                    "Logcat 由系统维护，应用无法清除；可以改用「导出日志」留存。"
+                },
+                fontSize = 14.sp,
+            )
+        }
+    }
+}
+
+/** 与皮肤同源的过滤片：miuix 的胶囊 + 选中主色。 */
+@Composable
+private fun MiuixFilterChip(
+    text: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    textColor: Color? = null,
+) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(if (selected) colorScheme.primary.copy(alpha = 0.16f) else colorScheme.surfaceContainerHigh)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        MiuixText(
+            text = text,
+            fontSize = 13.sp,
+            fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
+            color = textColor ?: if (selected) colorScheme.primary else colorScheme.onSurfaceVariantSummary,
+        )
+    }
 }
 
 // ── Material 3 版本 ─────────────────────────────────────────────────────────
@@ -463,15 +505,9 @@ private fun ShizukuLogScreenMiuix(onBack: () -> Unit) {
 @Composable
 private fun ShizukuLogScreenMaterial(onBack: () -> Unit) {
     val (state, actions) = rememberLogState()
-    var source by remember { mutableStateOf(state.source) }
-    var query by remember { mutableStateOf(state.query) }
-    var activeLevels by remember { mutableStateOf(state.activeLevels) }
     var showMenu by remember { mutableStateOf(false) }
     var isSearchActive by remember { mutableStateOf(false) }
-
-    LaunchedEffect(state.source) { source = state.source }
-    LaunchedEffect(state.query) { query = state.query }
-    LaunchedEffect(state.activeLevels) { activeLevels = state.activeLevels }
+    var confirmClear by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -481,7 +517,7 @@ private fun ShizukuLogScreenMaterial(onBack: () -> Unit) {
                     IconButton(onClick = {
                         if (isSearchActive) {
                             isSearchActive = false
-                            query = ""
+                            actions.onQueryChange("")
                         } else {
                             onBack()
                         }
@@ -491,8 +527,8 @@ private fun ShizukuLogScreenMaterial(onBack: () -> Unit) {
                 },
                 actions = {
                     if (isSearchActive) {
-                        if (query.isNotEmpty()) {
-                            IconButton(onClick = { query = "" }) {
+                        if (state.query.isNotEmpty()) {
+                            IconButton(onClick = { actions.onQueryChange("") }) {
                                 Icon(Icons.Filled.Close, contentDescription = null)
                             }
                         }
@@ -503,7 +539,7 @@ private fun ShizukuLogScreenMaterial(onBack: () -> Unit) {
                     }
                     Box {
                         IconButton(onClick = { showMenu = !showMenu }) {
-                            Icon(Icons.Filled.Refresh, contentDescription = "更多")
+                            Icon(Icons.Filled.MoreVert, contentDescription = "更多")
                         }
                         DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
                             DropdownMenuItem(
@@ -523,7 +559,7 @@ private fun ShizukuLogScreenMaterial(onBack: () -> Unit) {
                             )
                             DropdownMenuItem(
                                 text = { Text("清除日志") },
-                                onClick = { showMenu = false; actions.onClear() },
+                                onClick = { showMenu = false; confirmClear = true },
                                 leadingIcon = { Icon(Icons.Filled.DeleteSweep, contentDescription = null) },
                             )
                         }
@@ -536,8 +572,8 @@ private fun ShizukuLogScreenMaterial(onBack: () -> Unit) {
             if (isSearchActive) {
                 Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                     OutlinedTextField(
-                        value = query,
-                        onValueChange = { query = it },
+                        value = state.query,
+                        onValueChange = actions.onQueryChange,
                         placeholder = { Text("搜索日志...") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
@@ -554,13 +590,13 @@ private fun ShizukuLogScreenMaterial(onBack: () -> Unit) {
             ) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterChip(
-                        selected = source == LogSource.SERVER,
-                        onClick = { source = LogSource.SERVER },
+                        selected = state.source == LogSource.SERVER,
+                        onClick = { actions.onSourceChange(LogSource.SERVER) },
                         label = { Text("服务日志") },
                     )
                     FilterChip(
-                        selected = source == LogSource.LOGCAT,
-                        onClick = { source = LogSource.LOGCAT },
+                        selected = state.source == LogSource.LOGCAT,
+                        onClick = { actions.onSourceChange(LogSource.LOGCAT) },
                         label = { Text("Logcat") },
                     )
                 }
@@ -572,14 +608,8 @@ private fun ShizukuLogScreenMaterial(onBack: () -> Unit) {
                 ) {
                     LogLevel.entries.filter { it != LogLevel.Unknown }.forEach { level ->
                         FilterChip(
-                            selected = level in activeLevels,
-                            onClick = {
-                                activeLevels = if (level in activeLevels) {
-                                    activeLevels - level
-                                } else {
-                                    activeLevels + level
-                                }
-                            },
+                            selected = level in state.activeLevels,
+                            onClick = { actions.onToggleLevel(level) },
                             label = {
                                 Text(
                                     "${level.letter} ${level.name}",
@@ -610,7 +640,7 @@ private fun ShizukuLogScreenMaterial(onBack: () -> Unit) {
                         )
                         Spacer(Modifier.height(12.dp))
                         Text(
-                            text = "暂无日志",
+                            text = if (state.allLines.isEmpty()) "暂无日志" else "没有匹配的日志",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -652,6 +682,30 @@ private fun ShizukuLogScreenMaterial(onBack: () -> Unit) {
                     }
                 }
             }
+        }
+    }
+
+    if (confirmClear) {
+        val server = state.source == LogSource.SERVER
+        AppAlertDialog(
+            title = "清除日志",
+            onDismissRequest = { confirmClear = false },
+            confirmText = if (server) "清除" else "知道了",
+            confirmDestructive = server,
+            onConfirm = {
+                confirmClear = false
+                if (server) actions.onClear()
+            },
+            dismissText = if (server) "取消" else null,
+        ) {
+            Text(
+                text = if (server) {
+                    "将清空服务端持久日志，无法恢复。"
+                } else {
+                    "Logcat 由系统维护，应用无法清除；可以改用「导出日志」留存。"
+                },
+                style = MaterialTheme.typography.bodyMedium,
+            )
         }
     }
 }

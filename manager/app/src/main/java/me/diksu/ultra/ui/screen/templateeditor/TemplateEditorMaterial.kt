@@ -55,6 +55,7 @@ fun TemplateEditorScreenMaterial(
                     stringResource(R.string.app_profile_template_edit)
                 },
                 readOnly = state.readOnly,
+                isCreation = state.isCreation,
                 summary = state.titleSummary,
                 onBack = actions.onBack,
                 onDelete = actions.onDelete,
@@ -168,6 +169,7 @@ private fun TemplateEditorListItem(
 private fun TopBar(
     title: String,
     readOnly: Boolean,
+    isCreation: Boolean = false,
     summary: String = "",
     onBack: () -> Unit,
     onDelete: () -> Unit = {},
@@ -191,11 +193,14 @@ private fun TopBar(
         },
         actions = {
             if (readOnly) return@LargeFlexibleTopAppBar
-            IconButton(onClick = onDelete) {
-                Icon(
-                    Icons.Filled.DeleteForever,
-                    contentDescription = stringResource(id = R.string.app_profile_template_delete)
-                )
+            // 新建页还没有可删的东西，和 miuix 皮肤保持一致地隐藏。
+            if (!isCreation) {
+                IconButton(onClick = onDelete) {
+                    Icon(
+                        Icons.Filled.DeleteForever,
+                        contentDescription = stringResource(id = R.string.app_profile_template_delete)
+                    )
+                }
             }
             IconButton(onClick = onSave) {
                 Icon(

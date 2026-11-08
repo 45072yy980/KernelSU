@@ -93,6 +93,7 @@
     <string name="reboot_bootloader">Reboot to Bootloader</string>
     <string name="reboot_download">Reboot to Download</string>
     <string name="reboot_edl">Reboot to EDL</string>
+    <string name="reboot_confirm_message">The device leaves Android until you boot it again. Continue?</string>
     <string name="about">About</string>
     <string name="module_uninstall_confirm">Are you sure you want to uninstall module %s?</string>
     <string name="metamodule_uninstall_confirm">Are you sure you want to uninstall module %s? This action will affect all modules, and certain features provided by the metamodule (such as mounting) will no longer work.</string>
@@ -777,6 +778,7 @@
     <string name="netisolate_applied">Applied</string>
     <string name="netisolate_unsupported">This kernel does not support it</string>
     <string name="netisolate_unsupported_summary">The socket_connect hook could not be installed. Update the kernel module.</string>
+    <string name="netisolate_validation_targets">Select at least one app, or turn the mode off.</string>
     <string name="maintenance_title">Maintenance</string>
     <string name="maintenance_summary">Reload modules, soft reboot, hidden reboot</string>
     <string name="maintenance_group_actions">Actions</string>
@@ -803,4 +805,20 @@
     <string name="uts_field_version">version (build info)</string>
     <string name="uts_field_machine">machine (arch)</string>
     <string name="uts_field_domainname">domainname</string>
+    <string name="uts_kernel_support">Kernel support</string>
+    <string name="uts_unsupported_summary">The running kernel does not support UTS view. Update the kernel module, then refresh.</string>
+    <string name="uts_validation_fields">Enter at least one field, or turn the mode off.</string>
+    <string name="uts_validation_targets">Select at least one app, or turn the mode off.</string>
+    <string name="uts_validation_length">Each field must be at most 64 UTF-8 bytes.</string>
+    <string name="uts_fields_hint">Empty fields are left unchanged. Each field is limited to 64 UTF-8 bytes.</string>
+    <string name="uts_applied">Applied</string>
+    <string name="feature_target_limit">Up to %1$d apps. Remove one before adding another.</string>
+    <string name="feature_applying">Applying…</string>
+    <string name="feature_unsaved_changes">Changes are not applied yet.</string>
+    <string name="feature_discard_title">Discard changes?</string>
+    <string name="feature_discard">Discard</string>
+    <string name="feature_discard_summary">Your edits have not been applied. Continue without saving?</string>
+    <string name="feature_keep_editing">Keep editing</string>
+    <string name="feature_refresh">Refresh</string>
+    <string name="feature_refresh_warning">Refreshing replaces your edits with the configuration currently applied in the kernel.</string>
 </resources>

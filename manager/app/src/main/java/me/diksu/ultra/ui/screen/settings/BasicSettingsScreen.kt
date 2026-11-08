@@ -1,15 +1,14 @@
 package me.diksu.ultra.ui.screen.settings
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.filled.BlurOn
 import androidx.compose.material.icons.filled.Block
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.TextButton
+
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -46,12 +45,15 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import me.diksu.ultra.R
 import me.diksu.ultra.ui.LocalUiMode
 import me.diksu.ultra.ui.UiMode
+import me.diksu.ultra.ui.component.FeatureText
+import me.diksu.ultra.ui.component.dialog.AppAlertDialog
 import me.diksu.ultra.ui.component.material.SegmentedColumn
 import me.diksu.ultra.ui.component.material.SegmentedDropdownItem
 import me.diksu.ultra.ui.component.material.SegmentedListItem
 import me.diksu.ultra.ui.component.material.SegmentedSwitchItem
 import me.diksu.ultra.ui.navigation3.LocalNavigator
 import me.diksu.ultra.ui.navigation3.Route
+import me.diksu.ultra.ui.screen.susfs.SusfsTextField
 import me.diksu.ultra.ui.viewmodel.SettingsViewModel
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Scaffold as MiuixScaffold
@@ -524,32 +526,29 @@ private fun ModuleBlacklistDialog(
             loaded = true
         }
     }
-    AlertDialog(
+    AppAlertDialog(
+        title = stringResource(R.string.module_blacklist_dialog_title),
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.module_blacklist_dialog_title)) },
-        text = {
-            Column {
-                Text(stringResource(R.string.module_blacklist_dialog_message))
-                OutlinedTextField(
-                    value = text,
-                    onValueChange = { text = it },
-                    modifier = Modifier.padding(top = 12.dp),
-                    singleLine = false,
-                )
-            }
+        confirmText = stringResource(android.R.string.ok),
+        onConfirm = {
+            onSave(text)
+            onDismiss()
         },
-        confirmButton = {
-            TextButton(onClick = {
-                onSave(text)
-                onDismiss()
-            }) {
-                Text(stringResource(android.R.string.ok))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(android.R.string.cancel))
-            }
-        },
-    )
+        dismissText = stringResource(android.R.string.cancel),
+    ) {
+        Column {
+            FeatureText(
+                text = stringResource(R.string.module_blacklist_dialog_message),
+                size = 13,
+                muted = true,
+            )
+            SusfsTextField(
+                value = text,
+                onValueChange = { text = it },
+                label = "",
+                singleLine = false,
+                modifier = Modifier.padding(top = 12.dp).fillMaxWidth(),
+            )
+        }
+    }
 }

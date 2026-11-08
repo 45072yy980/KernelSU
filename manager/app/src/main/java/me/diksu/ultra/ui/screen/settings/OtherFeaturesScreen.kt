@@ -17,14 +17,11 @@ import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material.icons.filled.WifiOff
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -45,11 +42,14 @@ import me.diksu.ultra.Natives
 import me.diksu.ultra.R
 import me.diksu.ultra.ui.LocalUiMode
 import me.diksu.ultra.ui.UiMode
+import me.diksu.ultra.ui.component.FeatureText
+import me.diksu.ultra.ui.component.dialog.AppAlertDialog
 import me.diksu.ultra.ui.component.material.SegmentedColumn
 import me.diksu.ultra.ui.component.material.SegmentedListItem
 import me.diksu.ultra.ui.component.material.SegmentedSwitchItem
 import me.diksu.ultra.ui.navigation3.LocalNavigator
 import me.diksu.ultra.ui.navigation3.Route
+import me.diksu.ultra.ui.screen.susfs.SusfsTextField
 import me.diksu.ultra.ui.util.CalculatorLauncher
 import me.diksu.ultra.ui.util.HideAppList
 import me.diksu.ultra.ui.util.isStealthEnabled
@@ -256,34 +256,23 @@ fun OtherFeaturesScreen() {
     }
 
     if (codeDialogShown) {
-        AlertDialog(
+        AppAlertDialog(
+            title = stringResource(R.string.calculator_code_title),
             onDismissRequest = { codeDialogShown = false },
-            title = { Text(stringResource(R.string.calculator_code_title)) },
-            text = {
-                Column {
-                    Text(stringResource(R.string.calculator_code_summary))
-                    OutlinedTextField(
-                        value = codeText,
-                        onValueChange = { typed -> codeText = typed.filter { it.isDigit() } },
-                        singleLine = true,
-                        label = { Text(stringResource(R.string.calculator_code_label)) },
-                        modifier = Modifier
-                            .padding(top = 12.dp)
-                            .fillMaxWidth(),
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = onCalculatorCodeConfirmed) {
-                    Text("确定")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { codeDialogShown = false }) {
-                    Text("取消")
-                }
-            },
-        )
+            confirmText = stringResource(android.R.string.ok),
+            onConfirm = onCalculatorCodeConfirmed,
+            dismissText = stringResource(android.R.string.cancel),
+        ) {
+            Column {
+                FeatureText(text = stringResource(R.string.calculator_code_summary), size = 13, muted = true)
+                SusfsTextField(
+                    value = codeText,
+                    onValueChange = { typed -> codeText = typed.filter { it.isDigit() } },
+                    label = stringResource(R.string.calculator_code_label),
+                    modifier = Modifier.padding(top = 12.dp).fillMaxWidth(),
+                )
+            }
+        }
     }
 
 }

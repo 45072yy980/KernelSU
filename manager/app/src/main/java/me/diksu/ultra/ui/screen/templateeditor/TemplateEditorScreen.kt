@@ -15,6 +15,8 @@ import me.diksu.ultra.toOrdinalList
 import me.diksu.ultra.toRootProfileFlags
 import me.diksu.ultra.ui.LocalUiMode
 import me.diksu.ultra.ui.UiMode
+import me.diksu.ultra.ui.component.FeatureText
+import me.diksu.ultra.ui.component.dialog.AppAlertDialog
 import me.diksu.ultra.ui.navigation3.LocalNavigator
 import me.diksu.ultra.ui.util.deleteAppProfileTemplate
 import me.diksu.ultra.ui.viewmodel.TemplateViewModel
@@ -30,6 +32,7 @@ fun TemplateEditorScreen(template: TemplateViewModel.TemplateInfo, readOnly: Boo
 
     var currentTemplate by rememberSaveable { mutableStateOf(template) }
     var idErrorHint by remember { mutableStateOf("") }
+    var confirmDelete by remember { mutableStateOf(false) }
 
     val saveTemplateFailed = stringResource(id = R.string.app_profile_template_save_failed)
     val idConflictError = stringResource(id = R.string.app_profile_template_id_exist)
@@ -88,11 +91,7 @@ fun TemplateEditorScreen(template: TemplateViewModel.TemplateInfo, readOnly: Boo
 
     val actions = TemplateEditorActions(
         onBack = dropUnlessResumed { finishEditing() },
-        onDelete = {
-            if (deleteAppProfileTemplate(currentTemplate.id)) {
-                navigator.setResult("template_edit", true)
-            }
-        },
+        onDelete = { confirmDelete = true },
         onSave = ::saveCurrentTemplate,
         onNameChange = { value ->
             updateTemplate(currentTemplate.copy(name = value))
@@ -139,5 +138,26 @@ fun TemplateEditorScreen(template: TemplateViewModel.TemplateInfo, readOnly: Boo
             state = uiState,
             actions = actions,
         )
+    }
+
+    if (confirmDelete) {
+        AppAlertDialog(
+            title = stringResource(R.string.app_profile_template_delete),
+            onDismissRequest = { confirmDelete = false },
+            confirmText = stringResource(android.R.string.ok),
+            onConfirm = {
+                confirmDelete = false
+                if (deleteAppProfileTemplate(currentTemplate.id)) {
+                    navigator.setResult("template_edit", true)
+                }
+            },
+            dismissText = stringResource(android.R.string.cancel),
+            confirmDestructive = true,
+        ) {
+            FeatureText(
+                text = currentTemplate.name.ifBlank { currentTemplate.id } + " · 删除后无法恢复。",
+                size = 14,
+            )
+        }
     }
 }

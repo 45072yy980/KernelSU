@@ -1,36 +1,113 @@
 package me.diksu.ultra.ui.component
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import me.diksu.ultra.ui.LocalUiMode
 import me.diksu.ultra.ui.component.material.SegmentedRadioItem
 import me.diksu.ultra.ui.component.material.SegmentedSwitchItem
+import me.diksu.ultra.ui.component.material.TopBarBackButton
 import me.diksu.ultra.ui.isMiuixFamily
+import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card as MiuixCard
+import top.yukonga.miuix.kmp.basic.Icon as MiuixIcon
+import top.yukonga.miuix.kmp.basic.IconButton as MiuixIconButton
+import top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator
+import top.yukonga.miuix.kmp.basic.Scaffold as MiuixScaffold
 import top.yukonga.miuix.kmp.basic.SmallTitle
+import top.yukonga.miuix.kmp.basic.SmallTopAppBar
 import top.yukonga.miuix.kmp.basic.Text as MiuixText
+import top.yukonga.miuix.kmp.basic.TextButton as MiuixTextButton
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.preference.RadioButtonLocation
 import top.yukonga.miuix.kmp.preference.RadioButtonPreference
 import top.yukonga.miuix.kmp.preference.SwitchPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme as miuixColors
 
-/**
- * 特性页的骨架件，照 Shizuku / SUSFS 页面那套：`SmallTitle` 分组 + 卡片 + 紧凑行。
- *
- * 之前 UTS 与网络隔离开关页直接拿设置页的 `ArrowPreference` 拼，行高、缩进、分组
- * 间距都跟别的页面不一样，看起来像半成品。
- */
+/** 特性页共用的顶栏与页面骨架。 */
+@Composable
+fun FeatureScaffold(
+    title: String,
+    onBack: () -> Unit,
+    onRefresh: (() -> Unit)? = null,
+    refreshEnabled: Boolean = true,
+    content: @Composable (PaddingValues) -> Unit,
+) {
+    if (LocalUiMode.current.isMiuixFamily) {
+        MiuixScaffold(
+            topBar = {
+                SmallTopAppBar(
+                    title = title,
+                    navigationIcon = {
+                        MiuixIconButton(onClick = onBack) {
+                            MiuixIcon(
+                                imageVector = MiuixIcons.Back,
+                                contentDescription = null,
+                                tint = miuixColors.onBackground,
+                            )
+                        }
+                    },
+                    actions = {
+                        if (onRefresh != null) {
+                            MiuixIconButton(onClick = { if (refreshEnabled) onRefresh() }) {
+                                MiuixIcon(
+                                    imageVector = Icons.Filled.Refresh,
+                                    contentDescription = null,
+                                    tint = miuixColors.onBackground.copy(
+                                        alpha = if (refreshEnabled) 1f else 0.38f,
+                                    ),
+                                )
+                            }
+                        }
+                    },
+                )
+            },
+            content = content,
+        )
+    } else {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text(title) },
+                    navigationIcon = { TopBarBackButton(onClick = onBack) },
+                    actions = {
+                        if (onRefresh != null) {
+                            androidx.compose.material3.IconButton(
+                                onClick = onRefresh,
+                                enabled = refreshEnabled,
+                            ) {
+                                Icon(Icons.Filled.Refresh, contentDescription = null)
+                            }
+                        }
+                    },
+                )
+            },
+            content = content,
+        )
+    }
+}
+
 @Composable
 fun FeatureSectionTitle(text: String) {
     if (LocalUiMode.current.isMiuixFamily) {
@@ -58,12 +135,12 @@ fun FeatureCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.
     }
 }
 
-/** 单选行：miuix 用 RadioButtonPreference，Material 用 SegmentedRadioItem。 */
 @Composable
 fun FeatureRadioRow(
     title: String,
     summary: String?,
     selected: Boolean,
+    enabled: Boolean = true,
     onClick: () -> Unit,
 ) {
     if (LocalUiMode.current.isMiuixFamily) {
@@ -72,19 +149,25 @@ fun FeatureRadioRow(
             summary = summary.orEmpty(),
             radioButtonLocation = RadioButtonLocation.End,
             selected = selected,
-            onClick = onClick,
+            onClick = { if (enabled) onClick() },
         )
     } else {
-        SegmentedRadioItem(title = title, summary = summary, selected = selected, onClick = onClick)
+        SegmentedRadioItem(
+            title = title,
+            summary = summary,
+            selected = selected,
+            enabled = enabled,
+            onClick = onClick,
+        )
     }
 }
 
-/** 开关行。 */
 @Composable
 fun FeatureSwitchRow(
     title: String,
     summary: String?,
     checked: Boolean,
+    enabled: Boolean = true,
     onCheckedChange: (Boolean) -> Unit,
 ) {
     if (LocalUiMode.current.isMiuixFamily) {
@@ -92,49 +175,109 @@ fun FeatureSwitchRow(
             title = title,
             summary = summary.orEmpty(),
             checked = checked,
+            enabled = enabled,
             onCheckedChange = onCheckedChange,
         )
     } else {
-        SegmentedSwitchItem(title = title, summary = summary, checked = checked, onCheckedChange = onCheckedChange)
+        SegmentedSwitchItem(
+            title = title,
+            summary = summary,
+            checked = checked,
+            enabled = enabled,
+            onCheckedChange = onCheckedChange,
+        )
     }
 }
 
-/** 状态卡里的一行：左边标签、右边值。 */
+/** 页面主操作，不使用带右箭头的导航行充当提交按钮。 */
 @Composable
-fun FeatureValueRow(
-    label: String,
-    value: String,
+fun FeatureActionButton(
+    text: String,
+    onClick: () -> Unit,
+    enabled: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
+    if (LocalUiMode.current.isMiuixFamily) {
+        MiuixTextButton(
+            text = text,
+            onClick = onClick,
+            enabled = enabled,
+            modifier = modifier.fillMaxWidth(),
+            colors = ButtonDefaults.textButtonColorsPrimary(),
+        )
+    } else {
+        Button(onClick = onClick, enabled = enabled, modifier = modifier.fillMaxWidth()) {
+            Text(text)
+        }
+    }
+}
+
+@Composable
+fun FeatureProgress(visible: Boolean, modifier: Modifier = Modifier) {
+    if (!visible) return
+    Box(
+        modifier = modifier.fillMaxWidth().padding(vertical = 12.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (LocalUiMode.current.isMiuixFamily) {
+            InfiniteProgressIndicator()
+        } else {
+            CircularProgressIndicator()
+        }
+    }
+}
+
+@Composable
+fun FeatureValueRow(label: String, value: String, modifier: Modifier = Modifier) {
     Row(
         modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         FeatureText(text = label, muted = true, modifier = Modifier.weight(1f))
-        FeatureText(text = value, muted = false)
+        FeatureText(text = value)
     }
 }
 
-/** 特性页里的普通文字：跟着皮肤走，字号可以按用途给。 */
+@Composable
+fun FeatureMessage(text: String, error: Boolean = false, modifier: Modifier = Modifier) {
+    FeatureText(
+        text = text,
+        size = 13,
+        color = if (LocalUiMode.current.isMiuixFamily) {
+            if (error) miuixColors.error else miuixColors.primary
+        } else if (error) {
+            MaterialTheme.colorScheme.error
+        } else {
+            MaterialTheme.colorScheme.primary
+        },
+        modifier = modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+    )
+}
+
 @Composable
 fun FeatureText(
     text: String,
     muted: Boolean = false,
     size: Int = 14,
     modifier: Modifier = Modifier,
+    color: Color? = null,
 ) {
     if (LocalUiMode.current.isMiuixFamily) {
         MiuixText(
             text = text,
             fontSize = size.sp,
-            color = if (muted) miuixColors.onSurfaceVariantSummary else miuixColors.onSurface,
+            color = color ?: if (muted) miuixColors.onSurfaceVariantSummary else miuixColors.onSurface,
             modifier = modifier,
         )
     } else {
         Text(
             text = text,
-            style = MaterialTheme.typography.bodyMedium,
-            color = if (muted) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+            fontSize = size.sp,
+            color = color ?: if (muted) {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            } else {
+                MaterialTheme.colorScheme.onSurface
+            },
             modifier = modifier,
         )
     }

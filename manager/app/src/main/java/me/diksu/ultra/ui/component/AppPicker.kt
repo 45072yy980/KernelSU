@@ -41,6 +41,7 @@ fun AppToggleRow(
     app: PickedApp,
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
+    enabled: Boolean = true,
 ) {
     if (LocalUiMode.current.isMiuixFamily) {
         SwitchPreference(
@@ -54,12 +55,14 @@ fun AppToggleRow(
                 )
             },
             checked = checked,
+            enabled = enabled,
             onCheckedChange = onCheckedChange,
         )
     } else {
         SegmentedListItem(
             checked = checked,
             onCheckedChange = onCheckedChange,
+            enabled = enabled,
             leadingContent = {
                 AppIconImage(
                     modifier = Modifier.size(40.dp),

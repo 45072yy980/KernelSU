@@ -80,6 +80,7 @@
     <string name="reboot_bootloader">重启到 Bootloader</string>
     <string name="reboot_download">重启到 Download</string>
     <string name="reboot_edl">重启到 EDL</string>
+    <string name="reboot_confirm_message">设备会离开 Android，需要手动开机才能回来。继续？</string>
     <string name="about">关于</string>
     <string name="module_uninstall_confirm">确定要卸载模块 %s 吗？</string>
     <string name="metamodule_uninstall_confirm">确定要卸载模块 %s 吗？此操作将影响所有模块，并且元模块提供的某些功能（如挂载）将不再工作</string>
@@ -740,6 +741,7 @@
     <string name="netisolate_applied">已应用</string>
     <string name="netisolate_unsupported">当前内核不支持</string>
     <string name="netisolate_unsupported_summary">socket_connect 钩子没装上，需要更新内核模块。</string>
+    <string name="netisolate_validation_targets">至少选择一个应用，或将模式设为关闭。</string>
     <string name="maintenance_title">维护</string>
     <string name="maintenance_summary">重载模块、软重启与隐藏软重启</string>
     <string name="maintenance_group_actions">操作</string>
@@ -766,4 +768,20 @@
     <string name="uts_field_version">version（编译信息）</string>
     <string name="uts_field_machine">machine（架构）</string>
     <string name="uts_field_domainname">domainname（域名）</string>
+    <string name="uts_kernel_support">内核支持</string>
+    <string name="uts_unsupported_summary">当前内核不支持 UTS 视图。请更新内核模块后刷新。</string>
+    <string name="uts_validation_fields">至少填写一个字段，或将模式设为关闭。</string>
+    <string name="uts_validation_targets">至少选择一个应用，或将模式设为关闭。</string>
+    <string name="uts_validation_length">每个字段最多 64 个 UTF-8 字节。</string>
+    <string name="uts_fields_hint">留空的字段不会修改；每个字段最多 64 个 UTF-8 字节。</string>
+    <string name="uts_applied">已应用</string>
+    <string name="feature_target_limit">最多选择 %1$d 个应用，请先取消一个再添加。</string>
+    <string name="feature_applying">应用中…</string>
+    <string name="feature_unsaved_changes">有尚未应用的修改。</string>
+    <string name="feature_discard_title">放弃未保存的修改？</string>
+    <string name="feature_discard">放弃修改</string>
+    <string name="feature_discard_summary">这些修改尚未应用，确定放弃并离开吗？</string>
+    <string name="feature_keep_editing">继续编辑</string>
+    <string name="feature_refresh">刷新</string>
+    <string name="feature_refresh_warning">刷新会用内核当前配置替换你的修改，未应用的改动将丢失。</string>
 </resources>

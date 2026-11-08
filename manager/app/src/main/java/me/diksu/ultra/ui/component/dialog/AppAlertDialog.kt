@@ -16,7 +16,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import me.diksu.ultra.ui.LocalUiMode
 import me.diksu.ultra.ui.isMiuixFamily
@@ -63,15 +62,18 @@ fun AppAlertDialog(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         modifier = Modifier.padding(top = 12.dp),
                     ) {
-                        MiuixTextButton(
-                            text = dismissText ?: stringResource(android.R.string.cancel),
-                            onClick = onDismissRequest,
-                            modifier = Modifier.weight(1f),
-                        )
-                        Spacer(Modifier.width(20.dp))
+                        if (dismissText != null) {
+                            MiuixTextButton(
+                                text = dismissText,
+                                onClick = onDismissRequest,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Spacer(Modifier.width(20.dp))
+                        }
                         MiuixTextButton(
                             text = confirmText,
-                            onClick = { if (confirmEnabled) onConfirm() },
+                            onClick = onConfirm,
+                            enabled = confirmEnabled,
                             modifier = Modifier.weight(1f),
                             colors = ButtonDefaults.textButtonColorsPrimary(),
                         )

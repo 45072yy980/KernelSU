@@ -42,6 +42,7 @@
     <string name="reboot_bootloader">重新啟動至 Bootloader</string>
     <string name="reboot_download">重新啟動至 Download</string>
     <string name="reboot_edl">重新啟動至 EDL</string>
+    <string name="reboot_confirm_message">裝置會離開 Android，需要手動開機才能回來。繼續？</string>
     <string name="about">關於</string>
     <string name="module_uninstall_confirm">你是否要解除安裝「%s」模組？</string>
     <string name="module_uninstall_success">「%s」已解除安裝</string>
@@ -387,6 +388,7 @@
     <string name="netisolate_applied">已套用</string>
     <string name="netisolate_unsupported">目前核心不支援</string>
     <string name="netisolate_unsupported_summary">socket_connect 鉤子沒裝上，需要更新核心模組。</string>
+    <string name="netisolate_validation_targets">至少選取一個應用程式，或將模式設為關閉。</string>
     <string name="maintenance_title">維護</string>
     <string name="maintenance_summary">重新載入模組、軟重啟與隱藏軟重啟</string>
     <string name="maintenance_group_actions">操作</string>
@@ -413,4 +415,20 @@
     <string name="uts_field_version">version（編譯資訊）</string>
     <string name="uts_field_machine">machine（架構）</string>
     <string name="uts_field_domainname">domainname（網域）</string>
+    <string name="uts_kernel_support">核心支援</string>
+    <string name="uts_unsupported_summary">目前核心不支援 UTS 檢視。請更新核心模組後重新整理。</string>
+    <string name="uts_validation_fields">至少填寫一個欄位，或將模式設為關閉。</string>
+    <string name="uts_validation_targets">至少選取一個應用程式，或將模式設為關閉。</string>
+    <string name="uts_validation_length">每個欄位最多 64 個 UTF-8 位元組。</string>
+    <string name="uts_fields_hint">留空的欄位不會修改；每個欄位最多 64 個 UTF-8 位元組。</string>
+    <string name="uts_applied">已套用</string>
+    <string name="feature_target_limit">最多選取 %1$d 個應用程式，請先取消一個再新增。</string>
+    <string name="feature_applying">套用中…</string>
+    <string name="feature_unsaved_changes">有尚未套用的修改。</string>
+    <string name="feature_discard_title">放棄未儲存的修改？</string>
+    <string name="feature_discard">放棄修改</string>
+    <string name="feature_discard_summary">這些修改尚未套用，確定放棄並離開嗎？</string>
+    <string name="feature_keep_editing">繼續編輯</string>
+    <string name="feature_refresh">重新整理</string>
+    <string name="feature_refresh_warning">重新整理會以核心目前設定取代你的修改，未套用的改動將會遺失。</string>
 </resources>
