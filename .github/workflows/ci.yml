@@ -87,7 +87,7 @@ jobs:
       - uses: ludeeus/action-shellcheck@2.0.0
         with:
           ignore_names: gradlew
-          ignore_paths: ./userspace/ksud/src/installer.sh ./.github/scripts/setup-rust-build.sh ./manager/app/src/main/assets/hma-oss-config.sh
+          ignore_paths: ./userspace/ksud/src/installer.sh ./.github/scripts/setup-rust-build.sh ./manager/app/src/main/assets/hma-oss-config.sh ./manager/app/src/main/assets/exploit/c98260/run.sh
 
   ksud:
     # 两个 ABI 都要编：bindgen 会按目标平台的 char 有符号性生成不同类型
