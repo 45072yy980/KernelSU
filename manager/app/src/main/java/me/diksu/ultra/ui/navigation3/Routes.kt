@@ -72,6 +72,11 @@ sealed interface Route : NavKey, Parcelable {
     @Serializable
     data object Maintenance : Route
 
+    /** 界面语言与语言包导入。 */
+    @Parcelize
+    @Serializable
+    data object Language : Route
+
     /** The third-party library list the AboutLibraries plugin generates at build time. */
     @Parcelize
     @Serializable

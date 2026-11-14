@@ -880,4 +880,16 @@
     <string name="shizuku_cancel">Cancel</string>
     <string name="shizuku_clear_server_warning">This clears the persistent server log and cannot be undone.</string>
     <string name="shizuku_clear_logcat_note">Logcat is maintained by the system and cannot be cleared here; use Export logs to keep a copy.</string>
+    <string name="language_title">Language</string>
+    <string name="language_summary">App language and custom language packs</string>
+    <string name="language_follow_system">Follow system</string>
+    <string name="language_builtin">Built-in languages</string>
+    <string name="language_show_all">Show all %1$d languages</string>
+    <string name="language_collapse">Show fewer</string>
+    <string name="language_packs">Language packs</string>
+    <string name="language_packs_empty">No packs imported yet.</string>
+    <string name="language_import">Import a language pack…</string>
+    <string name="language_delete_pack">Delete “%1$s”</string>
+    <string name="language_pack_entries">%1$d entries</string>
+    <string name="language_pack_help">A pack is a JSON file: {"name": "…", "locale": "ja", "strings": {"resource_name": "text"}}. Keys are the names in strings.xml; entries you leave out keep the built-in text.</string>
 </resources>

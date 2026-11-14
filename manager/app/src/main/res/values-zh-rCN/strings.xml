@@ -843,4 +843,16 @@
     <string name="shizuku_cancel">取消</string>
     <string name="shizuku_clear_server_warning">将清空服务端持久日志，无法恢复。</string>
     <string name="shizuku_clear_logcat_note">Logcat 由系统维护，应用无法清除；可以改用「导出日志」留存。</string>
+    <string name="language_title">语言</string>
+    <string name="language_summary">界面语言与自定义语言包</string>
+    <string name="language_follow_system">跟随系统</string>
+    <string name="language_builtin">内置语言</string>
+    <string name="language_show_all">显示全部 %1$d 种语言</string>
+    <string name="language_collapse">收起</string>
+    <string name="language_packs">语言包</string>
+    <string name="language_packs_empty">还没有导入语言包。</string>
+    <string name="language_import">导入语言包…</string>
+    <string name="language_delete_pack">删除「%1$s」</string>
+    <string name="language_pack_entries">%1$d 条词条</string>
+    <string name="language_pack_help">语言包是一个 JSON：{"name": "…", "locale": "ja", "strings": {"资源名": "译文"}}。键就是 strings.xml 里的名字；没写的词条沿用内置译文。</string>
 </resources>

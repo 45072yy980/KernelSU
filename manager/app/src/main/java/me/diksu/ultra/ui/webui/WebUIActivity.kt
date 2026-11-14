@@ -34,6 +34,11 @@ import top.yukonga.miuix.kmp.basic.InfiniteProgressIndicator
 
 @SuppressLint("SetJavaScriptEnabled")
 open class WebUIActivity : ComponentActivity() {
+    /** 语言包与内置语种都在这里落地，Compose 与 Toast 都走同一份资源。 */
+    override fun attachBaseContext(newBase: android.content.Context) {
+        super.attachBaseContext(me.diksu.ultra.i18n.AppLanguage.wrap(newBase))
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
 
         enableEdgeToEdge()

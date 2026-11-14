@@ -34,6 +34,13 @@ open class KernelSUApplication : Application(), ViewModelStoreOwner {
     lateinit var okhttpClient: OkHttpClient
     private val appViewModelStore by lazy { ViewModelStore() }
 
+    /**
+     * 语言在这里定：改动后由设置页 recreate Activity，等价于重新走一遍包装。
+     */
+    override fun attachBaseContext(base: android.content.Context) {
+        super.attachBaseContext(me.diksu.ultra.i18n.AppLanguage.wrap(base))
+    }
+
     private fun isUserUnlocked(): Boolean =
         getSystemService(UserManager::class.java)?.isUserUnlocked == true
 

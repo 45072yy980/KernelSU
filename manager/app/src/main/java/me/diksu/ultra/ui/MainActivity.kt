@@ -100,6 +100,7 @@ import me.diksu.ultra.ui.screen.settings.SettingPager
 import me.diksu.ultra.ui.screen.settings.AutoEscalationScreen
 import me.diksu.ultra.ui.screen.settings.BasicSettingsScreen
 import me.diksu.ultra.ui.screen.settings.KeymintScreen
+import me.diksu.ultra.ui.screen.language.LanguageScreen
 import me.diksu.ultra.ui.screen.settings.MaintenanceScreen
 import me.diksu.ultra.ui.screen.settings.OtherFeaturesScreen
 import me.diksu.ultra.ui.screen.susfs.SusfsScreen
@@ -181,6 +182,11 @@ import top.yukonga.miuix.kmp.utils.PagerNavigationSpringSpec
 import top.yukonga.miuix.kmp.utils.pagerGestureOverride
 
 open class MainActivity : ComponentActivity() {
+    /** 语言包与内置语种都在这里落地，Compose 与 Toast 都走同一份资源。 */
+    override fun attachBaseContext(newBase: android.content.Context) {
+        super.attachBaseContext(me.diksu.ultra.i18n.AppLanguage.wrap(newBase))
+    }
+
 
     private val intentChannel = Channel<Intent>(capacity = Channel.BUFFERED)
     private var contentReady = false
@@ -352,6 +358,7 @@ open class MainActivity : ComponentActivity() {
                             entry<Route.Uts>(swipeDismiss = swipeDismiss) { UtsScreen() }
                             entry<Route.Netisolate>(swipeDismiss = swipeDismiss) { NetisolateScreen() }
                             entry<Route.Maintenance>(swipeDismiss = swipeDismiss) { MaintenanceScreen() }
+                            entry<Route.Language>(swipeDismiss = swipeDismiss) { LanguageScreen() }
                             entry<Route.OpenSourceLicense>(swipeDismiss = swipeDismiss) {
                                 OpenSourceLicenseScreen()
                             }

@@ -70,6 +70,11 @@ import java.util.concurrent.TimeUnit
  * Popup 无法正确定位渲染。直接用 Compose 布局渲染居中卡片。
  */
 class ShizukuPermissionActivity : ComponentActivity() {
+    /** 语言包与内置语种都在这里落地，Compose 与 Toast 都走同一份资源。 */
+    override fun attachBaseContext(newBase: android.content.Context) {
+        super.attachBaseContext(me.diksu.ultra.i18n.AppLanguage.wrap(newBase))
+    }
+
 
     companion object {
         private const val TAG = "ShizukuPerm"

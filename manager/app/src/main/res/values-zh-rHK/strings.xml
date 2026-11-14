@@ -607,4 +607,16 @@
     <string name="shizuku_cancel">取消</string>
     <string name="shizuku_clear_server_warning">將清空服務端持久日誌，無法復原。</string>
     <string name="shizuku_clear_logcat_note">Logcat 由系統維護，應用程式無法清除；可以改用「匯出日誌」留存。</string>
+    <string name="language_title">語言</string>
+    <string name="language_summary">介面語言與自訂語言包</string>
+    <string name="language_follow_system">跟隨系統</string>
+    <string name="language_builtin">內置語言</string>
+    <string name="language_show_all">顯示全部 %1$d 種語言</string>
+    <string name="language_collapse">收起</string>
+    <string name="language_packs">語言包</string>
+    <string name="language_packs_empty">還沒有匯入語言包。</string>
+    <string name="language_import">匯入語言包…</string>
+    <string name="language_delete_pack">刪除「%1$s」</string>
+    <string name="language_pack_entries">%1$d 條詞條</string>
+    <string name="language_pack_help">語言包是一個 JSON：{"name": "…", "locale": "ja", "strings": {"資源名": "譯文"}}。鍵就是 strings.xml 裡的名字；沒寫的詞條沿用內置譯文。</string>
 </resources>

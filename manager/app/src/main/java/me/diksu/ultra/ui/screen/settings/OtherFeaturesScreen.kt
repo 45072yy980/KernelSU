@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Terminal
+import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material.icons.filled.WifiOff
@@ -80,6 +81,7 @@ fun OtherFeaturesScreen() {
     val onOpenUts = dropUnlessResumed { navigator.push(Route.Uts) }
     val onOpenNetisolate = dropUnlessResumed { navigator.push(Route.Netisolate) }
     val onOpenMaintenance = dropUnlessResumed { navigator.push(Route.Maintenance) }
+    val onOpenLanguage = dropUnlessResumed { navigator.push(Route.Language) }
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -225,6 +227,7 @@ fun OtherFeaturesScreen() {
             onOpenUts = onOpenUts,
             onOpenNetisolate = onOpenNetisolate,
             onOpenMaintenance = onOpenMaintenance,
+            onOpenLanguage = onOpenLanguage,
         )
         UiMode.Miuix, UiMode.MiuixStock -> OtherFeaturesMiuix(
             onBack = onBack,
@@ -243,6 +246,7 @@ fun OtherFeaturesScreen() {
             onOpenUts = onOpenUts,
             onOpenNetisolate = onOpenNetisolate,
             onOpenMaintenance = onOpenMaintenance,
+            onOpenLanguage = onOpenLanguage,
         )
     }
 
@@ -296,6 +300,7 @@ private fun OtherFeaturesMaterial(
     onOpenUts: () -> Unit = {},
     onOpenNetisolate: () -> Unit = {},
     onOpenMaintenance: () -> Unit = {},
+    onOpenLanguage: () -> Unit = {},
 ) {
     Scaffold(
         topBar = {
@@ -444,6 +449,14 @@ private fun OtherFeaturesMaterial(
                             leadingContent = { Icon(Icons.Filled.RestartAlt, null) },
                         )
                     }
+                    add {
+                        SegmentedListItem(
+                            onClick = onOpenLanguage,
+                            headlineContent = { Text(stringResource(R.string.language_title)) },
+                            supportingContent = { Text(stringResource(R.string.language_summary)) },
+                            leadingContent = { Icon(Icons.Filled.Translate, null) },
+                        )
+                    }
                 },
             )
         }
@@ -469,6 +482,7 @@ private fun OtherFeaturesMiuix(
     onOpenUts: () -> Unit = {},
     onOpenNetisolate: () -> Unit = {},
     onOpenMaintenance: () -> Unit = {},
+    onOpenLanguage: () -> Unit = {},
 ) {
     MiuixScaffold(
         topBar = {
@@ -653,6 +667,19 @@ private fun OtherFeaturesMiuix(
                             )
                         },
                         onClick = onOpenMaintenance,
+                    )
+                    ArrowPreference(
+                        title = stringResource(R.string.language_title),
+                        summary = stringResource(R.string.language_summary),
+                        startAction = {
+                            MiuixIcon(
+                                imageVector = Icons.Filled.Translate,
+                                contentDescription = null,
+                                tint = colorScheme.onBackground,
+                                modifier = Modifier.padding(end = 6.dp),
+                            )
+                        },
+                        onClick = onOpenLanguage,
                     )
                 }
             }
