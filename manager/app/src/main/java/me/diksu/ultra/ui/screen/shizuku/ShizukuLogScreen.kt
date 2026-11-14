@@ -54,6 +54,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
@@ -65,6 +66,7 @@ import androidx.core.content.FileProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import me.diksu.ultra.R
 import me.diksu.ultra.shizuku.ShizukuServiceManager
 import me.diksu.ultra.ui.LocalUiMode
 import me.diksu.ultra.ui.component.dialog.AppAlertDialog
@@ -223,7 +225,7 @@ private fun rememberLogState(): Pair<LogState, LogActions> {
                     putExtra(Intent.EXTRA_STREAM, uri)
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 }
-                context.startActivity(Intent.createChooser(shareIntent, "导出 Shizuku 日志"))
+                context.startActivity(Intent.createChooser(shareIntent, stringResource(R.string.shizuku_export_log_title)))
             }
         },
         onClear = {
@@ -277,7 +279,7 @@ private fun ShizukuLogScreenMiuix(onBack: () -> Unit) {
     MiuixScaffold(
         topBar = {
             MiuixTopAppBar(
-                title = if (isSearchActive) "" else "Shizuku 日志",
+                title = if (isSearchActive) "" else stringResource(R.string.shizuku_log_title),
                 navigationIcon = {
                     MiuixIconButton(onClick = {
                         if (isSearchActive) {
@@ -304,26 +306,26 @@ private fun ShizukuLogScreenMiuix(onBack: () -> Unit) {
                     }
                     Box {
                         MiuixIconButton(onClick = { showMenu = !showMenu }) {
-                            MiuixIcon(Icons.Filled.MoreVert, contentDescription = "更多", tint = colorScheme.onSurface)
+                            MiuixIcon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.shizuku_more), tint = colorScheme.onSurface)
                         }
                         DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
                             DropdownMenuItem(
-                                text = { Text("刷新") },
+                                text = { Text(stringResource(R.string.shizuku_refresh)) },
                                 onClick = { showMenu = false; actions.onRefresh() },
                                 leadingIcon = { Icon(Icons.Filled.Refresh, contentDescription = null) },
                             )
                             DropdownMenuItem(
-                                text = { Text("复制全部") },
+                                text = { Text(stringResource(R.string.shizuku_copy_all)) },
                                 onClick = { showMenu = false; actions.onCopy() },
                                 leadingIcon = { Icon(Icons.Filled.ContentCopy, contentDescription = null) },
                             )
                             DropdownMenuItem(
-                                text = { Text("导出日志") },
+                                text = { Text(stringResource(R.string.shizuku_export_log)) },
                                 onClick = { showMenu = false; actions.onExport() },
                                 leadingIcon = { Icon(Icons.Filled.Share, contentDescription = null) },
                             )
                             DropdownMenuItem(
-                                text = { Text("清除日志") },
+                                text = { Text(stringResource(R.string.shizuku_clear_log)) },
                                 onClick = { showMenu = false; confirmClear = true },
                                 leadingIcon = { Icon(Icons.Filled.DeleteSweep, contentDescription = null) },
                             )
@@ -340,7 +342,7 @@ private fun ShizukuLogScreenMiuix(onBack: () -> Unit) {
                     InputField(
                         query = state.query,
                         onQueryChange = actions.onQueryChange,
-                        label = "搜索日志…",
+                        label = stringResource(R.string.shizuku_search_log),
                         modifier = Modifier.fillMaxWidth(),
                         onSearch = { },
                         expanded = false,
@@ -358,7 +360,7 @@ private fun ShizukuLogScreenMiuix(onBack: () -> Unit) {
             ) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     MiuixFilterChip(
-                        text = "服务日志",
+                        text = stringResource(R.string.shizuku_source_server),
                         selected = state.source == LogSource.SERVER,
                         onClick = { actions.onSourceChange(LogSource.SERVER) },
                     )
@@ -404,7 +406,7 @@ private fun ShizukuLogScreenMiuix(onBack: () -> Unit) {
                         )
                         Spacer(Modifier.height(12.dp))
                         MiuixText(
-                            text = if (state.allLines.isEmpty()) "暂无日志" else "没有匹配的日志",
+                            text = if (state.allLines.isEmpty()) stringResource(R.string.shizuku_log_empty) else stringResource(R.string.shizuku_log_no_match),
                             fontSize = 14.sp,
                             color = colorScheme.onSurfaceVariantSummary,
                         )
@@ -452,21 +454,21 @@ private fun ShizukuLogScreenMiuix(onBack: () -> Unit) {
     if (confirmClear) {
         val server = state.source == LogSource.SERVER
         AppAlertDialog(
-            title = "清除日志",
+            title = stringResource(R.string.shizuku_clear_log),
             onDismissRequest = { confirmClear = false },
-            confirmText = if (server) "清除" else "知道了",
+            confirmText = if (server) stringResource(R.string.shizuku_clear) else stringResource(R.string.shizuku_got_it),
             confirmDestructive = server,
             onConfirm = {
                 confirmClear = false
                 if (server) actions.onClear()
             },
-            dismissText = if (server) "取消" else null,
+            dismissText = if (server) stringResource(R.string.shizuku_cancel) else null,
         ) {
             MiuixText(
                 text = if (server) {
-                    "将清空服务端持久日志，无法恢复。"
+                    stringResource(R.string.shizuku_clear_server_warning)
                 } else {
-                    "Logcat 由系统维护，应用无法清除；可以改用「导出日志」留存。"
+                    stringResource(R.string.shizuku_clear_logcat_note)
                 },
                 fontSize = 14.sp,
             )
@@ -512,7 +514,7 @@ private fun ShizukuLogScreenMaterial(onBack: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { if (!isSearchActive) Text("Shizuku 日志") },
+                title = { if (!isSearchActive) Text(stringResource(R.string.shizuku_log_title)) },
                 navigationIcon = {
                     IconButton(onClick = {
                         if (isSearchActive) {
@@ -539,26 +541,26 @@ private fun ShizukuLogScreenMaterial(onBack: () -> Unit) {
                     }
                     Box {
                         IconButton(onClick = { showMenu = !showMenu }) {
-                            Icon(Icons.Filled.MoreVert, contentDescription = "更多")
+                            Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.shizuku_more))
                         }
                         DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
                             DropdownMenuItem(
-                                text = { Text("刷新") },
+                                text = { Text(stringResource(R.string.shizuku_refresh)) },
                                 onClick = { showMenu = false; actions.onRefresh() },
                                 leadingIcon = { Icon(Icons.Filled.Refresh, contentDescription = null) },
                             )
                             DropdownMenuItem(
-                                text = { Text("复制全部") },
+                                text = { Text(stringResource(R.string.shizuku_copy_all)) },
                                 onClick = { showMenu = false; actions.onCopy() },
                                 leadingIcon = { Icon(Icons.Filled.ContentCopy, contentDescription = null) },
                             )
                             DropdownMenuItem(
-                                text = { Text("导出日志") },
+                                text = { Text(stringResource(R.string.shizuku_export_log)) },
                                 onClick = { showMenu = false; actions.onExport() },
                                 leadingIcon = { Icon(Icons.Filled.Share, contentDescription = null) },
                             )
                             DropdownMenuItem(
-                                text = { Text("清除日志") },
+                                text = { Text(stringResource(R.string.shizuku_clear_log)) },
                                 onClick = { showMenu = false; confirmClear = true },
                                 leadingIcon = { Icon(Icons.Filled.DeleteSweep, contentDescription = null) },
                             )
@@ -574,7 +576,7 @@ private fun ShizukuLogScreenMaterial(onBack: () -> Unit) {
                     OutlinedTextField(
                         value = state.query,
                         onValueChange = actions.onQueryChange,
-                        placeholder = { Text("搜索日志...") },
+                        placeholder = { Text(stringResource(R.string.shizuku_search_log)) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
@@ -592,7 +594,7 @@ private fun ShizukuLogScreenMaterial(onBack: () -> Unit) {
                     FilterChip(
                         selected = state.source == LogSource.SERVER,
                         onClick = { actions.onSourceChange(LogSource.SERVER) },
-                        label = { Text("服务日志") },
+                        label = { Text(stringResource(R.string.shizuku_source_server)) },
                     )
                     FilterChip(
                         selected = state.source == LogSource.LOGCAT,
@@ -640,7 +642,7 @@ private fun ShizukuLogScreenMaterial(onBack: () -> Unit) {
                         )
                         Spacer(Modifier.height(12.dp))
                         Text(
-                            text = if (state.allLines.isEmpty()) "暂无日志" else "没有匹配的日志",
+                            text = if (state.allLines.isEmpty()) stringResource(R.string.shizuku_log_empty) else stringResource(R.string.shizuku_log_no_match),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -688,21 +690,21 @@ private fun ShizukuLogScreenMaterial(onBack: () -> Unit) {
     if (confirmClear) {
         val server = state.source == LogSource.SERVER
         AppAlertDialog(
-            title = "清除日志",
+            title = stringResource(R.string.shizuku_clear_log),
             onDismissRequest = { confirmClear = false },
-            confirmText = if (server) "清除" else "知道了",
+            confirmText = if (server) stringResource(R.string.shizuku_clear) else stringResource(R.string.shizuku_got_it),
             confirmDestructive = server,
             onConfirm = {
                 confirmClear = false
                 if (server) actions.onClear()
             },
-            dismissText = if (server) "取消" else null,
+            dismissText = if (server) stringResource(R.string.shizuku_cancel) else null,
         ) {
             Text(
                 text = if (server) {
-                    "将清空服务端持久日志，无法恢复。"
+                    stringResource(R.string.shizuku_clear_server_warning)
                 } else {
-                    "Logcat 由系统维护，应用无法清除；可以改用「导出日志」留存。"
+                    stringResource(R.string.shizuku_clear_logcat_note)
                 },
                 style = MaterialTheme.typography.bodyMedium,
             )

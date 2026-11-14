@@ -47,6 +47,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
@@ -61,6 +62,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.diksu.ultra.shizuku.ShizukuAutostart
+import me.diksu.ultra.R
 import me.diksu.ultra.shizuku.ShizukuServiceManager
 import me.diksu.ultra.ui.LocalUiMode
 import me.diksu.ultra.ui.isMiuixFamily
@@ -218,7 +220,7 @@ private fun rememberShizukuState(): Pair<ShizukuUiState, ShizukuActions> {
                 state = state.copy(starting = true, startError = null)
                 val ok = withContext(Dispatchers.IO) { ShizukuServiceManager.start(context) }
                 state = state.copy(starting = false)
-                if (!ok) state = state.copy(startError = "启动失败，请到日志页查看服务端原因")
+                if (!ok) state = state.copy(startError = stringResource(R.string.shizuku_start_failed))
                 refresh()
             }
         },
@@ -237,7 +239,7 @@ private fun rememberShizukuState(): Pair<ShizukuUiState, ShizukuActions> {
                 state = state.copy(stopping = false, starting = true)
                 val ok = withContext(Dispatchers.IO) { ShizukuServiceManager.start(context) }
                 state = state.copy(starting = false)
-                if (!ok) state = state.copy(startError = "重启失败，请到日志页查看服务端原因")
+                if (!ok) state = state.copy(startError = stringResource(R.string.shizuku_restart_failed))
                 refresh()
             }
         },
@@ -313,22 +315,27 @@ private fun formatAttemptTime(millis: Long): String =
         SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()).format(Date(millis))
     }.getOrDefault("")
 
+@Composable
 private fun attemptSourceLabel(source: String): String = when (source) {
-    "boot" -> "开机"
-    "package-replaced" -> "应用更新后"
-    "manual" -> "手动"
-    "enable-toggle" -> "打开开关时"
-    else -> source.ifBlank { "未知" }
+    "boot" -> stringResource(R.string.shizuku_source_boot)
+    "package-replaced" -> stringResource(R.string.shizuku_source_package_replaced)
+    "manual" -> stringResource(R.string.shizuku_source_manual)
+    "enable-toggle" -> stringResource(R.string.shizuku_source_enable_toggle)
+    else -> {
+        val unknown = stringResource(R.string.shizuku_source_unknown)
+        source.ifBlank { unknown }
+    }
 }
 
+@Composable
 private fun autostartSummary(attempt: ShizukuAutostart.LastAttempt?, autostarting: Boolean): String {
-    if (autostarting) return "正在尝试自启…"
-    if (attempt == null) return "本次安装后尚未尝试过自启"
+    if (autostarting) return stringResource(R.string.shizuku_autostart_attempting)
+    if (attempt == null) return stringResource(R.string.shizuku_autostart_never)
     val whenText = "${formatAttemptTime(attempt.atMillis)} · ${attemptSourceLabel(attempt.source)}"
     return if (attempt.success) {
-        "上次自启成功 · $whenText"
+        stringResource(R.string.shizuku_autostart_ok, whenText)
     } else {
-        "上次自启失败 · $whenText\n${attempt.detail}"
+        stringResource(R.string.shizuku_autostart_fail, whenText, attempt.detail)
     }
 }
 
@@ -355,14 +362,14 @@ private fun ShizukuScreenMiuix(onBack: () -> Unit, onOpenLog: () -> Unit) {
                     MiuixIconButton(onClick = onOpenLog) {
                         MiuixIcon(
                             imageVector = Icons.Filled.Article,
-                            contentDescription = "日志",
+                            contentDescription = stringResource(R.string.shizuku_log_content_desc),
                             tint = colorScheme.onSurface,
                         )
                     }
                     MiuixIconButton(onClick = actions.onRefresh) {
                         MiuixIcon(
                             imageVector = Icons.Filled.Refresh,
-                            contentDescription = "刷新",
+                            contentDescription = stringResource(R.string.shizuku_refresh),
                             tint = colorScheme.onSurface,
                         )
                     }
@@ -377,14 +384,14 @@ private fun ShizukuScreenMiuix(onBack: () -> Unit, onOpenLog: () -> Unit) {
             item { Spacer(Modifier.height(12.dp)) }
             item { MiuixStatusCard(state, actions) }
             item {
-                SmallTitle(text = "开机自启", modifier = Modifier.padding(top = 12.dp))
+                SmallTitle(text = stringResource(R.string.shizuku_autostart), modifier = Modifier.padding(top = 12.dp))
                 MiuixCard(modifier = Modifier.padding(top = 12.dp)) {
                     MiuixAutostartBlock(state, actions)
                 }
             }
             item {
                 SmallTitle(
-                    text = "应用授权（${state.allowedCount}/${state.apps.size}）",
+                    text = stringResource(R.string.shizuku_apps_title, state.allowedCount, state.apps.size),
                     modifier = Modifier.padding(top = 12.dp),
                 )
                 MiuixCard(modifier = Modifier.padding(top = 12.dp)) {
@@ -430,7 +437,7 @@ private fun MiuixStatusCard(state: ShizukuUiState, actions: ShizukuActions) {
                 Spacer(Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     MiuixText(
-                        text = if (state.running) "运行中" else "已停止",
+                        text = if (state.running) stringResource(R.string.shizuku_state_running) else stringResource(R.string.shizuku_state_stopped),
                         fontSize = 18.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = colorScheme.onSurface,
@@ -438,9 +445,9 @@ private fun MiuixStatusCard(state: ShizukuUiState, actions: ShizukuActions) {
                     Spacer(Modifier.height(2.dp))
                     MiuixText(
                         text = if (state.running) {
-                            if (state.serverIsRoot) "Root 模式 · 命令以 root 身份执行" else "Shell 模式 · 命令以 shell 身份执行"
+                            if (state.serverIsRoot) stringResource(R.string.shizuku_mode_root) else stringResource(R.string.shizuku_mode_shell)
                         } else {
-                            "服务未启动，应用无法使用 Shizuku 能力"
+                            stringResource(R.string.shizuku_not_running_summary)
                         },
                         fontSize = 12.sp,
                         color = colorScheme.onSurfaceVariantSummary,
@@ -458,17 +465,17 @@ private fun MiuixStatusCard(state: ShizukuUiState, actions: ShizukuActions) {
                 Spacer(Modifier.height(14.dp))
                 Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     MiuixMetric(
-                        label = "运行身份",
+                        label = stringResource(R.string.shizuku_metric_uid),
                         value = state.serverUid?.toString() ?: "—",
                         modifier = Modifier.weight(1f),
                     )
                     MiuixMetric(
-                        label = "进程 PID",
+                        label = stringResource(R.string.shizuku_metric_pid),
                         value = state.serverPid?.toString() ?: "—",
                         modifier = Modifier.weight(1f),
                     )
                     MiuixMetric(
-                        label = "已授权",
+                        label = stringResource(R.string.shizuku_allowed),
                         value = "${state.allowedCount} / ${state.apps.size}",
                         modifier = Modifier.weight(1f),
                     )
@@ -488,18 +495,18 @@ private fun MiuixStatusCard(state: ShizukuUiState, actions: ShizukuActions) {
             ) {
                 if (state.running) {
                     MiuixTextButton(
-                        text = if (state.stopping) "停止中…" else "停止服务",
+                        text = if (state.stopping) stringResource(R.string.shizuku_stopping) else stringResource(R.string.shizuku_stop),
                         onClick = { if (!state.stopping) actions.onStop() },
                         modifier = Modifier.weight(1f),
                     )
                     MiuixTextButton(
-                        text = if (state.starting) "重启中…" else "重启服务",
+                        text = if (state.starting) stringResource(R.string.shizuku_restarting) else stringResource(R.string.shizuku_restart),
                         onClick = { if (!state.starting && !state.stopping) actions.onRestart() },
                         modifier = Modifier.weight(1f),
                     )
                 } else {
                     MiuixTextButton(
-                        text = if (state.starting) "启动中…" else "启动服务",
+                        text = if (state.starting) stringResource(R.string.shizuku_starting) else stringResource(R.string.shizuku_start),
                         onClick = { if (!state.starting) actions.onStart() },
                         modifier = Modifier.weight(1f),
                     )
@@ -520,14 +527,14 @@ private fun MiuixAutostartBlock(state: ShizukuUiState, actions: ShizukuActions) 
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 MiuixText(
-                    text = "开机自启",
+                    text = stringResource(R.string.shizuku_autostart),
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Medium,
                     color = colorScheme.onSurface,
                 )
                 Spacer(Modifier.height(2.dp))
                 MiuixText(
-                    text = "设备启动后自动拉起内置服务",
+                    text = stringResource(R.string.shizuku_autostart_summary),
                     fontSize = 12.sp,
                     color = colorScheme.onSurfaceVariantSummary,
                 )
@@ -552,7 +559,7 @@ private fun MiuixAutostartBlock(state: ShizukuUiState, actions: ShizukuActions) 
             Spacer(Modifier.height(6.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 MiuixTextButton(
-                    text = if (state.autostarting) "执行中…" else "立即自启一次",
+                    text = if (state.autostarting) stringResource(R.string.shizuku_autostart_running) else stringResource(R.string.shizuku_autostart_now),
                     onClick = { if (!state.autostarting) actions.onAutostartNow() },
                 )
             }
@@ -566,14 +573,14 @@ private fun MiuixAppListHeader(state: ShizukuUiState, actions: ShizukuActions) {
         MiuixTextField(
             value = state.query,
             onValueChange = actions.onQueryChange,
-            label = "搜索应用名或包名",
+            label = stringResource(R.string.shizuku_search_apps),
             modifier = Modifier.fillMaxWidth(),
         )
         Spacer(Modifier.height(10.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            MiuixFilterPill("全部", state.filter == AppFilter.All) { actions.onFilterChange(AppFilter.All) }
-            MiuixFilterPill("已授权", state.filter == AppFilter.Allowed) { actions.onFilterChange(AppFilter.Allowed) }
-            MiuixFilterPill("未授权", state.filter == AppFilter.Denied) { actions.onFilterChange(AppFilter.Denied) }
+            MiuixFilterPill(stringResource(R.string.shizuku_filter_all), state.filter == AppFilter.All) { actions.onFilterChange(AppFilter.All) }
+            MiuixFilterPill(stringResource(R.string.shizuku_allowed), state.filter == AppFilter.Allowed) { actions.onFilterChange(AppFilter.Allowed) }
+            MiuixFilterPill(stringResource(R.string.shizuku_denied), state.filter == AppFilter.Denied) { actions.onFilterChange(AppFilter.Denied) }
         }
     }
 }
@@ -623,7 +630,7 @@ private fun MiuixAppRow(
                     )
                     Spacer(Modifier.width(6.dp))
                     MiuixPill(
-                        text = if (app.allowed) "已授权" else "未授权",
+                        text = if (app.allowed) stringResource(R.string.shizuku_allowed) else stringResource(R.string.shizuku_denied),
                         color = if (app.allowed) AccentRunning else AccentStopped,
                     )
                     if (serverIsRoot && app.allowed) {
@@ -654,12 +661,12 @@ private fun MiuixAppRow(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     MiuixText(
-                        text = "Root 访问",
+                        text = stringResource(R.string.shizuku_root_access),
                         fontSize = 13.sp,
                         color = colorScheme.onSurface,
                     )
                     MiuixText(
-                        text = if (app.shellOnly) "降级为 shell 权限执行" else "以 root 权限执行",
+                        text = if (app.shellOnly) stringResource(R.string.shizuku_shell_only_on) else stringResource(R.string.shizuku_shell_only_off),
                         fontSize = 11.sp,
                         color = colorScheme.onSurfaceVariantSummary,
                     )
@@ -676,7 +683,7 @@ private fun MiuixAppListEmpty(state: ShizukuUiState) {
         MiuixCard(modifier = Modifier.padding(top = 12.dp)) {
             Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
                 MiuixText(
-                    text = "服务未启动，无法读取应用列表",
+                    text = stringResource(R.string.shizuku_list_unavailable),
                     fontSize = 13.sp,
                     color = colorScheme.onSurfaceVariantSummary,
                 )
@@ -688,14 +695,14 @@ private fun MiuixAppListEmpty(state: ShizukuUiState) {
     MiuixCard(modifier = Modifier.padding(top = 12.dp)) {
         Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
             MiuixText(
-                text = if (state.apps.isEmpty()) "暂无声明 Shizuku 权限的应用" else "没有匹配的应用",
+                text = if (state.apps.isEmpty()) stringResource(R.string.shizuku_list_empty) else stringResource(R.string.shizuku_list_no_match),
                 fontSize = 13.sp,
                 color = colorScheme.onSurfaceVariantSummary,
             )
             if (state.apps.isEmpty()) {
                 Spacer(Modifier.height(4.dp))
                 MiuixText(
-                    text = "应用首次请求 Shizuku 时才会出现在这里",
+                    text = stringResource(R.string.shizuku_list_empty_hint),
                     fontSize = 11.sp,
                     color = colorScheme.onSurfaceVariantSummary,
                 )
@@ -781,10 +788,10 @@ private fun ShizukuScreenMaterial(onBack: () -> Unit, onOpenLog: () -> Unit) {
                 },
                 actions = {
                     IconButton(onClick = onOpenLog) {
-                        Icon(Icons.Filled.Article, contentDescription = "日志")
+                        Icon(Icons.Filled.Article, contentDescription = stringResource(R.string.shizuku_log_content_desc))
                     }
                     IconButton(onClick = actions.onRefresh) {
-                        Icon(Icons.Filled.Refresh, contentDescription = "刷新")
+                        Icon(Icons.Filled.Refresh, contentDescription = stringResource(R.string.shizuku_refresh))
                     }
                 },
             )
@@ -799,7 +806,7 @@ private fun ShizukuScreenMaterial(onBack: () -> Unit, onOpenLog: () -> Unit) {
             item { MaterialAutostartCard(state, actions) }
             item {
                 Text(
-                    text = "应用授权（${state.allowedCount}/${state.apps.size}）",
+                    text = stringResource(R.string.shizuku_apps_title, state.allowedCount, state.apps.size),
                     style = MaterialTheme.typography.titleSmall,
                     color = scheme.primary,
                     modifier = Modifier.padding(top = 8.dp, bottom = 4.dp),
@@ -837,15 +844,15 @@ private fun MaterialStatusCard(state: ShizukuUiState, actions: ShizukuActions) {
                 Spacer(Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = if (state.running) "运行中" else "已停止",
+                        text = if (state.running) stringResource(R.string.shizuku_state_running) else stringResource(R.string.shizuku_state_stopped),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
                     )
                     Text(
                         text = if (state.running) {
-                            if (state.serverIsRoot) "Root 模式 · 命令以 root 身份执行" else "Shell 模式 · 命令以 shell 身份执行"
+                            if (state.serverIsRoot) stringResource(R.string.shizuku_mode_root) else stringResource(R.string.shizuku_mode_shell)
                         } else {
-                            "服务未启动，应用无法使用 Shizuku 能力"
+                            stringResource(R.string.shizuku_not_running_summary)
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = scheme.onSurfaceVariant,
@@ -862,9 +869,9 @@ private fun MaterialStatusCard(state: ShizukuUiState, actions: ShizukuActions) {
             if (state.running) {
                 Spacer(Modifier.height(14.dp))
                 Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    MaterialMetric("运行身份", state.serverUid?.toString() ?: "—", Modifier.weight(1f))
-                    MaterialMetric("进程 PID", state.serverPid?.toString() ?: "—", Modifier.weight(1f))
-                    MaterialMetric("已授权", "${state.allowedCount} / ${state.apps.size}", Modifier.weight(1f))
+                    MaterialMetric(stringResource(R.string.shizuku_metric_uid), state.serverUid?.toString() ?: "—", Modifier.weight(1f))
+                    MaterialMetric(stringResource(R.string.shizuku_metric_pid), state.serverPid?.toString() ?: "—", Modifier.weight(1f))
+                    MaterialMetric(stringResource(R.string.shizuku_allowed), "${state.allowedCount} / ${state.apps.size}", Modifier.weight(1f))
                 }
             }
 
@@ -883,16 +890,16 @@ private fun MaterialStatusCard(state: ShizukuUiState, actions: ShizukuActions) {
                     TextButton(
                         onClick = { if (!state.stopping) actions.onStop() },
                         modifier = Modifier.weight(1f),
-                    ) { Text(if (state.stopping) "停止中…" else "停止服务") }
+                    ) { Text(if (state.stopping) stringResource(R.string.shizuku_stopping) else stringResource(R.string.shizuku_stop)) }
                     TextButton(
                         onClick = { if (!state.starting && !state.stopping) actions.onRestart() },
                         modifier = Modifier.weight(1f),
-                    ) { Text(if (state.starting) "重启中…" else "重启服务") }
+                    ) { Text(if (state.starting) stringResource(R.string.shizuku_restarting) else stringResource(R.string.shizuku_restart)) }
                 } else {
                     TextButton(
                         onClick = { if (!state.starting) actions.onStart() },
                         modifier = Modifier.weight(1f),
-                    ) { Text(if (state.starting) "启动中…" else "启动服务") }
+                    ) { Text(if (state.starting) stringResource(R.string.shizuku_starting) else stringResource(R.string.shizuku_start)) }
                 }
             }
         }
@@ -914,9 +921,9 @@ private fun MaterialAutostartCard(state: ShizukuUiState, actions: ShizukuActions
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("开机自启", style = MaterialTheme.typography.titleSmall)
+                    Text(stringResource(R.string.shizuku_autostart), style = MaterialTheme.typography.titleSmall)
                     Text(
-                        text = "设备启动后自动拉起内置服务",
+                        text = stringResource(R.string.shizuku_autostart_summary),
                         style = MaterialTheme.typography.bodySmall,
                         color = scheme.onSurfaceVariant,
                     )
@@ -934,7 +941,7 @@ private fun MaterialAutostartCard(state: ShizukuUiState, actions: ShizukuActions
                 TextButton(
                     onClick = { if (!state.autostarting) actions.onAutostartNow() },
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                ) { Text(if (state.autostarting) "执行中…" else "立即自启一次") }
+                ) { Text(if (state.autostarting) stringResource(R.string.shizuku_autostart_running) else stringResource(R.string.shizuku_autostart_now)) }
             }
         }
     }
@@ -953,27 +960,27 @@ private fun MaterialAppListCard(state: ShizukuUiState, actions: ShizukuActions) 
                     value = state.query,
                     onValueChange = actions.onQueryChange,
                     singleLine = true,
-                    label = { Text("搜索应用名或包名") },
+                    label = { Text(stringResource(R.string.shizuku_search_apps)) },
                     leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Spacer(Modifier.height(10.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    MaterialFilterChip("全部", state.filter == AppFilter.All) { actions.onFilterChange(AppFilter.All) }
-                    MaterialFilterChip("已授权", state.filter == AppFilter.Allowed) { actions.onFilterChange(AppFilter.Allowed) }
-                    MaterialFilterChip("未授权", state.filter == AppFilter.Denied) { actions.onFilterChange(AppFilter.Denied) }
+                    MaterialFilterChip(stringResource(R.string.shizuku_filter_all), state.filter == AppFilter.All) { actions.onFilterChange(AppFilter.All) }
+                    MaterialFilterChip(stringResource(R.string.shizuku_allowed), state.filter == AppFilter.Allowed) { actions.onFilterChange(AppFilter.Allowed) }
+                    MaterialFilterChip(stringResource(R.string.shizuku_denied), state.filter == AppFilter.Denied) { actions.onFilterChange(AppFilter.Denied) }
                 }
             }
             HorizontalDivider(color = scheme.outlineVariant.copy(alpha = 0.5f))
             when {
                 !state.running -> Text(
-                    text = "服务未启动，无法读取应用列表",
+                    text = stringResource(R.string.shizuku_list_unavailable),
                     style = MaterialTheme.typography.bodySmall,
                     color = scheme.onSurfaceVariant,
                     modifier = Modifier.padding(16.dp),
                 )
                 state.visibleApps.isEmpty() -> Text(
-                    text = if (state.apps.isEmpty()) "暂无声明 Shizuku 权限的应用" else "没有匹配的应用",
+                    text = if (state.apps.isEmpty()) stringResource(R.string.shizuku_list_empty) else stringResource(R.string.shizuku_list_no_match),
                     style = MaterialTheme.typography.bodySmall,
                     color = scheme.onSurfaceVariant,
                     modifier = Modifier.padding(16.dp),
@@ -1019,7 +1026,7 @@ private fun MaterialAppRow(
                     )
                     Spacer(Modifier.width(6.dp))
                     MaterialPill(
-                        text = if (app.allowed) "已授权" else "未授权",
+                        text = if (app.allowed) stringResource(R.string.shizuku_allowed) else stringResource(R.string.shizuku_denied),
                         color = if (app.allowed) AccentRunning else scheme.onSurfaceVariant,
                     )
                     if (serverIsRoot && app.allowed) {
@@ -1047,9 +1054,9 @@ private fun MaterialAppRow(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("Root 访问", style = MaterialTheme.typography.bodyMedium)
+                    Text(stringResource(R.string.shizuku_root_access), style = MaterialTheme.typography.bodyMedium)
                     Text(
-                        text = if (app.shellOnly) "降级为 shell 权限执行" else "以 root 权限执行",
+                        text = if (app.shellOnly) stringResource(R.string.shizuku_shell_only_on) else stringResource(R.string.shizuku_shell_only_off),
                         style = MaterialTheme.typography.bodySmall,
                         color = scheme.onSurfaceVariant,
                     )
