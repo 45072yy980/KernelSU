@@ -8,7 +8,7 @@ project("kernelsu")
 find_package(cxx REQUIRED CONFIG)
 link_libraries(cxx::cxx)
 
-add_library(kernelsu SHARED jni.cc ksu.cc)
+add_library(kernelsu SHARED jni.cc ksu.cc c98432/c98432_spawn.cc)
 # uapi 头只保留内核那一份（kernel/include/uapi/），仓库里不再存副本 ——
 # 副本只能靠人肉同步，63abf487 之前就漏过 feature id 5/6。
 # 从 cpp/ 往上 5 层是仓库根：cpp → main → src → app → manager → <repo>。
@@ -110,6 +110,30 @@ if(ANDROID_ABI STREQUAL "arm64-v8a")
     target_link_options(dirtyfrag_bootstrap PRIVATE -fPIE -pie)
     set_target_properties(dirtyfrag_bootstrap PROPERTIES
             OUTPUT_NAME "dirtyfrag_bootstrap"
+            SUFFIX ".so"
+            PREFIX "lib")
+endif()
+
+# ---------------------------------------------------------------------------
+# CVE-2026-98432 (ireq_opt use-after-free)
+#
+# 和另外两条链不同，这条链**没有 root 可用**——它就是拿来拿 root 的。所以它
+# 不能像 ghostlock / dirtyfrag 那样从 nativeLibraryDir exec 后自己搞定一切：
+# 它需要一个 tun 描述符（VpnService 建的）才能在没有 CAP_NET_RAW 的情况下把
+# 伪造报文投进内核。因此编成 libc98432.so，由 Manager 用 posix_spawn 起，
+# 并把 tun fd 复制到 fd 3 传进去。
+#
+# 只编 arm64-v8a：偏移表是按 6.6.77 GKI 单一构建导出的。
+# ---------------------------------------------------------------------------
+if(ANDROID_ABI STREQUAL "arm64-v8a")
+    add_executable(c98432 "${CMAKE_CURRENT_SOURCE_DIR}/c98432/exp.c")
+    target_compile_definitions(c98432 PRIVATE _GNU_SOURCE)
+    target_compile_options(c98432 PRIVATE
+            $<$<COMPILE_LANGUAGE:C>:-std=gnu11;-O2;-Wall;-Wextra;-Wno-unused-parameter;-Wno-sign-compare>)
+    target_include_directories(c98432 PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/c98432")
+    target_link_options(c98432 PRIVATE -fPIE -pie)
+    set_target_properties(c98432 PROPERTIES
+            OUTPUT_NAME "c98432"
             SUFFIX ".so"
             PREFIX "lib")
 endif()
