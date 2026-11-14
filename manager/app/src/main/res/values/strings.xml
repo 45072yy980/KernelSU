@@ -892,4 +892,6 @@
     <string name="language_delete_pack">Delete “%1$s”</string>
     <string name="language_pack_entries">%1$d entries</string>
     <string name="language_pack_help">A pack is a JSON file: {"name": "…", "locale": "ja", "strings": {"resource_name": "text"}}. Keys are the names in strings.xml; entries you leave out keep the built-in text.</string>
+    <string name="jailbreak_engine_c64560">CVE-2026-64560</string>
+    <string name="jailbreak_engine_c98260">CVE-2026-98260</string>
 </resources>

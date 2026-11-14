@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -34,13 +35,15 @@ fun JailbreakDialog(
     show: Boolean,
     onExploit: () -> Unit,
     onDirtyFrag: () -> Unit,
+    onC64560: () -> Unit,
+    onC98260: () -> Unit,
     onManualInstall: () -> Unit,
     onCancel: () -> Unit,
 ) {
     when (LocalUiMode.current) {
         UiMode.Miuix, UiMode.MiuixStock ->
-            JailbreakDialogMiuix(show, onExploit, onDirtyFrag, onManualInstall, onCancel)
-        UiMode.Material -> JailbreakDialogMaterial(show, onExploit, onDirtyFrag, onManualInstall, onCancel)
+            JailbreakDialogMiuix(show, onExploit, onDirtyFrag, onC64560, onC98260, onManualInstall, onCancel)
+        UiMode.Material -> JailbreakDialogMaterial(show, onExploit, onDirtyFrag, onC64560, onC98260, onManualInstall, onCancel)
     }
 }
 
@@ -49,6 +52,8 @@ private fun JailbreakDialogMiuix(
     show: Boolean,
     onExploit: () -> Unit,
     onDirtyFrag: () -> Unit,
+    onC64560: () -> Unit,
+    onC98260: () -> Unit,
     onManualInstall: () -> Unit,
     onCancel: () -> Unit,
 ) {
@@ -59,8 +64,8 @@ private fun JailbreakDialogMiuix(
         content = {
             Column(modifier = Modifier.fillMaxWidth()) {
                 MiuixText(text = stringResource(R.string.jailbreak_choose_message))
-                // 两条独立的提权路径，最终都落到 ksud late-load：
-                // ghostlock 是本应用内置的二进制，DirtyFrag 是另装的一个应用。
+                // 四条独立的提权路径，最终都落到 ksud late-load：
+                // ghostlock / DirtyFrag 是既有实现，64560 / 98260 是移植进来的。
                 Column(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.padding(top = 12.dp)
@@ -74,6 +79,16 @@ private fun JailbreakDialogMiuix(
                     MiuixTextButton(
                         text = stringResource(R.string.jailbreak_engine_dirtyfrag),
                         onClick = onDirtyFrag,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    MiuixTextButton(
+                        text = stringResource(R.string.jailbreak_engine_c64560),
+                        onClick = onC64560,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    MiuixTextButton(
+                        text = stringResource(R.string.jailbreak_engine_c98260),
+                        onClick = onC98260,
                         modifier = Modifier.fillMaxWidth()
                     )
                     MiuixTextButton(
@@ -92,6 +107,8 @@ private fun JailbreakDialogMaterial(
     show: Boolean,
     onExploit: () -> Unit,
     onDirtyFrag: () -> Unit,
+    onC64560: () -> Unit,
+    onC98260: () -> Unit,
     onManualInstall: () -> Unit,
     onCancel: () -> Unit,
 ) {
@@ -102,20 +119,33 @@ private fun JailbreakDialogMaterial(
         text = {
             Column {
                 Text(stringResource(R.string.jailbreak_choose_message))
-                TextButton(onClick = onDirtyFrag) {
-                    Text(stringResource(R.string.jailbreak_engine_dirtyfrag))
+                // 五个选项一列排开：挤在 confirm/dismiss 三个位里放不下，
+                // 也会让主次看不出来。
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(top = 12.dp),
+                ) {
+                    listOf(
+                        stringResource(R.string.jailbreak_engine_ghostlock) to onExploit,
+                        stringResource(R.string.jailbreak_engine_dirtyfrag) to onDirtyFrag,
+                        stringResource(R.string.jailbreak_engine_c64560) to onC64560,
+                        stringResource(R.string.jailbreak_engine_c98260) to onC98260,
+                        stringResource(R.string.jailbreak_manual_action) to onManualInstall,
+                    ).forEachIndexed { index, (label, action) ->
+                        TextButton(onClick = action, modifier = Modifier.fillMaxWidth()) {
+                            Text(
+                                text = label,
+                                color = if (index == 0) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurface
+                                },
+                            )
+                        }
+                    }
                 }
             }
         },
-        confirmButton = {
-            TextButton(onClick = onExploit) {
-                Text(stringResource(R.string.jailbreak_engine_ghostlock))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onManualInstall) {
-                Text(stringResource(R.string.jailbreak_manual_action))
-            }
-        }
+        confirmButton = {}
     )
 }

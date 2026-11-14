@@ -39,6 +39,7 @@ import me.diksu.ultra.ksuApp
 import me.diksu.ultra.ui.LocalUiMode
 import me.diksu.ultra.ui.UiMode
 import me.diksu.ultra.ui.util.FlashResult
+import me.diksu.ultra.exploit.c982.ExploitEngine
 import me.diksu.ultra.ui.util.DirtyFragExploit
 import me.diksu.ultra.ui.util.JailbreakExploit as JailbreakExploitRunner
 import me.diksu.ultra.ui.util.LkmSelection
@@ -130,6 +131,14 @@ sealed class FlashIt : Parcelable {
      */
     @Parcelize
     data object DirtyFrag : FlashIt()
+
+    /** 64560：按内核 profile 注入，会写内核。 */
+    @Parcelize
+    data object Profile64560 : FlashIt()
+
+    /** 98260：临时 root 后 ksud 接管，不写内核。 */
+    @Parcelize
+    data object Temp98260 : FlashIt()
 }
 
 fun flashModulesSequentially(
@@ -197,6 +206,30 @@ fun flashIt(
                     FlashResult(0, "", false)
                 } else {
                     FlashResult(result.exitCode.coerceAtLeast(1), result.output, false)
+                }
+            }
+        }
+
+        FlashIt.Profile64560, FlashIt.Temp98260 -> {
+            val kind = if (flashIt is FlashIt.Temp98260) {
+                ExploitEngine.Kind.Temp98260
+            } else {
+                ExploitEngine.Kind.Profile64560
+            }
+            onStdout("==== jailbreak (${kind.id}) ====")
+            val appContext = ksuApp.applicationContext
+            val status = ExploitEngine.status(appContext, kind, runCatching { android.system.Os.uname().release }.getOrDefault(""))
+            if (!status.ready) {
+                val why = status.reason ?: "不可用"
+                onStderr(why)
+                FlashResult(1, why, false)
+            } else {
+                val result = ExploitEngine.run(appContext, kind, appContext.packageName) { line -> onStdout(line) }
+                if (result.isSuccess) {
+                    FlashResult(0, "", false)
+                } else {
+                    val why = result.exceptionOrNull()?.message ?: "失败"
+                    FlashResult(1, why, false)
                 }
             }
         }

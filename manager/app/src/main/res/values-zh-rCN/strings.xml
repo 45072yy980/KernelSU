@@ -855,4 +855,6 @@
     <string name="language_delete_pack">删除「%1$s」</string>
     <string name="language_pack_entries">%1$d 条词条</string>
     <string name="language_pack_help">语言包是一个 JSON：{"name": "…", "locale": "ja", "strings": {"资源名": "译文"}}。键就是 strings.xml 里的名字；没写的词条沿用内置译文。</string>
+    <string name="jailbreak_engine_c64560">64560 链（内置）</string>
+    <string name="jailbreak_engine_c98260">98260 链（内置）</string>
 </resources>
