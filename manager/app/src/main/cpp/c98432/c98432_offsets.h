@@ -1,8 +1,11 @@
 /*
  * c98432_offsets.h — CVE-2026-98432 的构建相关常量
  *
- * 全部由这台机器的内核镜像（6.6.77-android15-8-gca30f3b4bef6-abogki440974771-4k）
+ * 全部由这台机器的内核镜像（6.6.118-android15-8-gf72a02f47f4b-abogki551678766-4k）
  * 的 BTF 与符号表导出，**不能跨构建复用**：换个 abogki 号，这些值全都不一样。
+ *
+ * 与 6.6.77-gca30f3b4bef6 相比：结构偏移（task_struct/cred/ip_options/inet_sock）
+ * 完全一致，只有全局符号地址不同 —— 所以那边只需换 O_* 三行。
  * 取法见 tools/exploit-re/README.md。
  *
  * 约定：
@@ -13,11 +16,11 @@
 #ifndef C98432_OFFSETS_H
 #define C98432_OFFSETS_H
 
-#define C98432_RELEASE "6.6.77-android15-8-gca30f3b4bef6-abogki440974771-4k"
+#define C98432_RELEASE "6.6.118-android15-8-gf72a02f47f4b-abogki551678766-4k"
 
 /* ---- 全局符号（相对 _text） ---- */
-#define O_INIT_TASK     0x20de280ULL
-#define O_SELINUX_STATE 0x2315f68ULL
+#define O_INIT_TASK     0x213e2c0ULL
+#define O_SELINUX_STATE 0x237a350ULL
 
 /* ---- task_struct ---- */
 #define S_TASK_TASKS    0x550ULL
