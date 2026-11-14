@@ -160,6 +160,8 @@ private fun rememberLogState(): Pair<LogState, LogActions> {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
+    // 导出发生在协程里，标题先在这里取。
+    val exportTitle = stringResource(R.string.shizuku_export_log_title)
 
     fun refresh() {
         scope.launch {
@@ -225,7 +227,7 @@ private fun rememberLogState(): Pair<LogState, LogActions> {
                     putExtra(Intent.EXTRA_STREAM, uri)
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 }
-                context.startActivity(Intent.createChooser(shareIntent, stringResource(R.string.shizuku_export_log_title)))
+                context.startActivity(Intent.createChooser(shareIntent, exportTitle))
             }
         },
         onClear = {

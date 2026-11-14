@@ -180,6 +180,9 @@ private fun rememberShizukuState(): Pair<ShizukuUiState, ShizukuActions> {
     var state by remember { mutableStateOf(ShizukuUiState()) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    // 协程里不能调用 stringResource，先把要用到的两条取出来。
+    val startFailedText = stringResource(R.string.shizuku_start_failed)
+    val restartFailedText = stringResource(R.string.shizuku_restart_failed)
 
     suspend fun refresh() {
         state = state.copy(loading = true)
@@ -220,7 +223,7 @@ private fun rememberShizukuState(): Pair<ShizukuUiState, ShizukuActions> {
                 state = state.copy(starting = true, startError = null)
                 val ok = withContext(Dispatchers.IO) { ShizukuServiceManager.start(context) }
                 state = state.copy(starting = false)
-                if (!ok) state = state.copy(startError = stringResource(R.string.shizuku_start_failed))
+                if (!ok) state = state.copy(startError = startFailedText)
                 refresh()
             }
         },
@@ -239,7 +242,7 @@ private fun rememberShizukuState(): Pair<ShizukuUiState, ShizukuActions> {
                 state = state.copy(stopping = false, starting = true)
                 val ok = withContext(Dispatchers.IO) { ShizukuServiceManager.start(context) }
                 state = state.copy(starting = false)
-                if (!ok) state = state.copy(startError = stringResource(R.string.shizuku_restart_failed))
+                if (!ok) state = state.copy(startError = restartFailedText)
                 refresh()
             }
         },
