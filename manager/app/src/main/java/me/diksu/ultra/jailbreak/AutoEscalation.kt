@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import me.diksu.ultra.data.repository.SettingsRepositoryImpl
 import me.diksu.ultra.ksuApp
+import me.diksu.ultra.exploit.c982.ExploitEngine
 import me.diksu.ultra.ui.util.DirtyFragExploit
 import me.diksu.ultra.ui.util.JailbreakExploit
 import me.diksu.ultra.ui.util.rootAvailable
@@ -34,6 +35,8 @@ object AutoEscalation {
 
     const val METHOD_GHOSTLOCK = "ghostlock"
     const val METHOD_DIRTYFRAG = "dirtyfrag"
+    const val METHOD_C64560 = "cve64560"
+    const val METHOD_C98260 = "cve98260"
 
     private const val KEY_ORDER = "auto_escalation_order"
     private const val KEY_LAST_AT = "auto_escalation_last_at"
@@ -44,17 +47,24 @@ object AutoEscalation {
     private const val KEY_FAIL_STREAK = "auto_escalation_fail_streak"
 
     /** 全部已知方式，顺序即默认优先级。 */
-    val ALL_METHODS: List<String> = listOf(METHOD_GHOSTLOCK, METHOD_DIRTYFRAG)
+    val ALL_METHODS: List<String> =
+        listOf(METHOD_GHOSTLOCK, METHOD_DIRTYFRAG, METHOD_C64560, METHOD_C98260)
+
+    private fun releaseOf(): String = runCatching { android.system.Os.uname().release }.getOrDefault("")
 
     fun label(method: String): String = when (method) {
         METHOD_GHOSTLOCK -> "ghostlock"
         METHOD_DIRTYFRAG -> "DirtyFrag"
+        METHOD_C64560 -> "CVE-2026-64560"
+        METHOD_C98260 -> "CVE-2026-98260"
         else -> method
     }
 
     fun description(method: String): String = when (method) {
         METHOD_GHOSTLOCK -> "按内核构建号定制的 CVE 链，链条最短，成功率最高"
         METHOD_DIRTYFRAG -> "页缓存写（IPsec ESP + splice），覆盖的内核版本更广"
+        METHOD_C64560 -> "按内核 profile 注入，需包内有这颗内核的 profile"
+        METHOD_C98260 -> "临时 root 后 ksud late-load 接管，不写内核"
         else -> ""
     }
 
@@ -157,6 +167,8 @@ object AutoEscalation {
     fun isAvailable(context: Context, method: String): Boolean = when (method) {
         METHOD_GHOSTLOCK -> JailbreakExploit.isAvailable(context)
         METHOD_DIRTYFRAG -> DirtyFragExploit.isAvailable(context)
+        METHOD_C64560 -> ExploitEngine.status(context, ExploitEngine.Kind.Profile64560, releaseOf()).ready
+        METHOD_C98260 -> ExploitEngine.status(context, ExploitEngine.Kind.Temp98260, releaseOf()).ready
         else -> false
     }
 
@@ -200,6 +212,14 @@ object AutoEscalation {
                     ).success
 
                     METHOD_DIRTYFRAG -> DirtyFragExploit.run(context) { line -> onLog(line) }.success
+
+                    METHOD_C64560 -> ExploitEngine.run(
+                        context, ExploitEngine.Kind.Profile64560, context.packageName, onLog,
+                    ).isSuccess
+
+                    METHOD_C98260 -> ExploitEngine.run(
+                        context, ExploitEngine.Kind.Temp98260, context.packageName, onLog,
+                    ).isSuccess
                     else -> false
                 }
             } catch (t: Throwable) {
