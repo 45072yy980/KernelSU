@@ -5,6 +5,7 @@ import android.util.Log
 import me.diksu.ultra.data.repository.SettingsRepositoryImpl
 import me.diksu.ultra.ksuApp
 import me.diksu.ultra.exploit.c98432.C98432Runner
+import me.diksu.ultra.exploit.ghostkey.GhostKeyRunner
 import me.diksu.ultra.ui.util.DirtyFragExploit
 import me.diksu.ultra.ui.util.JailbreakExploit
 import me.diksu.ultra.ui.util.rootAvailable
@@ -33,6 +34,7 @@ object AutoEscalation {
     /** 与 [SettingsRepositoryImpl.autoJailbreak] 共用同一份设置存储。 */
     private const val PREFS = "settings"
 
+    const val METHOD_GHOSTKEY = "ghostkey"
     const val METHOD_GHOSTLOCK = "ghostlock"
     const val METHOD_DIRTYFRAG = "dirtyfrag"
     const val METHOD_C98432 = "cve98432"
@@ -47,11 +49,12 @@ object AutoEscalation {
 
     /** 全部已知方式，顺序即默认优先级。 */
     val ALL_METHODS: List<String> =
-        listOf(METHOD_GHOSTLOCK, METHOD_DIRTYFRAG, METHOD_C98432)
+        listOf(METHOD_GHOSTKEY, METHOD_GHOSTLOCK, METHOD_DIRTYFRAG, METHOD_C98432)
 
     private fun releaseOf(): String = runCatching { android.system.Os.uname().release }.getOrDefault("")
 
     fun label(method: String): String = when (method) {
+        METHOD_GHOSTKEY -> "GhostKey"
         METHOD_GHOSTLOCK -> "ghostlock"
         METHOD_DIRTYFRAG -> "DirtyFrag"
         METHOD_C98432 -> "CVE-2026-98432"
@@ -59,6 +62,7 @@ object AutoEscalation {
     }
 
     fun description(method: String): String = when (method) {
+        METHOD_GHOSTKEY -> "月虹的 GhostKey（CVE-2026-98260），需要 Shizuku 做 ftrace 校准"
         METHOD_GHOSTLOCK -> "按内核构建号定制的 CVE 链，链条最短，成功率最高"
         METHOD_DIRTYFRAG -> "页缓存写（IPsec ESP + splice），覆盖的内核版本更广"
         METHOD_C98432 -> "ireq_opt use-after-free，走 VpnService tun 投递伪造报文"
@@ -162,6 +166,7 @@ object AutoEscalation {
 
     /** 某个方式在这台设备上是否可用（二进制是否随包内置）。 */
     fun isAvailable(context: Context, method: String): Boolean = when (method) {
+        METHOD_GHOSTKEY -> GhostKeyRunner(context).canRunAutomatically()
         METHOD_GHOSTLOCK -> JailbreakExploit.isAvailable(context)
         METHOD_DIRTYFRAG -> DirtyFragExploit.isAvailable(context)
         METHOD_C98432 -> C98432Runner(context).isSupported()
@@ -201,6 +206,14 @@ object AutoEscalation {
             onLog("== [${index + 1}/${methods.size}] 尝试 ${label(method)} ==")
             val ok = try {
                 when (method) {
+                    METHOD_GHOSTKEY -> {
+                        val r = GhostKeyRunner(context).run(onLog = onLog)
+                        if (r.ok) onLog(r.message)
+                        // 临时 root 不算自动提权成功：要 KernelSU 真正接管，
+                        // 或者已有的 root 检测能过，才停在这一种方式。
+                        r.ok && (r.ksuLoaded || runCatching { rootAvailable() }.getOrDefault(false))
+                    }
+
                     METHOD_GHOSTLOCK -> JailbreakExploit.run(
                         context = context,
                         managerPackage = context.packageName,
@@ -209,8 +222,12 @@ object AutoEscalation {
 
                     METHOD_DIRTYFRAG -> DirtyFragExploit.run(context) { line -> onLog(line) }.success
 
-                    METHOD_C98432 -> C98432Runner(context)
-                        .run(C98432Runner.Phase.LEAK, onLog = onLog).ok
+                    METHOD_C98432 -> {
+                        val r = C98432Runner(context).run(C98432Runner.Phase.LEAK, onLog = onLog)
+                        if (r.ok) onLog("98432 只到泄露阶段，写原语尚未启用")
+                        // 泄露不等于提权；ROOT 段没有实机验证前不在这里报成功。
+                        false
+                    }
                     else -> false
                 }
             } catch (t: Throwable) {

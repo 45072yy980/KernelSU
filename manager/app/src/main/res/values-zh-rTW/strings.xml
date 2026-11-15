@@ -201,6 +201,7 @@
     <string name="jailbreak_choose_title">啟用 Root</string>
     <string name="jailbreak_choose_message">當前核心尚未載入。你可以讓本應用藉助內建的漏洞利用直接提權並立即進入越獄（late-load）模式，全程不修改任何分區；也可以選擇手動安裝核心。</string>
     <string name="jailbreak_engine_98432">98432 鏈（內建）</string>
+    <string name="jailbreak_engine_ghostkey">GhostKey 鏈（98260）</string>
     <string name="jailbreak_manual_action">手動安裝</string>
     <string name="jailbreak_exploit_action">越獄啟用（漏洞提權）</string>
     <string name="jailbreak_exploit_unavailable">本裝置未內建該漏洞利用。</string>

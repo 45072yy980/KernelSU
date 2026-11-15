@@ -40,6 +40,7 @@ import me.diksu.ultra.ui.LocalUiMode
 import me.diksu.ultra.ui.UiMode
 import me.diksu.ultra.ui.util.FlashResult
 import me.diksu.ultra.exploit.c98432.C98432Runner
+import me.diksu.ultra.exploit.ghostkey.GhostKeyRunner
 import me.diksu.ultra.ui.util.DirtyFragExploit
 import me.diksu.ultra.ui.util.JailbreakExploit as JailbreakExploitRunner
 import me.diksu.ultra.ui.util.LkmSelection
@@ -141,6 +142,14 @@ sealed class FlashIt : Parcelable {
      */
     @Parcelize
     data object IReqOpt98432 : FlashIt()
+
+    /**
+     * 月虹的 GhostKey（CVE-2026-98260）：先校准 KASLR/page_offset，再注入、
+     * 拉起 rootd，最后可选做 KernelSU 接管。校准必须走 Shizuku 的 shell 身份，
+     * 应用进程没有 tracefs 权限。
+     */
+    @Parcelize
+    data object GhostKey : FlashIt()
 }
 
 fun flashModulesSequentially(
@@ -212,6 +221,26 @@ fun flashIt(
             }
         }
 
+        FlashIt.GhostKey -> {
+            onStdout("==== jailbreak (GhostKey / 98260) ====")
+            val appContext = ksuApp.applicationContext
+            val runner = GhostKeyRunner(appContext)
+            if (!runner.isSupported()) {
+                val why = "这颗内核没有对应的 GhostKey profile，或载荷缺失"
+                onStderr(why)
+                FlashResult(1, why, false)
+            } else {
+                val result = runner.run { line -> onStdout(line) }
+                if (result.ok) {
+                    FlashResult(0, "", false)
+                } else {
+                    val why = "${result.stage}：${result.message}"
+                    onStderr(why)
+                    FlashResult(1, why, false)
+                }
+            }
+        }
+
         FlashIt.IReqOpt98432 -> {
             onStdout("==== jailbreak (98432) ====")
             val appContext = ksuApp.applicationContext
@@ -229,7 +258,10 @@ fun flashIt(
             } else {
                 val result = runner.run(C98432Runner.Phase.LEAK) { line -> onStdout(line) }
                 if (result.ok) {
-                    FlashResult(0, "", false)
+                    // 泄露成功不代表提权成功：写原语还没启用，不能报 0。
+                    val why = "泄露阶段通过，但写原语尚未启用，还没有取得 root"
+                    onStderr(why)
+                    FlashResult(1, why, false)
                 } else {
                     val why = "${result.stage}：${result.message}"
                     onStderr(why)

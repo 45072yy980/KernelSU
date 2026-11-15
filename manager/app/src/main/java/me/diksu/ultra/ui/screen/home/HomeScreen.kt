@@ -26,6 +26,7 @@ import me.diksu.ultra.ui.LocalUiMode
 import me.diksu.ultra.ui.UiMode
 import me.diksu.ultra.ui.component.dialog.JailbreakDialog
 import me.diksu.ultra.ui.component.dialog.rememberLoadingDialog
+import me.diksu.ultra.exploit.ghostkey.GhostKeyRunner
 import me.diksu.ultra.ui.screen.flash.FlashIt
 import me.diksu.ultra.ui.util.DirtyFragExploit
 import me.diksu.ultra.ui.util.JailbreakExploit
@@ -72,6 +73,15 @@ fun HomePager(
                 Toast.makeText(context, R.string.jailbreak_exploit_unavailable, Toast.LENGTH_LONG).show()
             } else {
                 navigator.push(Route.Flash(FlashIt.DirtyFrag))
+            }
+        },
+        onGhostKey = {
+            jailbreakChooserShown = false
+            // 月虹的 GhostKey（CVE-2026-98260）：需要 Shizuku 的 shell 身份做 ftrace 校准。
+            if (!GhostKeyRunner(context).isSupported()) {
+                Toast.makeText(context, R.string.jailbreak_exploit_unavailable, Toast.LENGTH_LONG).show()
+            } else {
+                navigator.push(Route.Flash(FlashIt.GhostKey))
             }
         },
         onC98432 = {

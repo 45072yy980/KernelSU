@@ -35,14 +35,15 @@ fun JailbreakDialog(
     show: Boolean,
     onExploit: () -> Unit,
     onDirtyFrag: () -> Unit,
+    onGhostKey: () -> Unit,
     onC98432: () -> Unit,
     onManualInstall: () -> Unit,
     onCancel: () -> Unit,
 ) {
     when (LocalUiMode.current) {
         UiMode.Miuix, UiMode.MiuixStock ->
-            JailbreakDialogMiuix(show, onExploit, onDirtyFrag, onC98432, onManualInstall, onCancel)
-        UiMode.Material -> JailbreakDialogMaterial(show, onExploit, onDirtyFrag, onC98432, onManualInstall, onCancel)
+            JailbreakDialogMiuix(show, onExploit, onDirtyFrag, onGhostKey, onC98432, onManualInstall, onCancel)
+        UiMode.Material -> JailbreakDialogMaterial(show, onExploit, onDirtyFrag, onGhostKey, onC98432, onManualInstall, onCancel)
     }
 }
 
@@ -51,6 +52,7 @@ private fun JailbreakDialogMiuix(
     show: Boolean,
     onExploit: () -> Unit,
     onDirtyFrag: () -> Unit,
+    onGhostKey: () -> Unit,
     onC98432: () -> Unit,
     onManualInstall: () -> Unit,
     onCancel: () -> Unit,
@@ -62,8 +64,8 @@ private fun JailbreakDialogMiuix(
         content = {
             Column(modifier = Modifier.fillMaxWidth()) {
                 MiuixText(text = stringResource(R.string.jailbreak_choose_message))
-                // 四条独立的提权路径，最终都落到 ksud late-load：
-                // ghostlock / DirtyFrag 是既有实现，64560 / 98260 是移植进来的。
+                // 五条独立的提权路径，最终都落到 ksud late-load：
+                // ghostlock / DirtyFrag / 98432 是自有链，GhostKey（98260）移植自月虹。
                 Column(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.padding(top = 12.dp)
@@ -77,6 +79,11 @@ private fun JailbreakDialogMiuix(
                     MiuixTextButton(
                         text = stringResource(R.string.jailbreak_engine_dirtyfrag),
                         onClick = onDirtyFrag,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    MiuixTextButton(
+                        text = stringResource(R.string.jailbreak_engine_ghostkey),
+                        onClick = onGhostKey,
                         modifier = Modifier.fillMaxWidth()
                     )
                     MiuixTextButton(
@@ -100,6 +107,7 @@ private fun JailbreakDialogMaterial(
     show: Boolean,
     onExploit: () -> Unit,
     onDirtyFrag: () -> Unit,
+    onGhostKey: () -> Unit,
     onC98432: () -> Unit,
     onManualInstall: () -> Unit,
     onCancel: () -> Unit,
@@ -111,7 +119,7 @@ private fun JailbreakDialogMaterial(
         text = {
             Column {
                 Text(stringResource(R.string.jailbreak_choose_message))
-                // 五个选项一列排开：挤在 confirm/dismiss 三个位里放不下，
+                // 六个选项一列排开：挤在 confirm/dismiss 三个位里放不下，
                 // 也会让主次看不出来。
                 Column(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -120,6 +128,7 @@ private fun JailbreakDialogMaterial(
                     listOf(
                         stringResource(R.string.jailbreak_engine_ghostlock) to onExploit,
                         stringResource(R.string.jailbreak_engine_dirtyfrag) to onDirtyFrag,
+                        stringResource(R.string.jailbreak_engine_ghostkey) to onGhostKey,
                         stringResource(R.string.jailbreak_engine_98432) to onC98432,
                         stringResource(R.string.jailbreak_manual_action) to onManualInstall,
                     ).forEachIndexed { index, (label, action) ->
