@@ -83,7 +83,9 @@ static int g_rounds = 4000;
 /* ------------------------------------------------------- 收发与环形缓冲 */
 
 struct synack {
-    uint16_t sport;
+    /* 对端的随机源端口 —— 也就是我们发 SYN 时用的 sport，用来匹配本轮。
+     * 名字故意不叫 sport/dport：内核回的包里它是目的端口，容易搞反。 */
+    uint16_t peer;
     uint32_t ack;
     uint32_t seq;
     uint8_t optlen;
@@ -204,12 +206,16 @@ static void *reader(void *arg) {
         uint16_t sport = ntohs(*(uint16_t *)(tcp + 0));
         uint16_t dport = ntohs(*(uint16_t *)(tcp + 2));
         uint8_t flags = tcp[13];
-        if (dport != g_port) continue;
+        /* 内核回的 SYNACK：源端口是监听端口 g_port，目的端口是我们随机选的
+         * sport。之前查的是 dport == g_port，于是每个 SYNACK 都在这里被丢掉，
+         * 表现就是 tx 涨而 synack 永远是 0。 */
+        if (sport != g_port) continue;
         if ((flags & 0x12) != 0x12) continue; /* SYN+ACK */
+        (void)dport;
         g_rx++;
         struct synack s;
         memset(&s, 0, sizeof(s));
-        s.sport = sport;
+        s.peer = dport;   /* SYNACK 的目的端口 = 我们的随机源端口 */
         s.seq = ntohl(*(uint32_t *)(tcp + 4));
         s.ack = ntohl(*(uint32_t *)(tcp + 8));
         size_t tcp_hdr = (tcp[12] >> 4) * 4;
@@ -428,7 +434,7 @@ static int syn_round(uint16_t *sport_out, uint32_t *seq_out, struct synack *out)
         struct synack s;
         int got = pop(&s);
         pthread_mutex_unlock(&g_ring_lock);
-        if (got && s.sport == sport && s.ack == isn + 1) {
+        if (got && s.peer == sport && s.ack == isn + 1) {
             *sport_out = sport;
             *seq_out = isn;
             *out = s;
@@ -477,7 +483,7 @@ static int drain_for(uint16_t sport, struct synack *out, int max) {
         int got = pop(&s);
         pthread_mutex_unlock(&g_ring_lock);
         if (!got) break;
-        if (s.sport != sport) continue;
+        if (s.peer != sport) continue;
         if (n < max) out[n++] = s;
     }
     return n;
@@ -562,7 +568,10 @@ static int phase_probe(void) {
         uint16_t sport;
         uint32_t isn;
         struct synack s;
-        if (!syn_round(&sport, &isn, &s)) { say("probe %d: 没收到 SYNACK", i); continue; }
+        if (!syn_round(&sport, &isn, &s)) {
+            say("probe %d: 没收到 SYNACK（累计 g_rx=%lu）", i, g_rx);
+            continue;
+        }
         if (s.optlen != OPT_MAXLEN) {
             say("probe %d: 选项长度 %u（预期 %u）", i, s.optlen, OPT_MAXLEN);
             continue;
@@ -922,7 +931,8 @@ int main(int argc, char **argv) {
         }
     }
 
-    say("统计: tx=%lu synack=%lu hit=%lu clear=%lu none=%lu", g_tx, g_synack, g_hit, g_clear, g_none);
+    say("统计: tx=%lu rx=%lu synack=%lu hit=%lu clear=%lu none=%lu",
+        g_tx, g_rx, g_synack, g_hit, g_clear, g_none);
     g_running = 0;
     if (g_listen_fd >= 0) { close(g_listen_fd); g_listen_fd = -1; }
     pthread_join(th, NULL);
