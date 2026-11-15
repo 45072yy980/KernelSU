@@ -1,5 +1,5 @@
 /*
- * CVE-2026-98432 — ireq_opt use-after-free (6.6.77 / gca30f3b4bef6)
+ * CVE-2026-98432 — ireq_opt use-after-free (6.6.118 / f72a02f47f4b)
  *
  * 输入侧走 VpnService 的 tun：把伪造的 SYN 写进 tun，内核当成本地入站处理，
  * 于是无需 CAP_NET_RAW 也能把带 IP 选项的报文塞进 tcp_v4_save_options()。
