@@ -209,9 +209,12 @@ object AutoEscalation {
                     METHOD_GHOSTKEY -> {
                         val r = GhostKeyRunner(context).run(onLog = onLog)
                         if (r.ok) onLog(r.message)
-                        // 临时 root 不算自动提权成功：要 KernelSU 真正接管，
-                        // 或者已有的 root 检测能过，才停在这一种方式。
-                        r.ok && (r.ksuLoaded || runCatching { rootAvailable() }.getOrDefault(false))
+                        // 临时 root / 别人的 KernelSU 都不算自动提权成功；
+                        // 必须是这次用 DikSU 自带 ko 接管的才算。
+                        if (r.foreignKsu) {
+                            onLog("内核里已有别的 KernelSU，需要重启后重跑")
+                        }
+                        r.ok && !r.foreignKsu && r.ksuLoaded
                     }
 
                     METHOD_GHOSTLOCK -> JailbreakExploit.run(

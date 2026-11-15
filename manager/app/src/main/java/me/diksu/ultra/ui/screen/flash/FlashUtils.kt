@@ -231,12 +231,18 @@ fun flashIt(
                 FlashResult(1, why, false)
             } else {
                 val result = runner.run { line -> onStdout(line) }
-                if (result.ok) {
-                    FlashResult(0, "", false)
-                } else {
-                    val why = "${result.stage}：${result.message}"
-                    onStderr(why)
-                    FlashResult(1, why, false)
+                when {
+                    result.foreignKsu -> {
+                        // 内核里已经是别人的 KernelSU，这条链在本会话里改不了管理器。
+                        onStderr(result.message)
+                        FlashResult(1, result.message, true)
+                    }
+                    result.ok -> FlashResult(0, "", false)
+                    else -> {
+                        val why = "${result.stage}：${result.message}"
+                        onStderr(why)
+                        FlashResult(1, why, false)
+                    }
                 }
             }
         }
