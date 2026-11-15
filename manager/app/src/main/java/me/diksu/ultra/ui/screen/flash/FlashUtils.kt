@@ -278,7 +278,11 @@ fun flashIt(
                     allowWrite = flashIt.allowWrite,
                 ) { line -> onStdout(line) }
                 if (result.ok) {
-                    val why = "SynOpt 已到 root 阶段，但写原语默认不启用；还没有取得 root"
+                    val why = if (flashIt.allowWrite) {
+                        "SynOpt 已完成一次越界写；还没有取得 root（写原语未定向到 cred）"
+                    } else {
+                        "SynOpt 探测完成：基址已解出，未写内核，还没有取得 root"
+                    }
                     onStderr(why)
                     FlashResult(1, why, false)
                 } else {

