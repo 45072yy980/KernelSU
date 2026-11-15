@@ -200,6 +200,7 @@
     <string name="jailbreak_guard_running_summary">當前處於越獄模式，系統分區保護始終開啟。任何模組安裝都會先掃描腳本——包括從終端機發起的安裝：紅色直接拒絕，黃色由你按音量鍵確認，綠色直接安裝。</string>
     <string name="jailbreak_choose_title">啟用 Root</string>
     <string name="jailbreak_choose_message">當前核心尚未載入。你可以讓本應用藉助內建的漏洞利用直接提權並立即進入越獄（late-load）模式，全程不修改任何分區；也可以選擇手動安裝核心。</string>
+    <string name="jailbreak_engine_98432">98432 鏈（內建）</string>
     <string name="jailbreak_manual_action">手動安裝</string>
     <string name="jailbreak_exploit_action">越獄啟用（漏洞提權）</string>
     <string name="jailbreak_exploit_unavailable">本裝置未內建該漏洞利用。</string>
@@ -502,6 +503,4 @@
     <string name="language_delete_pack">刪除「%1$s」</string>
     <string name="language_pack_entries">%1$d 條詞條</string>
     <string name="language_pack_help">語言包是一個 JSON：{"name": "…", "locale": "ja", "strings": {"資源名": "譯文"}}。鍵就是 strings.xml 裡的名字；沒寫的詞條沿用內建譯文。</string>
-    <string name="jailbreak_engine_c64560">64560 鏈（內建）（内置）</string>
-    <string name="jailbreak_engine_c98260">98260 鏈（內建）（内置）</string>
 </resources>

@@ -35,15 +35,14 @@ fun JailbreakDialog(
     show: Boolean,
     onExploit: () -> Unit,
     onDirtyFrag: () -> Unit,
-    onC64560: () -> Unit,
-    onC98260: () -> Unit,
+    onC98432: () -> Unit,
     onManualInstall: () -> Unit,
     onCancel: () -> Unit,
 ) {
     when (LocalUiMode.current) {
         UiMode.Miuix, UiMode.MiuixStock ->
-            JailbreakDialogMiuix(show, onExploit, onDirtyFrag, onC64560, onC98260, onManualInstall, onCancel)
-        UiMode.Material -> JailbreakDialogMaterial(show, onExploit, onDirtyFrag, onC64560, onC98260, onManualInstall, onCancel)
+            JailbreakDialogMiuix(show, onExploit, onDirtyFrag, onC98432, onManualInstall, onCancel)
+        UiMode.Material -> JailbreakDialogMaterial(show, onExploit, onDirtyFrag, onC98432, onManualInstall, onCancel)
     }
 }
 
@@ -52,8 +51,7 @@ private fun JailbreakDialogMiuix(
     show: Boolean,
     onExploit: () -> Unit,
     onDirtyFrag: () -> Unit,
-    onC64560: () -> Unit,
-    onC98260: () -> Unit,
+    onC98432: () -> Unit,
     onManualInstall: () -> Unit,
     onCancel: () -> Unit,
 ) {
@@ -82,13 +80,8 @@ private fun JailbreakDialogMiuix(
                         modifier = Modifier.fillMaxWidth()
                     )
                     MiuixTextButton(
-                        text = stringResource(R.string.jailbreak_engine_c64560),
-                        onClick = onC64560,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    MiuixTextButton(
-                        text = stringResource(R.string.jailbreak_engine_c98260),
-                        onClick = onC98260,
+                        text = stringResource(R.string.jailbreak_engine_98432),
+                        onClick = onC98432,
                         modifier = Modifier.fillMaxWidth()
                     )
                     MiuixTextButton(
@@ -107,8 +100,7 @@ private fun JailbreakDialogMaterial(
     show: Boolean,
     onExploit: () -> Unit,
     onDirtyFrag: () -> Unit,
-    onC64560: () -> Unit,
-    onC98260: () -> Unit,
+    onC98432: () -> Unit,
     onManualInstall: () -> Unit,
     onCancel: () -> Unit,
 ) {
@@ -128,8 +120,7 @@ private fun JailbreakDialogMaterial(
                     listOf(
                         stringResource(R.string.jailbreak_engine_ghostlock) to onExploit,
                         stringResource(R.string.jailbreak_engine_dirtyfrag) to onDirtyFrag,
-                        stringResource(R.string.jailbreak_engine_c64560) to onC64560,
-                        stringResource(R.string.jailbreak_engine_c98260) to onC98260,
+                        stringResource(R.string.jailbreak_engine_98432) to onC98432,
                         stringResource(R.string.jailbreak_manual_action) to onManualInstall,
                     ).forEachIndexed { index, (label, action) ->
                         TextButton(onClick = action, modifier = Modifier.fillMaxWidth()) {

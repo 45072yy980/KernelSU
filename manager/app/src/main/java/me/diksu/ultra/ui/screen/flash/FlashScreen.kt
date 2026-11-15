@@ -96,8 +96,7 @@ fun FlashScreen(flashIt: FlashIt, onBackEnabledChange: (Boolean) -> Unit) {
         rebootLabelRes = if (softReboot) R.string.reboot_soft else R.string.reboot,
         isJailbreak = flashIt is FlashIt.JailbreakExploit ||
             flashIt is FlashIt.DirtyFrag ||
-            flashIt is FlashIt.Profile64560 ||
-            flashIt is FlashIt.Temp98260,
+            flashIt is FlashIt.IReqOpt98432,
         waitingForKeys = waitingForKeys,
     )
     val actions = FlashScreenActions(

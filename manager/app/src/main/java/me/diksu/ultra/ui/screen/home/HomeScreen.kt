@@ -74,14 +74,9 @@ fun HomePager(
                 navigator.push(Route.Flash(FlashIt.DirtyFrag))
             }
         },
-        onC64560 = {
+        onC98432 = {
             jailbreakChooserShown = false
-            // 64560 需要包内有这颗内核的 profile；缺料时进度页会直接说明缺什么。
-            navigator.push(Route.Flash(FlashIt.Profile64560))
-        },
-        onC98260 = {
-            jailbreakChooserShown = false
-            navigator.push(Route.Flash(FlashIt.Temp98260))
+            navigator.push(Route.Flash(FlashIt.IReqOpt98432))
         },
         onManualInstall = {
             jailbreakChooserShown = false

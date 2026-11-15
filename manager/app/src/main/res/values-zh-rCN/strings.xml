@@ -441,6 +441,7 @@
     <string name="jailbreak_exploit_action">越狱激活（漏洞提权）</string>
     <string name="jailbreak_engine_ghostlock">ghostlock（内置）</string>
     <string name="jailbreak_engine_dirtyfrag">DirtyFrag（内置）</string>
+    <string name="jailbreak_engine_98432">98432 链（内置）</string>
     <string name="jailbreak_dirtyfrag_installed">已安装 DirtyFrag。在它的 SU 管理器卡片里选中本应用，再点 Run exploit；root 会通过 ksud late-load 回到这里。</string>
     <string name="jailbreak_dirtyfrag_launched">已打开 DirtyFrag：把 SU 管理器选成本应用，再点 Run exploit。</string>
     <string name="jailbreak_dirtyfrag_launch_failed">无法打开 DirtyFrag。</string>
@@ -855,6 +856,4 @@
     <string name="language_delete_pack">删除「%1$s」</string>
     <string name="language_pack_entries">%1$d 条词条</string>
     <string name="language_pack_help">语言包是一个 JSON：{"name": "…", "locale": "ja", "strings": {"资源名": "译文"}}。键就是 strings.xml 里的名字；没写的词条沿用内置译文。</string>
-    <string name="jailbreak_engine_c64560">64560 链（内置）</string>
-    <string name="jailbreak_engine_c98260">98260 链（内置）</string>
 </resources>

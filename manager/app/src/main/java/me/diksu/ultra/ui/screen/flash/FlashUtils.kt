@@ -39,7 +39,7 @@ import me.diksu.ultra.ksuApp
 import me.diksu.ultra.ui.LocalUiMode
 import me.diksu.ultra.ui.UiMode
 import me.diksu.ultra.ui.util.FlashResult
-import me.diksu.ultra.exploit.c982.ExploitEngine
+import me.diksu.ultra.exploit.c98432.C98432Runner
 import me.diksu.ultra.ui.util.DirtyFragExploit
 import me.diksu.ultra.ui.util.JailbreakExploit as JailbreakExploitRunner
 import me.diksu.ultra.ui.util.LkmSelection
@@ -132,13 +132,15 @@ sealed class FlashIt : Parcelable {
     @Parcelize
     data object DirtyFrag : FlashIt()
 
-    /** 64560：按内核 profile 注入，会写内核。 */
+    /**
+     * CVE-2026-98432：ireq_opt 的 use-after-free。
+     *
+     * 与另外两条链最大的不同是它**没有 root 可用**（本来就是来拿 root 的），
+     * 也不能开 raw socket，所以要先起 VpnService 拿 tun，再让载荷把伪造的
+     * 入站报文投进内核。
+     */
     @Parcelize
-    data object Profile64560 : FlashIt()
-
-    /** 98260：临时 root 后 ksud 接管，不写内核。 */
-    @Parcelize
-    data object Temp98260 : FlashIt()
+    data object IReqOpt98432 : FlashIt()
 }
 
 fun flashModulesSequentially(
@@ -210,25 +212,27 @@ fun flashIt(
             }
         }
 
-        FlashIt.Profile64560, FlashIt.Temp98260 -> {
-            val kind = if (flashIt is FlashIt.Temp98260) {
-                ExploitEngine.Kind.Temp98260
-            } else {
-                ExploitEngine.Kind.Profile64560
-            }
-            onStdout("==== jailbreak (${kind.id}) ====")
+        FlashIt.IReqOpt98432 -> {
+            onStdout("==== jailbreak (98432) ====")
             val appContext = ksuApp.applicationContext
-            val status = ExploitEngine.status(appContext, kind, runCatching { android.system.Os.uname().release }.getOrDefault(""))
-            if (!status.ready) {
-                val why = status.reason ?: "不可用"
+            val runner = C98432Runner(appContext)
+            // 98432 不是"缺料"而是"要先授权一条 tun"，所以这里先探 prepare。
+            val prep = runner.prepareIntent()
+            if (prep != null) {
+                val why = "需要先授权 VPN 通道（用于向内核投递伪造报文）"
+                onStderr(why)
+                FlashResult(1, why, false)
+            } else if (!runner.isSupported()) {
+                val why = "这颗内核没有对应偏移表，未适配"
                 onStderr(why)
                 FlashResult(1, why, false)
             } else {
-                val result = ExploitEngine.run(appContext, kind, appContext.packageName) { line -> onStdout(line) }
-                if (result.isSuccess) {
+                val result = runner.run(C98432Runner.Phase.LEAK) { line -> onStdout(line) }
+                if (result.ok) {
                     FlashResult(0, "", false)
                 } else {
-                    val why = result.exceptionOrNull()?.message ?: "失败"
+                    val why = "${result.stage}：${result.message}"
+                    onStderr(why)
                     FlashResult(1, why, false)
                 }
             }
