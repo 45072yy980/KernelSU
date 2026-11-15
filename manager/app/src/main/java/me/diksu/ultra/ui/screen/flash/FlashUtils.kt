@@ -262,10 +262,10 @@ fun flashIt(
                 onStderr(why)
                 FlashResult(1, why, false)
             } else {
-                val result = runner.run(SynOptRunner.Phase.LEAK) { line -> onStdout(line) }
+                // 跑到 root 阶段（解基址 + 构造写原语），但默认不真的写内核。
+                val result = runner.run(SynOptRunner.Phase.ROOT) { line -> onStdout(line) }
                 if (result.ok) {
-                    // 泄露成功不代表提权成功：写原语还没启用，不能报 0。
-                    val why = "泄露阶段通过，但写原语尚未启用，还没有取得 root"
+                    val why = "SynOpt 已到 root 阶段，但写原语默认不启用；还没有取得 root"
                     onStderr(why)
                     FlashResult(1, why, false)
                 } else {

