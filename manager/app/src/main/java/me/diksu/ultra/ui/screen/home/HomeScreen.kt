@@ -84,9 +84,9 @@ fun HomePager(
                 navigator.push(Route.Flash(FlashIt.GhostKey))
             }
         },
-        onC98432 = {
+        onSynOpt = {
             jailbreakChooserShown = false
-            navigator.push(Route.Flash(FlashIt.IReqOpt98432))
+            navigator.push(Route.Flash(FlashIt.SynOpt))
         },
         onManualInstall = {
             jailbreakChooserShown = false

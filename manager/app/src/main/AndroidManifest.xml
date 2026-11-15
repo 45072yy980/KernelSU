@@ -196,7 +196,7 @@
         <!-- CVE-2026-98432 输入通道：应用进程没有 CAP_NET_RAW，靠 VpnService 的
              tun 描述符把伪造的入站报文投进内核。仅这条链使用，不需要时不会被拉起。 -->
         <service
-            android:name="me.diksu.ultra.exploit.c98432.C98432VpnService"
+            android:name="me.diksu.ultra.exploit.synopt.SynOptVpnService"
             android:exported="false"
             android:foregroundServiceType="dataSync"
             android:permission="android.permission.BIND_VPN_SERVICE">

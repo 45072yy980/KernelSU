@@ -439,10 +439,10 @@
     <string name="jailbreak_choose_message">当前内核尚未加载。你可以让本应用借助内置的漏洞利用直接提权并立即进入越狱（late-load）模式，全程不修改任何分区；也可以选择手动安装内核。</string>
     <string name="jailbreak_manual_action">手动安装</string>
     <string name="jailbreak_exploit_action">越狱激活（漏洞提权）</string>
-    <string name="jailbreak_engine_ghostlock">ghostlock（内置）</string>
+    <string name="jailbreak_engine_ghostlock">GhostLock（内置）</string>
     <string name="jailbreak_engine_dirtyfrag">DirtyFrag（内置）</string>
-    <string name="jailbreak_engine_98432">98432 链（内置）</string>
-    <string name="jailbreak_engine_ghostkey">GhostKey 链（98260）</string>
+    <string name="jailbreak_engine_98432">SynOpt（内置）</string>
+    <string name="jailbreak_engine_ghostkey">GhostKey（内置）</string>
     <string name="jailbreak_dirtyfrag_installed">已安装 DirtyFrag。在它的 SU 管理器卡片里选中本应用，再点 Run exploit；root 会通过 ksud late-load 回到这里。</string>
     <string name="jailbreak_dirtyfrag_launched">已打开 DirtyFrag：把 SU 管理器选成本应用，再点 Run exploit。</string>
     <string name="jailbreak_dirtyfrag_launch_failed">无法打开 DirtyFrag。</string>

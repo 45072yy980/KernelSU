@@ -36,14 +36,14 @@ fun JailbreakDialog(
     onExploit: () -> Unit,
     onDirtyFrag: () -> Unit,
     onGhostKey: () -> Unit,
-    onC98432: () -> Unit,
+    onSynOpt: () -> Unit,
     onManualInstall: () -> Unit,
     onCancel: () -> Unit,
 ) {
     when (LocalUiMode.current) {
         UiMode.Miuix, UiMode.MiuixStock ->
-            JailbreakDialogMiuix(show, onExploit, onDirtyFrag, onGhostKey, onC98432, onManualInstall, onCancel)
-        UiMode.Material -> JailbreakDialogMaterial(show, onExploit, onDirtyFrag, onGhostKey, onC98432, onManualInstall, onCancel)
+            JailbreakDialogMiuix(show, onExploit, onDirtyFrag, onGhostKey, onSynOpt, onManualInstall, onCancel)
+        UiMode.Material -> JailbreakDialogMaterial(show, onExploit, onDirtyFrag, onGhostKey, onSynOpt, onManualInstall, onCancel)
     }
 }
 
@@ -53,7 +53,7 @@ private fun JailbreakDialogMiuix(
     onExploit: () -> Unit,
     onDirtyFrag: () -> Unit,
     onGhostKey: () -> Unit,
-    onC98432: () -> Unit,
+    onSynOpt: () -> Unit,
     onManualInstall: () -> Unit,
     onCancel: () -> Unit,
 ) {
@@ -65,7 +65,7 @@ private fun JailbreakDialogMiuix(
             Column(modifier = Modifier.fillMaxWidth()) {
                 MiuixText(text = stringResource(R.string.jailbreak_choose_message))
                 // 五条独立的提权路径，最终都落到 ksud late-load：
-                // ghostlock / DirtyFrag / 98432 是自有链，GhostKey（98260）移植自月虹。
+                // GhostLock / DirtyFrag / SynOpt 是自有链，GhostKey 移植自月虹。
                 Column(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.padding(top = 12.dp)
@@ -88,7 +88,7 @@ private fun JailbreakDialogMiuix(
                     )
                     MiuixTextButton(
                         text = stringResource(R.string.jailbreak_engine_98432),
-                        onClick = onC98432,
+                        onClick = onSynOpt,
                         modifier = Modifier.fillMaxWidth()
                     )
                     MiuixTextButton(
@@ -108,7 +108,7 @@ private fun JailbreakDialogMaterial(
     onExploit: () -> Unit,
     onDirtyFrag: () -> Unit,
     onGhostKey: () -> Unit,
-    onC98432: () -> Unit,
+    onSynOpt: () -> Unit,
     onManualInstall: () -> Unit,
     onCancel: () -> Unit,
 ) {
@@ -129,7 +129,7 @@ private fun JailbreakDialogMaterial(
                         stringResource(R.string.jailbreak_engine_ghostlock) to onExploit,
                         stringResource(R.string.jailbreak_engine_dirtyfrag) to onDirtyFrag,
                         stringResource(R.string.jailbreak_engine_ghostkey) to onGhostKey,
-                        stringResource(R.string.jailbreak_engine_98432) to onC98432,
+                        stringResource(R.string.jailbreak_engine_98432) to onSynOpt,
                         stringResource(R.string.jailbreak_manual_action) to onManualInstall,
                     ).forEachIndexed { index, (label, action) ->
                         TextButton(onClick = action, modifier = Modifier.fillMaxWidth()) {

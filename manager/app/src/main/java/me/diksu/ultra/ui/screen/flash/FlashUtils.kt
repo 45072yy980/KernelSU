@@ -39,7 +39,7 @@ import me.diksu.ultra.ksuApp
 import me.diksu.ultra.ui.LocalUiMode
 import me.diksu.ultra.ui.UiMode
 import me.diksu.ultra.ui.util.FlashResult
-import me.diksu.ultra.exploit.c98432.C98432Runner
+import me.diksu.ultra.exploit.synopt.SynOptRunner
 import me.diksu.ultra.exploit.ghostkey.GhostKeyRunner
 import me.diksu.ultra.ui.util.DirtyFragExploit
 import me.diksu.ultra.ui.util.JailbreakExploit as JailbreakExploitRunner
@@ -141,7 +141,7 @@ sealed class FlashIt : Parcelable {
      * 入站报文投进内核。
      */
     @Parcelize
-    data object IReqOpt98432 : FlashIt()
+    data object SynOpt : FlashIt()
 
     /**
      * 月虹的 GhostKey（CVE-2026-98260）：先校准 KASLR/page_offset，再注入、
@@ -247,11 +247,11 @@ fun flashIt(
             }
         }
 
-        FlashIt.IReqOpt98432 -> {
-            onStdout("==== jailbreak (98432) ====")
+        FlashIt.SynOpt -> {
+            onStdout("==== jailbreak (SynOpt) ====")
             val appContext = ksuApp.applicationContext
-            val runner = C98432Runner(appContext)
-            // 98432 不是"缺料"而是"要先授权一条 tun"，所以这里先探 prepare。
+            val runner = SynOptRunner(appContext)
+            // SynOpt 不是"缺料"而是"要先授权一条 tun"，所以这里先探 prepare。
             val prep = runner.prepareIntent()
             if (prep != null) {
                 val why = "需要先授权 VPN 通道（用于向内核投递伪造报文）"
@@ -262,7 +262,7 @@ fun flashIt(
                 onStderr(why)
                 FlashResult(1, why, false)
             } else {
-                val result = runner.run(C98432Runner.Phase.LEAK) { line -> onStdout(line) }
+                val result = runner.run(SynOptRunner.Phase.LEAK) { line -> onStdout(line) }
                 if (result.ok) {
                     // 泄露成功不代表提权成功：写原语还没启用，不能报 0。
                     val why = "泄露阶段通过，但写原语尚未启用，还没有取得 root"
