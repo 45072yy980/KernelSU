@@ -24,3 +24,7 @@
 -keep class me.diksu.ultra.shizuku.ShizukuManagerProvider { *; }
 -keep class me.diksu.ultra.shizuku.ShizukuReceiver { *; }
 -keep class me.diksu.ultra.shizuku.ShizukuPermissionActivity { *; }
+
+# ShizukuShell 通过反射调用 Shizuku.newProcess（13.1.5 里是 private）
+-keep class rikka.shizuku.Shizuku { *; }
+-keep class rikka.shizuku.ShizukuRemoteProcess { *; }
