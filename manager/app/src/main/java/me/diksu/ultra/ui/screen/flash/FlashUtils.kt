@@ -251,10 +251,11 @@ fun flashIt(
             onStdout("==== jailbreak (SynOpt) ====")
             val appContext = ksuApp.applicationContext
             val runner = SynOptRunner(appContext)
-            // SynOpt 不是"缺料"而是"要先授权一条 tun"，所以这里先探 prepare。
+            // VPN 授权由 FlashScreen 在执行前用系统对话框拿到；走到这里
+            // 还没授权说明用户刚在系统框里点了拒绝，或授权被系统撤销。
             val prep = runner.prepareIntent()
             if (prep != null) {
-                val why = "需要先授权 VPN 通道（用于向内核投递伪造报文）"
+                val why = "VPN 通道尚未授权（系统对话框可能被拒绝），SynOpt 无法投递报文"
                 onStderr(why)
                 FlashResult(1, why, false)
             } else if (!runner.isSupported()) {

@@ -1,6 +1,10 @@
 package me.diksu.ultra.ui.screen.flash
 
+import android.content.Intent
+import android.net.VpnService
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -78,6 +82,32 @@ fun FlashScreen(flashIt: FlashIt, onBackEnabledChange: (Boolean) -> Unit) {
         }
     }
 
+    // SynOpt 要先拿到 tun 才能投递报文。VpnService.prepare() 非空时必须由
+    // Activity 弹系统授权框 —— 之前直接在 flashIt() 里报错，用户根本没有
+    // 机会授权，看到的就是“需要先授权 VPN 通道”。
+    var vpnConsentReady by remember { mutableStateOf(false) }
+    val vpnConsentLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        vpnConsentReady = result.resultCode == android.app.Activity.RESULT_OK
+        if (!vpnConsentReady) {
+            logContent.append("VPN 授权被拒绝，SynOpt 无法投递报文\n")
+            text = text + "VPN 授权被拒绝，SynOpt 无法投递报文\n"
+            flashingStatus = FlashingStatus.FAILED
+        }
+    }
+
+    LaunchedEffect(flashIt, flashingEnabled) {
+        if (flashIt !is FlashIt.SynOpt || !flashingEnabled) return@LaunchedEffect
+        if (vpnConsentReady) return@LaunchedEffect
+        val intent: Intent? = VpnService.prepare(context)
+        if (intent == null) {
+            vpnConsentReady = true
+        } else {
+            vpnConsentLauncher.launch(intent)
+        }
+    }
+
     FlashEffect(
         flashIt = flashIt,
         text = text,
@@ -85,7 +115,7 @@ fun FlashScreen(flashIt: FlashIt, onBackEnabledChange: (Boolean) -> Unit) {
         onTextUpdate = { text = it },
         onShowRebootChange = { showRebootAction = it },
         onFlashingStatusChange = { flashingStatus = it },
-        enabled = flashingEnabled,
+        enabled = flashingEnabled && (flashIt !is FlashIt.SynOpt || vpnConsentReady),
     )
 
     val state = FlashUiState(
