@@ -442,6 +442,10 @@
     <string name="jailbreak_engine_ghostlock">GhostLock（内置）</string>
     <string name="jailbreak_engine_dirtyfrag">DirtyFrag（内置）</string>
     <string name="jailbreak_engine_98432">SynOpt（内置）</string>
+    <string name="synopt_mode_title">SynOpt 运行方式</string>
+    <string name="synopt_mode_message">SynOpt（CVE-2026-98432）目前能到「解出内核基址 + 构造写原语」。\n\n只探测：只读，跑完会打印内核基址与关键符号地址，不改内核。\n\n允许写入：会真的做一次 16 字节越界写。这台机器 CONFIG_PANIC_ON_OOPS=y，写错就是重启，请先备份。</string>
+    <string name="synopt_mode_probe">只探测（推荐）</string>
+    <string name="synopt_mode_write">允许写入（有风险）</string>
     <string name="jailbreak_engine_ghostkey">GhostKey（内置）</string>
     <string name="jailbreak_dirtyfrag_installed">已安装 DirtyFrag。在它的 SU 管理器卡片里选中本应用，再点 Run exploit；root 会通过 ksud late-load 回到这里。</string>
     <string name="jailbreak_dirtyfrag_launched">已打开 DirtyFrag：把 SU 管理器选成本应用，再点 Run exploit。</string>

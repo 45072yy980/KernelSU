@@ -227,7 +227,7 @@ object AutoEscalation {
 
                     METHOD_SYNOPT -> {
                         val r = SynOptRunner(context).run(SynOptRunner.Phase.LEAK, onLog = onLog)
-                        if (r.ok) onLog("SynOpt 只到泄露阶段，写原语尚未启用")
+                        if (r.ok) onLog("SynOpt 只到泄露阶段；写原语需要手动在弹窗里选「允许写入」")
                         // 泄露不等于提权；ROOT 段没有实机验证前不在这里报成功。
                         false
                     }

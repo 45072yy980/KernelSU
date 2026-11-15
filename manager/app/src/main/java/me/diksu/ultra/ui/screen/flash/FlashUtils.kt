@@ -141,7 +141,16 @@ sealed class FlashIt : Parcelable {
      * 入站报文投进内核。
      */
     @Parcelize
-    data object SynOpt : FlashIt()
+    data class SynOpt(
+        /**
+         * 是否真的写内核。
+         *
+         * 默认 false：只跑到解基址 + 构造写原语，不碰内核。
+         * true 时越界写会真的发生（16 字节），在 CONFIG_PANIC_ON_OOPS=y 的
+         * 机器上写错就是重启 —— 所以必须由用户在确认框里显式选择。
+         */
+        val allowWrite: Boolean = false,
+    ) : FlashIt()
 
     /**
      * 月虹的 GhostKey（CVE-2026-98260）：先校准 KASLR/page_offset，再注入、
@@ -247,7 +256,7 @@ fun flashIt(
             }
         }
 
-        FlashIt.SynOpt -> {
+        is FlashIt.SynOpt -> {
             onStdout("==== jailbreak (SynOpt) ====")
             val appContext = ksuApp.applicationContext
             val runner = SynOptRunner(appContext)
@@ -264,7 +273,10 @@ fun flashIt(
                 FlashResult(1, why, false)
             } else {
                 // 跑到 root 阶段（解基址 + 构造写原语），但默认不真的写内核。
-                val result = runner.run(SynOptRunner.Phase.ROOT) { line -> onStdout(line) }
+                val result = runner.run(
+                    phase = SynOptRunner.Phase.ROOT,
+                    allowWrite = flashIt.allowWrite,
+                ) { line -> onStdout(line) }
                 if (result.ok) {
                     val why = "SynOpt 已到 root 阶段，但写原语默认不启用；还没有取得 root"
                     onStderr(why)

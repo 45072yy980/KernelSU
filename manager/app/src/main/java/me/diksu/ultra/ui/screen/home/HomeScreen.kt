@@ -25,6 +25,7 @@ import me.diksu.ultra.magica.MagicaService
 import me.diksu.ultra.ui.LocalUiMode
 import me.diksu.ultra.ui.UiMode
 import me.diksu.ultra.ui.component.dialog.JailbreakDialog
+import me.diksu.ultra.ui.component.dialog.SynOptModeDialog
 import me.diksu.ultra.ui.component.dialog.rememberLoadingDialog
 import me.diksu.ultra.exploit.ghostkey.GhostKeyRunner
 import me.diksu.ultra.ui.screen.flash.FlashIt
@@ -54,6 +55,7 @@ fun HomePager(
     // two explicit buttons (exploit / manual install); tapping outside or the
     // back gesture only closes it and must NOT fall through to the install page.
     var jailbreakChooserShown by rememberSaveable { mutableStateOf(false) }
+    var synOptChooserShown by rememberSaveable { mutableStateOf(false) }
 
     JailbreakDialog(
         show = jailbreakChooserShown,
@@ -86,7 +88,9 @@ fun HomePager(
         },
         onSynOpt = {
             jailbreakChooserShown = false
-            navigator.push(Route.Flash(FlashIt.SynOpt))
+            // SynOpt 有两种跑法：只解基址（安全）和真的写内核（会改内核）。
+            // 让用户在这里明确选，而不是进到进度页再报错。
+            synOptChooserShown = true
         },
         onManualInstall = {
             jailbreakChooserShown = false
@@ -96,6 +100,19 @@ fun HomePager(
             // Just close the chooser; do not navigate anywhere.
             jailbreakChooserShown = false
         },
+    )
+
+    SynOptModeDialog(
+        show = synOptChooserShown,
+        onProbe = {
+            synOptChooserShown = false
+            navigator.push(Route.Flash(FlashIt.SynOpt(allowWrite = false)))
+        },
+        onWrite = {
+            synOptChooserShown = false
+            navigator.push(Route.Flash(FlashIt.SynOpt(allowWrite = true)))
+        },
+        onCancel = { synOptChooserShown = false },
     )
 
     var hasActivated by rememberSaveable { mutableStateOf(false) }

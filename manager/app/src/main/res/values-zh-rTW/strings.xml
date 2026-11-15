@@ -201,6 +201,10 @@
     <string name="jailbreak_choose_title">啟用 Root</string>
     <string name="jailbreak_choose_message">當前核心尚未載入。你可以讓本應用藉助內建的漏洞利用直接提權並立即進入越獄（late-load）模式，全程不修改任何分區；也可以選擇手動安裝核心。</string>
     <string name="jailbreak_engine_98432">SynOpt（內建）</string>
+    <string name="synopt_mode_title">SynOpt 執行方式</string>
+    <string name="synopt_mode_message">SynOpt（CVE-2026-98432）目前能到「解出內核基址 + 構造寫原語」。\n\n只探測：只讀，跑完會印出內核基址與關鍵符號位址，不改內核。\n\n允許寫入：會真的做一次 16 位元組越界寫。這台機器 CONFIG_PANIC_ON_OOPS=y，寫錯就是重啟，請先備份。</string>
+    <string name="synopt_mode_probe">只探測（推薦）</string>
+    <string name="synopt_mode_write">允許寫入（有風險）</string>
     <string name="jailbreak_engine_ghostkey">GhostKey（內建）</string>
     <string name="jailbreak_manual_action">手動安裝</string>
     <string name="jailbreak_exploit_action">越獄啟用（漏洞提權）</string>

@@ -448,6 +448,10 @@
     <string name="jailbreak_engine_ghostlock">GhostLock (built in)</string>
     <string name="jailbreak_engine_dirtyfrag">DirtyFrag (built in)</string>
     <string name="jailbreak_engine_98432">SynOpt (built in)</string>
+    <string name="synopt_mode_title">SynOpt mode</string>
+    <string name="synopt_mode_message">SynOpt (CVE-2026-98432) currently reaches "solve the kernel base + build the write primitive".\n\nProbe only: read-only. Prints the kernel base and key symbol addresses, does not touch the kernel.\n\nAllow write: performs one real 16-byte out-of-bounds write. This device runs CONFIG_PANIC_ON_OOPS=y, so a wrong write means a reboot. Back up first.</string>
+    <string name="synopt_mode_probe">Probe only (recommended)</string>
+    <string name="synopt_mode_write">Allow write (risky)</string>
     <string name="jailbreak_engine_ghostkey">GhostKey (built in)</string>
     <string name="jailbreak_dirtyfrag_installed">DirtyFrag is installed. In its SU Manager card pick this app, then press Run exploit; root comes back here through ksud late-load.</string>
     <string name="jailbreak_dirtyfrag_launched">Opened DirtyFrag: pick this app as the SU manager, then press Run exploit.</string>

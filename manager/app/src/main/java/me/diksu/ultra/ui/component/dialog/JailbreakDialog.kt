@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import me.diksu.ultra.R
 import me.diksu.ultra.ui.LocalUiMode
 import me.diksu.ultra.ui.UiMode
+import me.diksu.ultra.ui.isMiuixFamily
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Text as MiuixText
 import top.yukonga.miuix.kmp.basic.TextButton as MiuixTextButton
@@ -148,4 +149,75 @@ private fun JailbreakDialogMaterial(
         },
         confirmButton = {}
     )
+}
+
+/**
+ * SynOpt 的两种跑法。
+ *
+ * 这条链的写原语会真的改内核（16 字节越界写），在 CONFIG_PANIC_ON_OOPS=y
+ * 的机器上写错就是重启。所以不能默认开，必须让用户自己选。
+ */
+@Composable
+fun SynOptModeDialog(
+    show: Boolean,
+    onProbe: () -> Unit,
+    onWrite: () -> Unit,
+    onCancel: () -> Unit,
+) {
+    if (!show) return
+    val title = stringResource(R.string.synopt_mode_title)
+    val message = stringResource(R.string.synopt_mode_message)
+    val probe = stringResource(R.string.synopt_mode_probe)
+    val write = stringResource(R.string.synopt_mode_write)
+
+    if (LocalUiMode.current.isMiuixFamily) {
+        WindowDialog(
+            show = show,
+            title = title,
+            onDismissRequest = onCancel,
+            content = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    MiuixText(text = message)
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.padding(top = 12.dp)
+                    ) {
+                        MiuixTextButton(
+                            text = probe,
+                            onClick = onProbe,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.textButtonColorsPrimary()
+                        )
+                        MiuixTextButton(
+                            text = write,
+                            onClick = onWrite,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+            }
+        )
+    } else {
+        AlertDialog(
+            onDismissRequest = onCancel,
+            title = { Text(title) },
+            text = {
+                Column {
+                    Text(message)
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.padding(top = 12.dp),
+                    ) {
+                        TextButton(onClick = onProbe, modifier = Modifier.fillMaxWidth()) {
+                            Text(probe, color = MaterialTheme.colorScheme.primary)
+                        }
+                        TextButton(onClick = onWrite, modifier = Modifier.fillMaxWidth()) {
+                            Text(write, color = MaterialTheme.colorScheme.onSurface)
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+        )
+    }
 }
