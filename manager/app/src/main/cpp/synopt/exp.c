@@ -98,6 +98,13 @@ static volatile unsigned g_head, g_tail;
 static pthread_mutex_t g_ring_lock = PTHREAD_MUTEX_INITIALIZER;
 static volatile int g_running = 1;
 static volatile unsigned long g_tx, g_rx, g_synack, g_hit, g_clear, g_none;
+/* 诊断用：凡是能从 tun 读到的包都计进 raw_rx，不管匹配不匹配。
+ * raw_rx=0 说明包根本没回到 tun（投递方向或路由有问题），
+ * raw_rx>0 但 synack=0 说明回来了但被过滤掉了 —— 两种故障完全不同。 */
+static volatile unsigned long g_raw_rx, g_icmp_rx;
+static uint8_t g_raw_first[64];
+static size_t g_raw_first_len;
+static volatile unsigned g_raw_proto;
 
 /* 校验和要分两步：先把各段原样求和，最后统一取反一次。
  *
@@ -199,6 +206,15 @@ static void *reader(void *arg) {
             continue;
         }
         if (n < 20) continue;
+        /* 任何从 tun 读到的包都先记账，便于区分“没回来”和“被过滤”。 */
+        if (g_raw_rx == 0) {
+            size_t k = (size_t)n < sizeof(g_raw_first) ? (size_t)n : sizeof(g_raw_first);
+            memcpy(g_raw_first, buf, k);
+            g_raw_first_len = k;
+            g_raw_proto = buf[9];
+        }
+        g_raw_rx++;
+        if ((buf[0] >> 4) == 4 && buf[9] == 1) g_icmp_rx++;   /* ICMP */
         size_t ihl = (buf[0] & 0x0f) * 4;
         if ((buf[0] >> 4) != 4 || buf[9] != 6 || (size_t)n < ihl + 20) continue;
         if (*(uint32_t *)(buf + 16) != g_src) continue;
@@ -354,6 +370,69 @@ static void spray_stop(void) {
     if (!g_spray_run) return;
     g_spray_run = 0;
     pthread_join(g_spray_thread, NULL);
+}
+
+/* ------------------------------------------------------------ 通道自检
+ *
+ * 在打 TCP 之前先回答一个更基本的问题：往 tun 里写的包，内核到底收不收？
+ *
+ * 做法是发一个 ICMP echo request 到 tun 自己的地址。如果内核把包当成本地
+ * 入站处理，它会直接回一个 echo reply —— 这条路径不牵扯监听套接字、不牵扯
+ * TCP 校验和，是最干净的判据：
+ *
+ *   icmp reply 回来  → 投递方向是通的，问题在 TCP 层（端口/校验和/过滤）
+ *   一个包都不回    → 包没有进入内核栈，问题在 VpnService 语义、路由或
+ *                      rp_filter，再怎么调 TCP 参数都没用
+ */
+static size_t build_icmp_echo(uint8_t *buf) {
+    const size_t ihl = 20, icmp_len = 8 + 16;
+    const size_t total = ihl + icmp_len;
+    memset(buf, 0, total);
+
+    buf[0] = 0x45;
+    *(uint16_t *)(buf + 2) = htons((uint16_t)total);
+    *(uint16_t *)(buf + 4) = htons(0x1234);
+    buf[8] = 64;
+    buf[9] = 1;                    /* ICMP */
+    *(uint32_t *)(buf + 12) = g_src;
+    *(uint32_t *)(buf + 16) = g_dst;
+    *(uint16_t *)(buf + 10) = csum(buf, ihl);
+
+    uint8_t *icmp = buf + ihl;
+    icmp[0] = 8;                   /* echo request */
+    icmp[1] = 0;
+    *(uint16_t *)(icmp + 4) = htons(0x5a5a);   /* id */
+    *(uint16_t *)(icmp + 6) = htons(0x0001);   /* seq */
+    for (int i = 0; i < 16; i++) icmp[8 + i] = (uint8_t)('a' + i);
+    *(uint16_t *)(icmp + 2) = csum(icmp, icmp_len);
+    return total;
+}
+
+static int channel_selftest(void) {
+    uint8_t pkt[128];
+    size_t len = build_icmp_echo(pkt);
+    unsigned long before = g_icmp_rx;
+    say("[chan] 发送 ICMP echo → 10.7.7.1（测试包能否进入内核栈）");
+    tx(pkt, len);
+
+    for (int i = 0; i < 30 && g_icmp_rx == before; i++) usleep(10 * 1000);
+
+    if (g_icmp_rx > before) {
+        say("[OK] 收到 ICMP echo reply：tun 投递方向正常");
+        return 0;
+    }
+    say("[!] ICMP 没有回包 —— 包没有进入内核栈");
+    say("[!] raw_rx=%lu（从 tun 读到的包总数）", g_raw_rx);
+    if (g_raw_first_len) {
+        char line[200];
+        int off = snprintf(line, sizeof(line), "[!] 首个包 proto=%u len=%zu:", g_raw_proto, g_raw_first_len);
+        for (size_t i = 0; i < g_raw_first_len && i < 32; i++)
+            off += snprintf(line + off, sizeof(line) - off, " %02x", g_raw_first[i]);
+        say("%s", line);
+    }
+    say("[!] 可能原因：tun 没把 10.7.7.0/24 路由进来、rp_filter 丢弃了伪造源、");
+    say("[!]           或 VpnService 未处于已建立状态");
+    return 1;
 }
 
 /* ------------------------------------------------------------ 监听端
@@ -917,6 +996,15 @@ int main(int argc, char **argv) {
     pthread_t th;
     if (pthread_create(&th, NULL, reader, NULL) != 0) { FAIL("读线程起不来"); return 2; }
 
+    /* 先确认 tun 的投递方向通不通，再谈 TCP。
+     *
+     * 即使 ICMP 不通也继续跑一小段 TCP：万一只是 ICMP 被过滤，TCP 反而能通，
+     * 这样一次运行就能同时拿到两个判据，不用再来一轮。 */
+    if (channel_selftest() != 0) {
+        say("[!] 通道自检失败，仍用缩短的轮数跑一段 TCP 以收集对照数据");
+        if (g_rounds > 50) g_rounds = 50;
+    }
+
     int rc;
     if (!strcmp(phase, "probe")) {
         rc = phase_probe();
@@ -931,8 +1019,8 @@ int main(int argc, char **argv) {
         }
     }
 
-    say("统计: tx=%lu rx=%lu synack=%lu hit=%lu clear=%lu none=%lu",
-        g_tx, g_rx, g_synack, g_hit, g_clear, g_none);
+    say("统计: tx=%lu rx=%lu synack=%lu hit=%lu clear=%lu none=%lu raw=%lu icmp=%lu",
+        g_tx, g_rx, g_synack, g_hit, g_clear, g_none, g_raw_rx, g_icmp_rx);
     g_running = 0;
     if (g_listen_fd >= 0) { close(g_listen_fd); g_listen_fd = -1; }
     pthread_join(th, NULL);
