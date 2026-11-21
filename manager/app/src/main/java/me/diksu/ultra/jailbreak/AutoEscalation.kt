@@ -48,8 +48,15 @@ object AutoEscalation {
     private const val KEY_FAIL_STREAK = "auto_escalation_fail_streak"
 
     /** 全部已知方式，顺序即默认优先级。 */
+    /**
+     * SynOpt 暂时不在自动提权里。
+     *
+     * 它会开 VpnService、喷几百个 user key、在竞态里反复发包；在写原语没有
+     * 验证过之前，让它在每次开机时自动跑只会放大风险（用户实测出现重启循环）。
+     * 只能从弹窗手动触发。
+     */
     val ALL_METHODS: List<String> =
-        listOf(METHOD_GHOSTKEY, METHOD_GHOSTLOCK, METHOD_DIRTYFRAG, METHOD_SYNOPT)
+        listOf(METHOD_GHOSTKEY, METHOD_GHOSTLOCK, METHOD_DIRTYFRAG)
 
     private fun releaseOf(): String = runCatching { android.system.Os.uname().release }.getOrDefault("")
 
@@ -169,7 +176,7 @@ object AutoEscalation {
         METHOD_GHOSTKEY -> GhostKeyRunner(context).canRunAutomatically()
         METHOD_GHOSTLOCK -> JailbreakExploit.isAvailable(context)
         METHOD_DIRTYFRAG -> DirtyFragExploit.isAvailable(context)
-        METHOD_SYNOPT -> SynOptRunner(context).isSupported()
+        METHOD_SYNOPT -> false   // 见 ALL_METHODS 注释：不参与自动提权
         else -> false
     }
 

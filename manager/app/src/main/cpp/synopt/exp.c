@@ -979,7 +979,9 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--rounds") && i + 1 < argc) g_rounds = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--phase") && i + 1 < argc) phase = argv[++i];
         else if (!strcmp(argv[i], "--verbose")) g_verbose = 1;
-        else if (!strcmp(argv[i], "--allow-write")) g_allow_write = 1;
+        /* 写路径暂时硬关闭：用户实测出现重启循环，在写原语定向到 cred
+         * 之前不能真的动内核。参数保留但不再生效，避免旧脚本误开。 */
+        else if (!strcmp(argv[i], "--allow-write")) g_allow_write = 0;
     }
 
     srand((unsigned)time(NULL) ^ (unsigned)getpid());

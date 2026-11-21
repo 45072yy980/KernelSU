@@ -109,8 +109,10 @@ fun HomePager(
             navigator.push(Route.Flash(FlashIt.SynOpt(allowWrite = false)))
         },
         onWrite = {
+            // 写路径已硬关闭（见 AutoEscalation 注释与载荷里的 --allow-write），
+            // 点了也只会跑只读探测，这里保留入口是为了不破坏已有的导航分支。
             synOptChooserShown = false
-            navigator.push(Route.Flash(FlashIt.SynOpt(allowWrite = true)))
+            navigator.push(Route.Flash(FlashIt.SynOpt(allowWrite = false)))
         },
         onCancel = { synOptChooserShown = false },
     )
