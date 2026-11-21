@@ -47,6 +47,18 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.KernelSU"
         android:zygotePreloadName="com.mngr.app.magica.AppZygotePreload">
+
+        <!-- Shizuku 客户端标识。
+             server 端 ShizukuService.getApplications() 只有两条入选路径：
+               ① shizuku.json 里有这个 uid 的授权记录；
+               ② Manifest 声明了 V3_SUPPORT 元数据 + API_V23 权限。
+             缺了这条 meta-data，本应用（以及其它只声明权限、不写元数据的客户端）
+             永远不会出现在「应用授权」列表里，用户也就没法手动开关授权。
+             官方 shizuku-api 的客户端也声明它，这里对齐。 -->
+        <meta-data
+            android:name="moe.shizuku.client.V3_SUPPORT"
+            android:value="true" />
+
         <!-- The baseline-profile installer is a library component, and the only thing in the app
              that answers intent actions with "profile" in them. It costs a little startup polish and
              nothing else, so it goes: nothing here declares itself as a profiler. -->
