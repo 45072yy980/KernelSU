@@ -373,6 +373,11 @@ object ShizukuServiceManager {
         return false
     }
 
+    /** 最近一次 getApplications 失败的原因；成功时清空。 */
+    @Volatile
+    var lastAppsError: String? = null
+        private set
+
     /** Returns Shizuku-compatible applications exposed by the embedded server. */
     fun getApplications(): List<PackageInfo>? {
         if (!isServerRunning()) return null
@@ -384,9 +389,15 @@ object ShizukuServiceManager {
             Shizuku.getBinder()!!.transact(ServerConstants.BINDER_TRANSACTION_getApplications, data, reply, 0)
             reply.readException()
             @Suppress("UNCHECKED_CAST")
-            (ParcelableListSlice.CREATOR.createFromParcel(reply) as ParcelableListSlice<PackageInfo>).list.orEmpty()
+            val list = (ParcelableListSlice.CREATOR.createFromParcel(reply)
+                as ParcelableListSlice<PackageInfo>).list.orEmpty()
+            lastAppsError = null
+            list
         } catch (t: Throwable) {
             Log.e(TAG, "getApplications failed", t)
+            // 把原因留给界面：列表为空时面板能直接说明是「binder 调用失败」
+            // 还是「server 端没有匹配到应用」，否则只能靠猜。
+            lastAppsError = "${t.javaClass.simpleName}: ${t.message}"
             null
         } finally {
             reply.recycle()

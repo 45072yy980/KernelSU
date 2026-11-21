@@ -134,6 +134,8 @@ private data class ShizukuUiState(
     val serverPid: Int? = null,
     val bootEnabled: Boolean = false,
     val apps: List<ShizukuAppEntry> = emptyList(),
+    /** getApplications 失败的原因；为空表示调用成功但没匹配到应用。 */
+    val appsError: String? = null,
     val loading: Boolean = false,
     val starting: Boolean = false,
     val stopping: Boolean = false,
@@ -199,12 +201,14 @@ private fun rememberShizukuState(): Pair<ShizukuUiState, ShizukuActions> {
         } else {
             emptyList()
         }
+        val appsError = if (running) ShizukuServiceManager.lastAppsError else null
         state = state.copy(
             running = running,
             serverIsRoot = serverIsRoot,
             serverUid = serverUid,
             serverPid = serverPid,
             apps = apps,
+            appsError = appsError,
             loading = false,
         )
     }
@@ -297,6 +301,10 @@ private fun rememberShizukuState(): Pair<ShizukuUiState, ShizukuActions> {
 private fun loadApps(context: Context): List<ShizukuAppEntry> {
     val pm = context.packageManager
     val raw = ShizukuServiceManager.getApplications().orEmpty()
+    if (raw.isEmpty()) {
+        // 记下“为什么是空的”，界面在列表为空时会显示这一行。
+        ShizukuServiceManager.lastAppsError?.let { Log.w("ShizukuApps", "getApplications: $it") }
+    }
     return raw.mapNotNull { pkg ->
         val ai = pkg.applicationInfo ?: return@mapNotNull null
         val uid = ai.uid
@@ -709,6 +717,15 @@ private fun MiuixAppListEmpty(state: ShizukuUiState) {
                     fontSize = 11.sp,
                     color = colorScheme.onSurfaceVariantSummary,
                 )
+                // 调用失败时把原因摊开，否则只能看到“暂无应用”。
+                state.appsError?.let { err ->
+                    Spacer(Modifier.height(4.dp))
+                    MiuixText(
+                        text = "server 返回失败：$err",
+                        fontSize = 11.sp,
+                        color = colorScheme.error,
+                    )
+                }
             }
         }
     }
