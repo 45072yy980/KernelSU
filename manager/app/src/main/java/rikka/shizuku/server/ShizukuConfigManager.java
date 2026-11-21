@@ -230,6 +230,13 @@ public class ShizukuConfigManager extends ConfigManager {
         }
     }
 
+    /** 配置里现有的条目（只读快照），供诊断与面板展示使用。 */
+    public List<ShizukuConfig.PackageEntry> getPackages() {
+        synchronized (this) {
+            return new ArrayList<>(config.packages);
+        }
+    }
+
     private ShizukuConfig.PackageEntry findLocked(int uid) {
         for (ShizukuConfig.PackageEntry entry : config.packages) {
             if (uid == entry.uid) {

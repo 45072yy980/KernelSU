@@ -524,6 +524,34 @@ public class ShizukuService extends Service<ShizukuUserServiceManager, ShizukuCl
     }
 
     private ParcelableListSlice<PackageInfo> getApplications(int userId) {
+        // 诊断：把扫描结果的关键数字写进 server 持久化日志，面板的日志查看器能读到。
+        // 没有这行，列表为空时无法区分「扫到 0 个包」「有包但都不匹配」。
+        try {
+            List<Integer> probeUsers = new ArrayList<>();
+            if (userId == -1) probeUsers.addAll(UserManagerApis.getUserIdsNoThrow());
+            else probeUsers.add(userId);
+            int scanned = 0, hasPerm = 0, hasMeta = 0, matched = 0;
+            for (int u : probeUsers) {
+                for (PackageInfo p : PackageManagerApis.getInstalledPackagesNoThrow(
+                        PackageManager.GET_META_DATA | PackageManager.GET_PERMISSIONS, u)) {
+                    scanned++;
+                    if (p.applicationInfo == null) continue;
+                    boolean perm = p.requestedPermissions != null
+                            && ArraysKt.contains(p.requestedPermissions, PERMISSION);
+                    boolean meta = p.applicationInfo.metaData != null
+                            && p.applicationInfo.metaData.getBoolean("moe.shizuku.client.V3_SUPPORT", false);
+                    if (perm) hasPerm++;
+                    if (meta) hasMeta++;
+                    if (perm && meta) matched++;
+                }
+            }
+            LOGGER.i("getApplications(user=%d): scanned=%d hasPermission=%d hasV3Meta=%d bothMatch=%d configEntries=%d managerId=%s",
+                    userId, scanned, hasPerm, hasMeta, matched,
+                    configManager.getPackages().size(), MANAGER_APPLICATION_ID);
+        } catch (Throwable tr) {
+            LOGGER.w(tr, "getApplications diagnostics");
+        }
+
         List<PackageInfo> list = new ArrayList<>();
         List<Integer> users = new ArrayList<>();
         if (userId == -1) {
