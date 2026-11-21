@@ -301,10 +301,8 @@ private fun rememberShizukuState(): Pair<ShizukuUiState, ShizukuActions> {
 private fun loadApps(context: Context): List<ShizukuAppEntry> {
     val pm = context.packageManager
     val raw = ShizukuServiceManager.getApplications().orEmpty()
-    if (raw.isEmpty()) {
-        // 记下“为什么是空的”，界面在列表为空时会显示这一行。
-        ShizukuServiceManager.lastAppsError?.let { Log.w("ShizukuApps", "getApplications: $it") }
-    }
+    // 失败原因已经通过 ShizukuServiceManager.lastAppsError 传到 state.appsError，
+    // 由界面直接显示，这里不需要再打日志。
     return raw.mapNotNull { pkg ->
         val ai = pkg.applicationInfo ?: return@mapNotNull null
         val uid = ai.uid
