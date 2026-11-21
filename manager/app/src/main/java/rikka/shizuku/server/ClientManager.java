@@ -68,6 +68,11 @@ public class ClientManager<ConfigMgr extends ConfigManager> {
         ConfigPackageEntry entry = configManager.find(uid);
         if (entry != null && entry.isAllowed()) {
             clientRecord.allowed = true;
+        } else {
+            // 没有授权记录：明确记一笔，便于排查“为什么应用拿不到权限”。
+            LOGGER.i("addClient: uid=%d pid=%d package=%s has no ALLOWED entry in config, "
+                            + "client must call requestPermission()",
+                    uid, pid, packageName);
         }
 
         IBinder binder = client.asBinder();

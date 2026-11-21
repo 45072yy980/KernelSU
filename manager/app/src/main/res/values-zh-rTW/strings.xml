@@ -467,6 +467,9 @@
     <string name="shizuku_shell_only_on">降級為 shell 權限執行</string>
     <string name="shizuku_shell_only_off">以 root 權限執行</string>
     <string name="shizuku_list_unavailable">服務未啟動，無法讀取應用程式清單</string>
+    <string name="shizuku_reset_permissions">重設授權並重新啟動服務</string>
+    <string name="shizuku_reset_permissions_hint">列表為空表示設定檔裡沒有授權記錄。重設會刪除 shizuku.json 並重新啟動服務，應用下次啟動時會重新彈窗請求授權。</string>
+    <string name="shizuku_reset_permissions_failed">重設授權失敗，請查看日誌</string>
     <string name="shizuku_list_empty">暫無宣告 Shizuku 權限的應用程式</string>
     <string name="shizuku_list_no_match">沒有符合的應用程式</string>
     <string name="shizuku_list_empty_hint">應用程式首次要求 Shizuku 時才會顯示在這裡</string>

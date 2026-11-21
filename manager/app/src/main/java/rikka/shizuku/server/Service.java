@@ -256,7 +256,22 @@ public abstract class Service<
             return true;
         }
 
-        return clientManager.requireClient(callingUid, callingPid).allowed;
+        ClientRecord record = clientManager.requireClient(callingUid, callingPid);
+        boolean allowed = record.allowed;
+
+        // 一致性修复：配置被清空/重置后，客户端仍可能带着旧的 allowed 状态活着。
+        // 这里以 configManager 为权威，避免出现“面板显示未授权、应用却以为已授权”
+        // 或反过来的错位。两者不一致时以配置文件为准。
+        ConfigPackageEntry entry = configManager.find(callingUid);
+        boolean cfgAllowed = entry != null && entry.isAllowed();
+        if (allowed != cfgAllowed) {
+            LOGGER.i("checkSelfPermission: uid=%d pid=%d package=%s client=%s config=%s, using config",
+                    callingUid, callingPid, record.packageName,
+                    Boolean.toString(allowed), Boolean.toString(cfgAllowed));
+            record.allowed = cfgAllowed;
+            allowed = cfgAllowed;
+        }
+        return allowed;
     }
 
     @Override

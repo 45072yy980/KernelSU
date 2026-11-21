@@ -197,6 +197,24 @@ public class ShizukuService extends Service<ShizukuUserServiceManager, ShizukuCl
             }
         });
 
+        // 配置自检：shizuku.json 被删过/清空过之后，客户端可能还握着旧的 binder 和
+        // 陈旧的授权判断。以文件为准打一次日志，便于确认“谁还没授权”。
+        //
+        // 不在启动时主动清配置：那会把用户真实授权一起抹掉。这里只做可观测性，
+        // 真正的一致性判断放在 checkSelfPermission()（以 configManager 为准）。
+        try {
+            int entries = configManager.getPackages().size();
+            LOGGER.i("config: %d package entr%s in shizuku.json",
+                    entries, entries == 1 ? "y" : "ies");
+            if (entries == 0) {
+                LOGGER.w("config is empty — every client will report "
+                        + "checkSelfPermission()==false until it calls requestPermission() again. "
+                        + "If the Shizuku page shows no apps, that is why.");
+            }
+        } catch (Throwable tr) {
+            LOGGER.w(tr, "config self-check");
+        }
+
         BinderSender.register(this);
 
         // Send the manager binder first. Broadcasting to every installed

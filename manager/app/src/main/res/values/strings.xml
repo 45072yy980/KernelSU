@@ -857,6 +857,9 @@
     <string name="shizuku_shell_only_on">Run with shell permissions</string>
     <string name="shizuku_shell_only_off">Run with root permissions</string>
     <string name="shizuku_list_unavailable">The service is not running, so the app list cannot be read</string>
+    <string name="shizuku_reset_permissions">Reset permissions and restart</string>
+    <string name="shizuku_reset_permissions_hint">An empty list means the config file has no permission records. Resetting deletes shizuku.json and restarts the server; apps will request permission again on next launch.</string>
+    <string name="shizuku_reset_permissions_failed">Failed to reset permissions, check the log</string>
     <string name="shizuku_list_empty">No app declares Shizuku permission</string>
     <string name="shizuku_list_no_match">No matching apps</string>
     <string name="shizuku_list_empty_hint">Apps appear here the first time they ask for Shizuku</string>

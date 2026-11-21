@@ -168,6 +168,7 @@ private class ShizukuActions(
     val onStart: () -> Unit,
     val onStop: () -> Unit,
     val onRestart: () -> Unit,
+    val onResetPermissions: () -> Unit,
     val onBootChange: (Boolean) -> Unit,
     val onAutostartNow: () -> Unit,
     val onRefresh: () -> Unit,
@@ -185,6 +186,7 @@ private fun rememberShizukuState(): Pair<ShizukuUiState, ShizukuActions> {
     // 协程里不能调用 stringResource，先把要用到的两条取出来。
     val startFailedText = stringResource(R.string.shizuku_start_failed)
     val restartFailedText = stringResource(R.string.shizuku_restart_failed)
+    val resetFailedText = stringResource(R.string.shizuku_reset_permissions_failed)
 
     suspend fun refresh() {
         state = state.copy(loading = true)
@@ -247,6 +249,17 @@ private fun rememberShizukuState(): Pair<ShizukuUiState, ShizukuActions> {
                 val ok = withContext(Dispatchers.IO) { ShizukuServiceManager.start(context) }
                 state = state.copy(starting = false)
                 if (!ok) state = state.copy(startError = restartFailedText)
+                refresh()
+            }
+        },
+        onResetPermissions = {
+            scope.launch {
+                state = state.copy(stopping = true, startError = null)
+                val ok = withContext(Dispatchers.IO) {
+                    ShizukuServiceManager.resetPermissions(context)
+                }
+                state = state.copy(stopping = false)
+                if (!ok) state = state.copy(startError = resetFailedText)
                 refresh()
             }
         },
@@ -494,6 +507,23 @@ private fun MiuixStatusCard(state: ShizukuUiState, actions: ShizukuActions) {
             state.startError?.let {
                 Spacer(Modifier.height(10.dp))
                 MiuixText(text = it, fontSize = 12.sp, color = AccentDanger)
+            }
+
+            // 授权列表为空时给一条出路：清掉配置文件并重启 server，让客户端
+            // 下次启动重新请求授权。只在确实没有条目时出现，避免误触。
+            if (state.apps.isEmpty() && state.running) {
+                Spacer(Modifier.height(10.dp))
+                MiuixText(
+                    text = stringResource(R.string.shizuku_reset_permissions_hint),
+                    fontSize = 11.sp,
+                    color = colorScheme.onSurfaceVariantSummary,
+                )
+                Spacer(Modifier.height(6.dp))
+                MiuixTextButton(
+                    text = stringResource(R.string.shizuku_reset_permissions),
+                    onClick = { if (!state.stopping) actions.onResetPermissions() },
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
 
             Spacer(Modifier.height(12.dp))
@@ -896,6 +926,20 @@ private fun MaterialStatusCard(state: ShizukuUiState, actions: ShizukuActions) {
             state.startError?.let {
                 Spacer(Modifier.height(10.dp))
                 Text(text = it, style = MaterialTheme.typography.bodySmall, color = scheme.error)
+            }
+
+            if (state.apps.isEmpty() && state.running) {
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    text = stringResource(R.string.shizuku_reset_permissions_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = scheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(6.dp))
+                TextButton(
+                    onClick = { if (!state.stopping) actions.onResetPermissions() },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text(stringResource(R.string.shizuku_reset_permissions)) }
             }
 
             Spacer(Modifier.height(8.dp))

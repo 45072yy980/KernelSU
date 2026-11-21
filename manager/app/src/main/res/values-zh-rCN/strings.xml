@@ -820,6 +820,9 @@
     <string name="shizuku_shell_only_on">降级为 shell 权限执行</string>
     <string name="shizuku_shell_only_off">以 root 权限执行</string>
     <string name="shizuku_list_unavailable">服务未启动，无法读取应用列表</string>
+    <string name="shizuku_reset_permissions">重置授权并重启服务</string>
+    <string name="shizuku_reset_permissions_hint">列表为空说明配置文件里没有授权记录。重置会删除 shizuku.json 并重启服务，应用下次启动时会重新弹窗请求授权。</string>
+    <string name="shizuku_reset_permissions_failed">重置授权失败，请查看日志</string>
     <string name="shizuku_list_empty">暂无声明 Shizuku 权限的应用</string>
     <string name="shizuku_list_no_match">没有匹配的应用</string>
     <string name="shizuku_list_empty_hint">应用首次请求 Shizuku 时才会出现在这里</string>

@@ -422,6 +422,36 @@ object ShizukuServiceManager {
     }
 
     /** server 是否以 root (uid 0) 运行。 */
+    /**
+     * 清空授权记录并重启 server。
+     *
+     * 用途：shizuku.json 被删过、或被外部工具改坏之后，客户端会握着陈旧的
+     * 授权判断（binder 已在，不再重新请求），表现为“面板里一个应用都没有，
+     * 应用也用不了权限”。删掉配置文件再重启，客户端下次启动就会重新走
+     * requestPermission()。
+     *
+     * 注意：这会清掉**所有**应用的历史授权，需要重新授权一遍。
+     */
+    fun resetPermissions(context: Context): Boolean {
+        return try {
+            // server 以 root/shell 身份运行，配置文件在 shell 的 de 目录。
+            val file = "/data/user_de/0/com.android.shell/shizuku.json"
+            val out = ArrayList<String>()
+            val err = ArrayList<String>()
+            getRootShell().newJob()
+                .add("rm -f $file")
+                .to(out, err)
+                .exec()
+            Log.i(TAG, "resetPermissions: removed $file (out=$out err=$err)")
+
+            stop()
+            start(context)
+        } catch (t: Throwable) {
+            Log.w(TAG, "resetPermissions failed", t)
+            false
+        }
+    }
+
     fun isRootServer(): Boolean {
         return try {
             Shizuku.pingBinder() && Shizuku.getUid() == 0
