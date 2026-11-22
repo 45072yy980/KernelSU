@@ -37,6 +37,7 @@ Java_me_diksu_ultra_exploit_synopt_NativeSpawner_run(JNIEnv *env, jclass,
                                                      jstring jpath,
                                                      jobjectArray jargs,
                                                      jint tunFd,
+                                                     jint listenFd,
                                                      jstring jlogPath) {
     const std::string path = toUtf(env, jpath);
     const std::string logPath = toUtf(env, jlogPath);
@@ -72,6 +73,10 @@ Java_me_diksu_ultra_exploit_synopt_NativeSpawner_run(JNIEnv *env, jclass,
         // fd 3 是约定：载荷的 --tun-fd 读这个编号。
         if (tunFd >= 0 && dup2(tunFd, 3) < 0) _exit(126);
         if (tunFd > 3) close(tunFd);
+        // fd 4 是 Kotlin 侧建好的监听 socket（已绑到 VPN 网络）。
+        // 载荷优先用它，没有才自己建。
+        if (listenFd >= 0 && dup2(listenFd, 4) < 0) _exit(126);
+        if (listenFd > 4) close(listenFd);
         execv(argv[0], argv.data());
         _exit(127);
     }

