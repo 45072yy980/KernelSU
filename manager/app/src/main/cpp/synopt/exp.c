@@ -904,6 +904,7 @@ static int probe_closed_port(void) {
     uint16_t closed_port = 0;
     for (int i = 0; i < 20 && closed_port == 0; i++) {
         uint16_t cand = (uint16_t)(30000 + (rand() % 20000));
+        if (cand == g_port) continue;   /* 别撞上自己的 listener */
         int t = socket(AF_INET, SOCK_STREAM, 0);
         if (t < 0) break;
         struct sockaddr_in a;
@@ -1031,6 +1032,146 @@ static int control_no_options(void) {
  * 绑定 10.7.7.1:g_port 之后，从 tun 投递进来的包会正常命中这个监听。
  */
 static int g_listen_fd = -1;
+
+/* 监听端探针：SYNACK 到底卡在哪一环。
+ *
+ * 现在已知：包进得了 TCP（闭端口回 RST），listener 也接住了（否则该回 RST），
+ * 但 SYNACK 就是不出来。可能是
+ *   ① listener 的路由域不对，inet_csk_route_req 返回 NULL，静默丢弃；
+ *   ② listener 根本没收到 SYN（请求队列层面就没进去）。
+ * 下面三样东西正好把这两者分开：
+ *   · SO_MARK / SO_BINDTODEVICE —— 看 listener 有没有真的绑到 VPN 网络；
+ *   · /proc/net/tcp 里有没有 SYN_RECV —— 有就说明请求 sock 建起来了；
+ *   · 本进程 connect 一次自己 —— 能连上说明 listener 能完成握手。
+ */
+static void probe_listener_state(void) {
+    char dev[IF_NAMESIZE];
+    memset(dev, 0, sizeof(dev));
+    socklen_t dl = sizeof(dev);
+    if (getsockopt(g_listen_fd, SOL_SOCKET, SO_BINDTODEVICE, dev, &dl) == 0 && dl > 1) {
+        say("[lprobe] listener 绑定网卡=%s", dev);
+    } else {
+        say("[lprobe] listener 没绑网卡");
+    }
+
+    int mark = 0;
+    socklen_t ml = sizeof(mark);
+    if (getsockopt(g_listen_fd, SOL_SOCKET, SO_MARK, &mark, &ml) == 0) {
+        say("[lprobe] listener SO_MARK=%#x", (unsigned)mark);
+    }
+
+    int acc = 0;
+    socklen_t al = sizeof(acc);
+    if (getsockopt(g_listen_fd, SOL_SOCKET, SO_ACCEPTCONN, &acc, &al) == 0) {
+        say("[lprobe] listener SO_ACCEPTCONN=%d（1=确实在 listen）", acc);
+    }
+
+    /* /proc/net/tcp 是判断「请求 sock 有没有建起来」的唯一直接证据。
+     * 状态 0x0A=LISTEN、0x03=SYN_RECV、0x01=ESTABLISHED。 */
+    FILE *f = fopen("/proc/net/tcp", "r");
+    if (f == NULL) {
+        say("[lprobe] 读不到 /proc/net/tcp（errno=%d）", errno);
+    } else {
+        char line[512];
+        int shown = 0;
+        if (fgets(line, sizeof(line), f) == NULL) { /* 表头 */ }
+        while (fgets(line, sizeof(line), f) != NULL && shown < 8) {
+            char local[80], rem[80];
+            unsigned st = 0;
+            if (sscanf(line, "%*s %79s %79s %x", local, rem, &st) != 3) continue;
+            char *colon = strrchr(local, ':');
+            if (colon == NULL) continue;
+            unsigned lport = (unsigned)strtoul(colon + 1, NULL, 16);
+            if (lport != (unsigned)g_port) continue;
+            const char *name = "其他";
+            switch (st) {
+                case 0x01: name = "ESTABLISHED"; break;
+                case 0x02: name = "SYN_SENT"; break;
+                case 0x03: name = "SYN_RECV"; break;
+                case 0x06: name = "TIME_WAIT"; break;
+                case 0x0a: name = "LISTEN"; break;
+                default: break;
+            }
+            say("[lprobe] /proc/net/tcp 端口 %u 状态 %s(%#x)", lport, name, st);
+            shown++;
+        }
+        fclose(f);
+        if (shown == 0) say("[lprobe] /proc/net/tcp 里没有端口 %u 的条目", g_port);
+    }
+}
+
+/* 打几个 SYN，然后立刻看 listener 的 accept 队列有没有东西。
+ *
+ * 这是判断「SYN 到底进没进 listener 的请求队列」最直接的办法：
+ *   · accept 拿到连接 → 握手完成，SYNACK 发出去并被回了 ACK；
+ *   · accept 返回 EAGAIN → 没有完成的连接，但 SYN 可能停在 SYN_RECV；
+ *   · 队列里连 SYN_RECV 都没有 → SYN 根本没到这个 socket。
+ * 前两种都说明 listener 收到了包，第三种说明包在更早的地方就被丢了。
+ */
+static void probe_accept_queue(void) {
+    uint16_t sport = (uint16_t)(30000 + (rand() % 20000));
+    uint8_t pkt[128];
+    int saved_len = g_optlen;
+    g_optlen = 0;
+    for (int i = 0; i < 3; i++) {
+        size_t len = build_pkt(pkt, (uint16_t)(sport + i), 0x11223344 + i, 0, 0x02);
+        tx(pkt, len);
+        usleep(20 * 1000);
+    }
+    g_optlen = saved_len;
+
+    /* 给内核一点时间建请求 sock / 完成握手。 */
+    usleep(150 * 1000);
+
+    int got = 0;
+    for (int i = 0; i < 4; i++) {
+        int c = accept(g_listen_fd, NULL, NULL);
+        if (c < 0) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK) break;
+            say("[aq] accept 失败 errno=%d（%s）", errno, strerror(errno));
+            break;
+        }
+        got++;
+        close(c);
+    }
+    if (got > 0) {
+        g_synack += (unsigned long)got;
+        say("[aq] accept 到 %d 个连接 ✅ —— SYN 进来了，SYNACK 也发出去了", got);
+        say("[aq] → 通道完全正常，之前 0/5 是 syn_round 的匹配条件太严");
+    } else {
+        say("[aq] accept 队列空 —— 没有完成的连接");
+        say("[aq] SYN 可能停在 SYN_RECV（SYNACK 发了但没回来），也可能根本没到");
+        say("[aq] 结合 [lprobe] 的 /proc/net/tcp 状态判断是哪一种");
+    }
+}
+
+/* 从本进程连一次自己的 listener：能连上说明握手能完成、SYNACK 发得出去。 */
+static void probe_self_connect(void) {
+    int c = socket(AF_INET, SOCK_STREAM, 0);
+    if (c < 0) return;
+    struct timeval tv;
+    tv.tv_sec = 1;
+    tv.tv_usec = 0;
+    setsockopt(c, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+    struct sockaddr_in a;
+    memset(&a, 0, sizeof(a));
+    a.sin_family = AF_INET;
+    a.sin_port = htons(g_port);
+    a.sin_addr.s_addr = g_dst;
+    int rc = connect(c, (struct sockaddr *)&a, sizeof(a));
+    if (rc == 0) {
+        say("[lprobe] 本进程 connect 自己 → 成功 ✅（listener 能完成握手）");
+    } else {
+        say("[lprobe] 本进程 connect 自己 → 失败 errno=%d（%s）", errno, strerror(errno));
+        if (errno == ETIMEDOUT) {
+            say("[lprobe] 超时 = SYN 发出去了但 SYNACK 没回来，选路/回包有问题");
+        } else if (errno == ECONNREFUSED) {
+            say("[lprobe] 被拒 = 没有 socket 在听这个地址端口");
+        }
+    }
+    close(c);
+}
+
 
 static int listen_open(uint16_t port) {
     int fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -1712,6 +1853,10 @@ int main(int argc, char **argv) {
      *
      * 这一步把「TCP 通道不通」和「IP 选项被内核拒绝」彻底分开。之前
      * synack 一直是 0，两个原因都说得通，白跑了好几轮。 */
+    probe_listener_state();
+    probe_self_connect();
+    probe_accept_queue();
+
     if (g_optlen != 0) {
         int ctl = control_no_options();
         if (ctl != 0) {
