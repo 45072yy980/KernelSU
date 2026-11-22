@@ -8,6 +8,7 @@
  * 绝不自动执行提交 / 推送。
  */
 import { aheadBehind, currentBranch, git, gitLine, parseStatusZ, repoRoot } from './core.js'
+import { sessionCwdById, withBaseDir } from './scope.js'
 
 const STRIP_TEXT_MAX = 24
 const POLL_MS = 20_000
@@ -86,8 +87,8 @@ function panelData(s, caps) {
       tracking: '—',
       tag: '—',
       changes: '—',
-      files: zh(caps) ? '当前目录向上找不到 git 仓库。' : 'No git repository found from the working directory.',
-      recent: zh(caps) ? '在插件配置里填 repoPath 就能指到别的仓库。' : 'Set repoPath in the plugin config to point elsewhere.',
+      files: zh(caps) ? '这个对话的工作目录不在 git 仓库里。' : 'This chat does not work inside a git repository.',
+      recent: zh(caps) ? '把对话工作区设成项目目录，或在插件设置里填一个默认 repoPath。' : 'Open a chat in a project folder, or set a default repoPath.',
     }
   }
   const changes = totalChanges(s)
@@ -141,11 +142,16 @@ const COMMIT_PROMPT = '把当前改动提交上去：先跑 git_audit，再按�
 
 /** 在 dsh-go 主机上注册原生贡献；非 dsh-go 主机直接不执行。 */
 export function registerNative(ctx, config) {
+  // 面板和状态条没有工具执行上下文，按 sessionId 从会话服务取工作目录。
+  const scoped = (scope, fn) => {
+    const cwd = sessionCwdById(ctx, scope?.sessionId)
+    return cwd === undefined ? fn() : withBaseDir(cwd, fn)
+  }
   ctx.inject(['dshGo'], (ctx) => {
     ctx.dshGo.strip('repo', (scope, emit, caps) => {
       let stopped = false
       const tick = () => {
-        snapshot(config)
+        scoped(scope, () => snapshot(config))
           .then((s) => {
             if (!stopped) {
               emit({
@@ -173,7 +179,7 @@ export function registerNative(ctx, config) {
       data: (scope, emit, caps) => {
         let stopped = false
         const push = () => {
-          snapshot(config)
+          scoped(scope, () => snapshot(config))
             .then((s) => {
               if (!stopped) emit(panelData(s, caps))
             })

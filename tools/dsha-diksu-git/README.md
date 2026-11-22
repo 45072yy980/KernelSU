@@ -132,6 +132,14 @@ dsh --profile web --dump-config | grep -A2 diksu-git
 | `maxDiffBytes` | `200000` | diff / patch 输出字节上限（按行边界截断） |
 | `auditMaxFileMB` | `2` | 提交审计的大文件阈值 |
 
+## 2.3.1 修了什么
+
+- **负缓存把「还不是仓库」记死了**：会话开在空目录（或 clone 之前）时，状态条 / 工具第一次
+  探测就把 `null` 永久写进内存缓存，仓库随后建好也一直报「找不到 git 仓库」，只能重启宿主。
+  现在未命中只缓存 3 秒，命中仓库仍只探测一次；
+- **`/sdcard` 的 dubious ownership**：FUSE 挂载上文件属主与运行用户不符时 git 直接拒绝访问，
+  以前被当成「不是仓库」。现在自动补一条 `safe.directory` 再试一次。
+
 ## 2.2.0 新增
 
 - **图形化 token 入口**：「设置 → 插件 → Diksu Git 凭据」tab，密码框保存 / 状态显示 / 清除，

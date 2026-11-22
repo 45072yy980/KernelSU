@@ -44,6 +44,7 @@ import {
   versionInfo,
   writeRepoFile,
 } from '../lib/core.js'
+import { withBaseDir } from '../lib/scope.js'
 
 const results = []
 let failed = 0
@@ -329,6 +330,25 @@ if (probe.code !== 0) {
       await assert.rejects(() => repoRoot({ ...config, repoPath: empty }), /不是 git 仓库/)
     } finally {
       await rm(empty, { recursive: true, force: true })
+    }
+  })
+
+  // 回归：会话开在空目录、随后才 clone 进来时，插件不能把「还不是仓库」记死（2.3.1 修的）。
+  await testAsync('空目录后来建仓库能被重新发现（负缓存会过期）', async () => {
+    const late = await mkdtemp(join(tmpdir(), 'diksu-late-'))
+    // repoRoot 找不到会话目录时会回落到 process.cwd()；测试自身若跑在仓库里，
+    // 这一步就会「找到」外层仓库而不再报错，所以先把进程目录挪到中立空目录。
+    const origin = process.cwd()
+    try {
+      process.chdir(late)
+      await assert.rejects(() => withBaseDir(late, () => repoRoot({})), /找不到 git 仓库/)
+      const init = await run('git', ['init', '-q', '-b', 'main'], { cwd: late })
+      assert.equal(init.code, 0, init.stderr)
+      await new Promise((done) => setTimeout(done, 3_200))
+      assert.equal(await withBaseDir(late, () => repoRoot({})), late)
+    } finally {
+      process.chdir(origin)
+      await rm(late, { recursive: true, force: true })
     }
   })
 

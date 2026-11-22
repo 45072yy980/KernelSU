@@ -32,6 +32,7 @@ import { registerRemoteTools } from './tools-remote.js'
 import { registerCiTools } from './tools-ci.js'
 import { registerTokenRoute } from './token-route.js'
 import { registerNative, withCard } from './native.js'
+import { sessionCwdOf, withBaseDir } from './scope.js'
 
 export const name = 'dsha-diksu-git'
 
@@ -41,7 +42,7 @@ export const Config = z.object({
   repoPath: z
     .string()
     .default('')
-    .description('仓库根目录的绝对路径；留空则调用时自动定位（DSH_WORKSPACE / DSH_PROJECT_ROOT / DSH_CWD / 当前目录向上查找）'),
+    .description('默认仓库的绝对路径；留空则跟随当前对话的工作目录（找不到仓库时再回落到环境变量与进程目录）'),
   remote: z.string().default('origin').description('默认远端名'),
   token: z
     .string()
@@ -84,8 +85,8 @@ async function explain(error, config, credentials) {
   }
   if (/not a git repository|不是 git 仓库/i.test(text)) {
     text +=
-      '\n提示：插件按「repoPath 配置 → DSH_WORKSPACE / DSH_PROJECT_ROOT / DSH_CWD → 当前目录向上查找 .git」定位仓库。' +
-      '如果目标目录不是 git 仓库，请先在 设置 → 插件 → dsha-diksu-git 里填对 repoPath。'
+      '\n提示：插件优先用「当前对话的工作目录」向上找 .git，找不到才用配置的 repoPath / DSH_WORKSPACE / 进程目录。' +
+      '在项目目录里开对话就能直接用；需要固定默认仓库时，在 设置 → 插件 → dsha-diksu-git 里填 repoPath。'
   }
   if (/unable to auto-detect email address|Please tell me who you are/i.test(text)) {
     text += '\n提示：提交/tag 用的作者已由插件注入（authorName/authorEmail），如果你的 git 版本要求显式身份，请在插件配置里设置这两项。'
@@ -105,7 +106,9 @@ export function apply(ctx, config) {
       output: withCard(spec.name, spec.output),
       async execute(args, exec) {
         try {
-          return lossless(await spec.execute(args, exec))
+          const cwd = sessionCwdOf(exec)
+          const run = () => spec.execute(args, exec)
+          return lossless(await (cwd === undefined ? run() : withBaseDir(cwd, run)))
         } catch (error) {
           throw new Error(await explain(error, config, credentials))
         }

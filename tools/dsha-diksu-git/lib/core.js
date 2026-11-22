@@ -18,8 +18,10 @@
  */
 import { execFile } from 'node:child_process'
 import { access, chmod, mkdir, mkdtemp, readFile, readdir, rm, stat as fsStat, writeFile } from 'node:fs/promises'
+import { realpathSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
+import { currentBaseDir } from './scope.js'
 
 // ────────────────────────────── 常量 ──────────────────────────────
 
@@ -139,16 +141,60 @@ export function run(command, args, options = {}) {
 
 /** 已确认过的仓库根目录（避免每次 git 调用都多跑一次 rev-parse）。 */
 const verifiedRepos = new Set()
-/** 自动探测的结果，按 cwd 缓存。 */
+/**
+ * 自动探测的结果，按 cwd 缓存：命中仓库永久缓存，**未命中只缓存几秒**。
+ *
+ * 2.3.1 修掉的真事故：会话的工作目录一开始是空目录（或还没 clone），插件加载后
+ * 第一次探测就把 `null` 永久写进这个 Map —— 之后仓库 clone 进来了也永远看不到，
+ * git_status 一直报「找不到 git 仓库」，只有重启宿主进程才能恢复。
+ * 现在未命中的结果带时间戳，过期就重新探测；命中仓库仍然只探测一次。
+ */
 const detectedRepos = new Map()
+/** 未命中结果的缓存时长（毫秒）：够挡住 20s 轮询里的重复探测，又不至于卡住刚建的仓库。 */
+const MISS_TTL_MS = 3_000
+/** 已经补过 safe.directory 的目录，避免重复探测时反复调 git config。 */
+const ownershipHealed = new Set()
+
+/** /sdcard 这类 FUSE 挂载上文件属主不是当前用户，git 会以 dubious ownership 拒绝访问。 */
+async function healOwnership(dir) {
+  if (ownershipHealed.has(dir)) return false
+  const current = await run('git', ['config', '--global', '--get-all', 'safe.directory'], { timeoutMs: 15_000 })
+  const known = current.code === 0 ? current.stdout.split('\n').map((line) => line.trim()) : []
+  if (!known.includes(dir)) {
+    const added = await run('git', ['config', '--global', '--add', 'safe.directory', dir], { timeoutMs: 15_000 })
+    if (added.code !== 0) return false
+  }
+  ownershipHealed.add(dir)
+  return true
+}
 
 async function isGitRepo(dir) {
-  const result = await run('git', ['-C', dir, 'rev-parse', '--git-dir'], { timeoutMs: 15_000 })
-  return result.code === 0
+  // `rev-parse --git-dir` 在仓库的任何子目录里都成功，会让向上查找停在子目录。
+  // 用 --show-toplevel 和目录本身比对，只有真正的仓库根才算。
+  let result = await run('git', ['-C', dir, 'rev-parse', '--show-toplevel'], { timeoutMs: 15_000 })
+  // 属主不符 ≠ 不是仓库：这是两码事，补一条 safe.directory 再试一次。
+  if (result.code !== 0 && /dubious ownership/i.test(String(result.stderr ?? ''))) {
+    if (await healOwnership(dir)) {
+      result = await run('git', ['-C', dir, 'rev-parse', '--show-toplevel'], { timeoutMs: 15_000 })
+    }
+  }
+  if (result.code !== 0) return false
+  const top = result.stdout.trim()
+  if (top === '') return false
+  try {
+    return realpathSync(top) === realpathSync(dir)
+  } catch {
+    return false
+  }
 }
 
 /**
  * 解析仓库根目录。
+ *
+ * 顺序（2.3.0 起通用化）：
+ * 1. 当前会话的工作目录（在哪个项目里聊天就用哪个仓库）
+ * 2. 插件配置的 repoPath（会话不在仓库里时的默认值）
+ * 3. DSH_WORKSPACE / DSH_PROJECT_ROOT / DSH_CWD，最后是进程目录
  *
  * 1.1.0 的坑：`repoPath: z.string().default(process.cwd())` 在**模块加载时**求值，
  * 而插件加载时的 cwd 是 harness 的启动目录（本机是 /root），于是所有工具都在
@@ -156,50 +202,70 @@ async function isGitRepo(dir) {
  * 现在改成调用时解析 + 明确报错。
  */
 export async function repoRoot(config) {
+  const baseDir = currentBaseDir()
   const configured = typeof config?.repoPath === 'string' ? config.repoPath.trim() : ''
+
+  // 1. 会话目录优先：走哪算哪，不再绑死一个项目。
+  if (baseDir !== undefined) {
+    const found = await detectRepo(baseDir)
+    if (found !== undefined) return found
+  }
+
+  // 2. 显式配置的默认仓库。
   if (configured.length > 0) {
     const absolute = isAbsolute(configured) ? configured : resolve(configured)
     if (verifiedRepos.has(absolute)) return absolute
     if (!(await isGitRepo(absolute))) {
       throw new Error(
         `repoPath 不是 git 仓库：${absolute}\n` +
-          '请在「设置 → 插件 → dsha-diksu-git」里把 repoPath 改成仓库根目录（例如 /sdcard/diksu），' +
-          '或把环境变量 DSH_WORKSPACE 指向它。',
+          '请在「设置 → 插件 → dsha-diksu-git」里把 repoPath 改成仓库根目录（留空则跟随当前对话的工作目录）。',
       )
     }
     verifiedRepos.add(absolute)
     return absolute
   }
-  const cwd = process.cwd()
-  if (detectedRepos.has(cwd)) {
-    const cached = detectedRepos.get(cwd)
-    if (cached === null) throw notARepoError(cwd)
-    return cached
-  }
+
+  // 3. 环境变量 / 进程目录。
   const seeds = ['DSH_WORKSPACE', 'DSH_PROJECT_ROOT', 'DSH_CWD']
     .map((key) => process.env[key])
     .filter((value) => typeof value === 'string' && value.length > 0)
-  seeds.push(cwd)
   for (const seed of seeds) {
-    let dir = resolve(seed)
-    for (let depth = 0; depth < 12; depth += 1) {
-      if (await isGitRepo(dir)) {
-        detectedRepos.set(cwd, dir)
-        return dir
-      }
-      const parent = dirname(dir)
-      if (parent === dir) break
-      dir = parent
-    }
+    const found = await detectRepo(seed)
+    if (found !== undefined) return found
   }
-  detectedRepos.set(cwd, null)
-  throw notARepoError(cwd)
+  const cwd = process.cwd()
+  const found = await detectRepo(cwd)
+  if (found !== undefined) return found
+  throw notARepoError(baseDir ?? cwd)
+}
+
+/** 从 start 向上找仓库；找不到返回 undefined（命中缓存，未命中只短期缓存）。 */
+async function detectRepo(start) {
+  const seed = resolve(start)
+  const cached = detectedRepos.get(seed)
+  if (cached !== undefined) {
+    if (cached.dir !== null) return cached.dir
+    if (Date.now() - cached.missAt < MISS_TTL_MS) return undefined
+  }
+  let dir = seed
+  for (let depth = 0; depth < 12; depth += 1) {
+    if (await isGitRepo(dir)) {
+      detectedRepos.set(seed, { dir, missAt: 0 })
+      return dir
+    }
+    const parent = dirname(dir)
+    if (parent === dir) break
+    dir = parent
+  }
+  detectedRepos.set(seed, { dir: null, missAt: Date.now() })
+  return undefined
 }
 
 function notARepoError(cwd) {
   return new Error(
     `找不到 git 仓库（从 ${cwd} 向上找了 12 层）。\n` +
-      '请在「设置 → 插件 → dsha-diksu-git」里把 repoPath 设成仓库根目录，或设置环境变量 DSH_WORKSPACE。',
+      '这个插件默认跟随当前对话的工作目录：把对话的工作区设成项目目录，或设置 DSH_WORKSPACE，' +
+      '也可以在「设置 → 插件 → dsha-diksu-git」里填一个默认 repoPath。',
   )
 }
 

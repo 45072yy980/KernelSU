@@ -1,7 +1,7 @@
 {
   "name": "dsha-diksu-git",
-  "description": "Diksu Ultra 专用 git/CI/发布工具（19 个）：仓库自动定位、四层 token 解析 + 设置页入口、提交审计、diff/log/branch/stash/sync/push、CI 编排与 Release 发布",
-  "version": "2.2.0",
+  "description": "通用 git/CI/发布工具（19 个）：跟随当前对话的工作区自动定位仓库、四层 token 解析 + 设置页入口、提交审计、diff/log/branch/stash/sync/push、CI 编排与 Release 发布",
+  "version": "2.3.1",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
