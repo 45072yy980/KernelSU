@@ -1253,9 +1253,15 @@ static int listen_open(uint16_t port) {
          * 为这个 SYN 建请求 sock。 */
         addr.sin_addr.s_addr = htonl(INADDR_ANY);
         if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+            int second = errno;
             say("[listen] bind %u.%u.%u.%u:%u 失败 errno=%d（退到 0.0.0.0 也失败 errno=%d）",
                 g_dst & 0xff, (g_dst >> 8) & 0xff, (g_dst >> 16) & 0xff,
-                (g_dst >> 24) & 0xff, port, first, errno);
+                (g_dst >> 24) & 0xff, port, first, second);
+            if (first == EADDRINUSE || second == EADDRINUSE) {
+                say("[listen] 端口被占用 —— 多半是上一次运行的监听 socket 还活着");
+                say("[listen] 该 socket 可能在 Kotlin 侧（heldListenerFd 未关）");
+                say("[listen] 或者上一轮的子进程成了孤儿，仍在 listen");
+            }
             close(fd);
             return -1;
         }
