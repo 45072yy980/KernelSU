@@ -35,6 +35,8 @@
 #include <sys/syscall.h>
 #include <sys/types.h>
 #include <sys/xattr.h>
+#include <net/if.h>
+#include <ifaddrs.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -693,6 +695,79 @@ static int try_syns(int n) {
     return got;
 }
 
+/* 路由探针：SYNACK 发不出来，几乎可以肯定是 inet_csk_route_req 查不到路由。
+ *
+ * 它要查的是「到 10.7.7.99 的出口」，用监听 socket 所属网络的路由表。
+ * Android 把 VPN 的路由放在独立表里（按 netId），如果我们的 socket 不在
+ * VPN 网络上，就查不到 10.7.7.0/24，回落到默认路由 —— 而默认路由上的
+ * 网卡没有 10.7.7.1 这个源地址，于是查表失败、SYNACK 静默丢弃。
+ *
+ * 这里用三种只读手段把"到底哪一步断了"问出来：
+ *   ① 找出 10.7.7.1 挂在哪个网卡上（确认 tun 的接口名）
+ *   ② UDP connect 到 10.7.7.99 —— 能成功说明路由存在，ENETUNREACH 说明没有
+ *   ③ SO_BINDTODEVICE 到 tun —— 能设上就有救，回落到内核自己选路
+ */
+static char g_tun_if[IF_NAMESIZE];
+
+static void probe_route(void) {
+    g_tun_if[0] = '\0';
+
+    /* ① 找 10.7.7.1 所在的接口。 */
+    struct ifaddrs *ifa = NULL;
+    if (getifaddrs(&ifa) == 0) {
+        for (struct ifaddrs *p = ifa; p != NULL; p = p->ifa_next) {
+            if (p->ifa_addr == NULL || p->ifa_addr->sa_family != AF_INET) continue;
+            const struct sockaddr_in *sin = (const struct sockaddr_in *)p->ifa_addr;
+            if (sin->sin_addr.s_addr == g_dst) {
+                snprintf(g_tun_if, sizeof(g_tun_if), "%s", p->ifa_name);
+                break;
+            }
+        }
+        freeifaddrs(ifa);
+    }
+    if (g_tun_if[0] != '\0') {
+        say("[route] 10.7.7.1 挂在网卡 %s 上", g_tun_if);
+    } else {
+        say("[route] 没找到挂着 10.7.7.1 的网卡（tun 地址没配上？）");
+    }
+
+    /* ② 到 10.7.7.99 的路由存不存在。 */
+    int u = socket(AF_INET, SOCK_DGRAM, 0);
+    if (u >= 0) {
+        struct sockaddr_in d;
+        memset(&d, 0, sizeof(d));
+        d.sin_family = AF_INET;
+        d.sin_port = htons(53);
+        d.sin_addr.s_addr = g_src;
+        int rc = connect(u, (struct sockaddr *)&d, sizeof(d));
+        if (rc == 0) {
+            struct sockaddr_in local;
+            socklen_t ll = sizeof(local);
+            getsockname(u, (struct sockaddr *)&local, &ll);
+            const uint8_t *b = (const uint8_t *)&local.sin_addr.s_addr;
+            say("[route] 到 10.7.7.99 有路由 ✅（内核选的本机源地址 %u.%u.%u.%u）",
+                b[0], b[1], b[2], b[3]);
+        } else {
+            say("[route] 到 10.7.7.99 没有路由：errno=%d（%s）", errno, strerror(errno));
+            say("[route] → SYNACK 就是卡在这一步：inet_csk_route_req 返回 NULL，静默不发包");
+        }
+        close(u);
+    }
+
+    /* ③ 能不能把 socket 钉到 tun 上。 */
+    int t = socket(AF_INET, SOCK_STREAM, 0);
+    if (t >= 0) {
+        const char *dev = g_tun_if[0] ? g_tun_if : "tun0";
+        int rc = setsockopt(t, SOL_SOCKET, SO_BINDTODEVICE, dev, (socklen_t)strlen(dev) + 1);
+        if (rc == 0) {
+            say("[route] SO_BINDTODEVICE(%s) 可用 ✅ —— 可以让监听 socket 直接走 tun", dev);
+        } else {
+            say("[route] SO_BINDTODEVICE(%s) 被拒 errno=%d（%s）", dev, errno, strerror(errno));
+        }
+        close(t);
+    }
+}
+
 /* 决定性探针：用**本机 socket** 发一个带 40 字节 IP 选项的 SYN。
  *
  * 为什么这条最值得先做：它完全绕开 tun 的投递问题。setsockopt(IP_OPTIONS)
@@ -964,6 +1039,15 @@ static int listen_open(uint16_t port) {
     int one = 1;
     setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
 
+    /* 必须在 bind 之前钉网卡：bind 之后就决定了这个 socket 的路由域，
+     * 之后再 SO_BINDTODEVICE 不会改变 SYNACK 的选路结果。 */
+    if (g_tun_if[0] != '\0') {
+        if (setsockopt(fd, SOL_SOCKET, SO_BINDTODEVICE, g_tun_if,
+                       (socklen_t)strlen(g_tun_if) + 1) == 0) {
+            say("[listen] 已把监听 socket 钉到 %s", g_tun_if);
+        }
+    }
+
     struct sockaddr_in addr;
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
@@ -996,7 +1080,6 @@ static int listen_open(uint16_t port) {
     /* 非阻塞：accept 只在空闲时排空队列，不能把主流程卡住。 */
     int flags = fcntl(fd, F_GETFL, 0);
     fcntl(fd, F_SETFL, flags | O_NONBLOCK);
-    /* g_dst 是 inet_addr 的返回值，已经是网络序；按字节顺序打印才正确。 */
     /* 回读实际绑定的地址：绑定成功不等于绑到了你以为的那个地址。 */
     struct sockaddr_in bound;
     socklen_t blen = sizeof(bound);
@@ -1535,6 +1618,9 @@ int main(int argc, char **argv) {
     srand((unsigned)time(NULL) ^ (unsigned)getpid());
     if (g_tun < 0) { FAIL("缺少 --tun-fd"); return 2; }
     say("synopt: release=%s tun=%d dst=%08x port=%u phase=%s", SYNOPT_RELEASE, g_tun, g_dst, g_port, phase);
+
+    /* 先探路：监听 socket 要用 g_tun_if 钉网卡，所以必须在 listen_open 之前。 */
+    probe_route();
 
     /* 先真的在目标端口 listen：没有监听套接字，内核不会为 SYN 建请求 sock。 */
     g_listen_fd = listen_open(g_port);
