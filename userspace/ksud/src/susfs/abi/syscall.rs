@@ -78,4 +78,5 @@ impl_has_err!(
     SusfsMap,
     SusfsSusPath,
     SusfsCmdlineOrBootconfig,
+    SusfsPriorityUidFilter,
 );

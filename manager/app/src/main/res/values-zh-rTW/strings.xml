@@ -228,6 +228,8 @@
     <string name="susfs_status_title">狀態</string>
     <string name="susfs_status_loading">讀取中…</string>
     <string name="susfs_status_loaded">已載入 %1$s（%2$s）</string>
+    <string name="susfs_lkm_proc_hidden">模組沒有暴露 /proc 節點</string>
+    <string name="susfs_lkm_proc_hidden_hint">獨立 susfs_guard_lkm 以 expose_proc=0 載入時不建立 /proc/susfs_* 節點，介面因此讀不到規則原文。用 insmod ... expose_proc=1 重新載入，或在模組的載入腳本裡補上該參數後重啟。</string>
     <string name="susfs_status_unloaded">沒有 SuSFS 實作回應。請先載入模組，然後重新整理。</string>
     <string name="susfs_log">核心日誌</string>
     <string name="susfs_log_summary">允許模組把它的動作列印到核心日誌</string>
@@ -259,6 +261,8 @@
     <string name="susfs_proc_open_redirect">susfs_open_redirect</string>
     <string name="susfs_proc_avc">susfs_avc_spoof</string>
     <string name="susfs_proc_log">susfs_enable_log</string>
+    <string name="susfs_proc_map">susfs_map</string>
+    <string name="susfs_proc_opath">susfs_opath</string>
     <string name="susfs_log_title">上一道命令</string>
     <string name="susfs_log_idle">還沒有執行過任何命令。</string>
     <string name="susfs_field_path">路徑</string>

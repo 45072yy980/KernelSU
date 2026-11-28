@@ -130,6 +130,11 @@ android {
         jniLibs {
             useLegacyPackaging = true
             excludes += "lib/*/libandroidx.graphics.path.so"
+            // libcve98260.so 是**预编译**的 GhostKey 载荷（带符号、直接当可执行
+            // 文件跑），不是本工程编出来的库。AGP 默认会对 jniLibs 里的 .so 跑
+            // strip，虽然通常不破坏可执行性，但符号表被删就没法在真机上按地址
+            // 排查问题，也没有任何体积收益值得冒这个险。
+            keepDebugSymbols += "**/libcve98260.so"
         }
     }
 

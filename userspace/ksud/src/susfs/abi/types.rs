@@ -3,8 +3,9 @@
 //! Field order, types, and sizes must match the kernel-side declarations
 //! exactly because the syscall passes them by raw pointer.
 use super::consts::{
-    NEW_UTS_LEN, SUSFS_ENABLED_FEATURES_SIZE, SUSFS_FAKE_CMDLINE_OR_BOOTCONFIG_SIZE,
-    SUSFS_MAX_PATHNAME, SUSFS_MAX_VARIANT_BUFSIZE, SUSFS_MAX_VERSION_BUFSIZE,
+    NEW_UTS_LEN, SUSFS_APP_STR_BUF_SIZE, SUSFS_ENABLED_FEATURES_SIZE,
+    SUSFS_FAKE_CMDLINE_OR_BOOTCONFIG_SIZE, SUSFS_MAX_PATHNAME, SUSFS_MAX_VARIANT_BUFSIZE,
+    SUSFS_MAX_VERSION_BUFSIZE,
 };
 #[repr(C)]
 pub struct SusfsVersion {
@@ -83,5 +84,14 @@ pub struct SusfsSusPath {
 #[repr(C)]
 pub struct SusfsCmdlineOrBootconfig {
     pub fake_cmdline_or_bootconfig: [u8; SUSFS_FAKE_CMDLINE_OR_BOOTCONFIG_SIZE],
+    pub err: i32,
+}
+/// 独立 LKM 的 `st_susfs_priority_uid_filter`。
+///
+/// 内核侧要求：这段缓冲区里必须能找到 NUL（`memchr(.., 0, ..)`），且
+/// 首字节不能是 NUL。也就是说至少要有一个非空的 NUL 结尾字符串。
+#[repr(C)]
+pub struct SusfsPriorityUidFilter {
+    pub app_strings: [u8; SUSFS_APP_STR_BUF_SIZE],
     pub err: i32,
 }

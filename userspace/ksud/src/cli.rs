@@ -732,6 +732,16 @@ enum Susfs {
         /// 1 to enable, 0 to disable
         value: u32,
     },
+
+    /// Set the priority-uid filter list (standalone `susfs_guard_lkm` only)
+    ///
+    /// The built-in SuSFS implementation does not implement this command; the
+    /// kernel then answers "not supported" and this prints that verbatim
+    /// instead of failing. The list format is parsed by the module itself.
+    SetPriorityUidFilter {
+        /// Filter list text (one entry per line, as the module expects)
+        list: String,
+    },
 }
 
 #[derive(clap::Subcommand, Debug)]
@@ -1099,6 +1109,9 @@ pub fn run() -> Result<()> {
             }
             Susfs::HideSusMntsForNonSuProcs { value } => {
                 crate::susfs::hide_sus_mnts_for_non_su_procs(value != 0)
+            }
+            Susfs::SetPriorityUidFilter { list } => {
+                crate::susfs::set_priority_uid_filter(&list)
             }
         },
 

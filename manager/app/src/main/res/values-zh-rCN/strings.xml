@@ -527,6 +527,8 @@
     <string name="susfs_status_title">状态</string>
     <string name="susfs_status_loading">读取中…</string>
     <string name="susfs_status_loaded">已加载 %1$s（%2$s）</string>
+    <string name="susfs_lkm_proc_hidden">模块没有暴露 /proc 节点</string>
+    <string name="susfs_lkm_proc_hidden_hint">独立 susfs_guard_lkm 以 expose_proc=0 加载时不创建 /proc/susfs_* 节点，界面因此读不到规则原文。用 insmod ... expose_proc=1 重新加载，或在模块的加载脚本里补上该参数后重启。</string>
     <string name="susfs_status_unloaded">没有 SuSFS 实现响应。请先加载模块，然后刷新。</string>
     <string name="susfs_log">内核日志</string>
     <string name="susfs_log_summary">允许模块把它的动作打印到内核日志</string>
@@ -558,6 +560,8 @@
     <string name="susfs_proc_open_redirect">susfs_open_redirect</string>
     <string name="susfs_proc_avc">susfs_avc_spoof</string>
     <string name="susfs_proc_log">susfs_enable_log</string>
+    <string name="susfs_proc_map">susfs_map</string>
+    <string name="susfs_proc_opath">susfs_opath</string>
     <string name="susfs_log_title">上一条命令</string>
     <string name="susfs_log_idle">还没有运行过任何命令。</string>
     <string name="susfs_field_path">路径</string>

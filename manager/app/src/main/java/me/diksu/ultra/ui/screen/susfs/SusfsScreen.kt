@@ -287,6 +287,16 @@ private fun OverviewPage(state: SusfsUiState, vm: SusfsViewModel) {
             summary = stringResource(R.string.susfs_capabilities_count, status.features.size),
             icon = Icons.Filled.Info,
         )
+        // 独立 LKM 的 /proc 节点由 expose_proc 模块参数控制；关掉时下面那张
+        // 「模块发布的节点」卡片会是空的，用户会以为功能坏了。这里直接说清
+        // 原因和修法，省掉一轮排查。
+        if (status.loaded && status.isStandaloneLkm && state.proc.isEmpty) {
+            SusfsRow(
+                title = stringResource(R.string.susfs_lkm_proc_hidden),
+                summary = stringResource(R.string.susfs_lkm_proc_hidden_hint),
+                icon = Icons.Filled.BugReport,
+            )
+        }
         SusfsRow(
             title = stringResource(R.string.susfs_rules_count, state.draft.rules.size),
             summary = state.draft.rules
@@ -572,6 +582,9 @@ private fun ExtensionsPage(
                 R.string.susfs_proc_open_redirect to proc.openRedirect,
                 R.string.susfs_proc_avc to proc.avcSpoof,
                 R.string.susfs_proc_log to proc.enableLog,
+                // 独立 LKM 才有的两项；内建实现读不到，下面 isNotBlank 会跳过。
+                R.string.susfs_proc_map to proc.susfsMap,
+                R.string.susfs_proc_opath to proc.susfsOpath,
             ).forEach { (res, value) ->
                 if (value.isNotBlank()) {
                     SusfsRow(title = stringResource(res), summary = value.take(200), icon = Icons.Filled.Info)

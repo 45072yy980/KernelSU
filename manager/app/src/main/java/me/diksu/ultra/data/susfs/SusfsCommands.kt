@@ -128,6 +128,9 @@ object SusfsCommands {
             openRedirect = node("susfs_open_redirect"),
             avcSpoof = node("susfs_avc_spoof"),
             enableLog = node("susfs_enable_log"),
+            // 独立 LKM 独有的两个节点；内建实现没有，读出来就是空串。
+            susfsMap = node("susfs_map"),
+            susfsOpath = node("susfs_opath"),
         )
     }
 

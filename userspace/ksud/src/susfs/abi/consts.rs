@@ -18,6 +18,9 @@ pub const SUSFS_MAX_VARIANT_BUFSIZE: usize = 16;
 pub const NEW_UTS_LEN: usize = 64;
 pub const SUSFS_MAX_PATHNAME: usize = 256;
 pub const SUSFS_FAKE_CMDLINE_OR_BOOTCONFIG_SIZE: usize = 8192;
+/// `st_susfs_priority_uid_filter.app_strings` 的长度（LKM 侧 `SUSFS_APP_STR_BUF_SIZE`）。
+/// 内核要求这段缓冲区里必须有 NUL 终止符，且首字节不能是 NUL。
+pub const SUSFS_APP_STR_BUF_SIZE: usize = 65535;
 // ── command IDs (internal — only the syscall dispatcher cares) ───────────────
 pub const CMD_SUSFS_ADD_SUS_PATH: u32 = 0x0005_5550;
 pub const CMD_SUSFS_ADD_SUS_PATH_LOOP: u32 = 0x0005_5553;
@@ -34,6 +37,9 @@ pub const CMD_SUSFS_SHOW_ENABLED_FEATURES: u32 = 0x0005_55E2;
 pub const CMD_SUSFS_SHOW_VARIANT: u32 = 0x0005_55E3;
 pub const CMD_SUSFS_ENABLE_AVC_LOG_SPOOFING: u32 = 0x0006_0010;
 pub const CMD_SUSFS_ADD_SUS_MAP: u32 = 0x0006_0020;
+/// 独立 LKM（susfs4ksu-for-lkm）新增：设置「优先按 uid 过滤」的应用名单。
+/// 内建实现没有这条命令，内核会回 `ERR_CMD_NOT_SUPPORTED`（126）。
+pub const CMD_SUSFS_SET_PRIORITY_UID_FILTER: u32 = 0x0006_0030;
 /// Mask of every stat member that is spoofed automatically when the kernel
 /// re-stats the target path.
 pub const KSTAT_AUTO_SPOOF: u32 = (1 << 0)   // ino
